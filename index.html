@@ -141,13 +141,13 @@
 
             <h3>How is it different from google blockly?</h3>
             <p>
-                Goblock is not different from google blockly, it is built in top of google blockly. Goblock has several advantages:                
+                Goblock is not different from google blockly, it is built on top of google blockly. Goblock has several advantages:                
             </p>
             <ul>
                 <li>
                     <b>Console-like output</b><br />
                     Rather than using javascript alert, we print the output into console-like interface, thus you can retrieve the output history easier.
-                    I also has modified it so that array (list) will also pretty-printed.
+                    I also have modify it can print array beautifuly.
                 </li>
                 <li>
                     <b>Toolbox Arrangement</b><br />
@@ -162,17 +162,14 @@
             <h3>Is it free?</h3>
             <p>Yes</p>
 
-            <h3>What is Guo?</h3>
-            <p>Guo is a Programming Panda, a mascot of Goblock</p>
-
-            <h3>Why Panda?</h3>
-            <p>Because Panda is Black, White, and Asian. Stop being racist, and start to code. Also, because one of my best friend like Panda so much.</p>
+            <h3>What is Guo, and why panda?</h3>
+            <p>
+                Guo is a Programming Panda, a mascot of Goblock. I use panda because it is black, white, and asian at the same time. 
+                Stop being racist, and start to code. One of my friend also like Panda so much, so it is for her :).
+            </p>
 
             <h3>Who are you?</h3>
-            <p>I am Go Frendi Gunawan, a Lecturer at STIKI Malang, Indonesia, a human, a silly coder, a padawan without master, an ultraman-gonna-be whenever earth attacked by giant monsters.</p>
-            
-            <h3>I like goblock, Is there anything I can do to help you?</h3>
-            <p>Contact me by email : gofrendiasgard@gmail.com. I need a home, a motorbike, a light-saber, and daily meal :)</p>
+            <p>I am Go Frendi Gunawan, a Lecturer at STIKI Malang. Now I am single, but not available for relationship.</p>
         </div>
         <!-- End of About Container -->
 
@@ -396,9 +393,9 @@
 
         var outputPrompt = function(message){
             var input = window.prompt(message);
-            input = stripHtml(input);
             message = stripHtml(message);
-            $('#output').append((message == '' ? '' : '<b>' + message + '</b><br />') + input + '<br />');
+            $('#output').append((message == '' ? '' : '<b>' + message + '</b><br />') + 
+                stripHtml(input) + '<br />');
             return input;
         }
 
@@ -442,9 +439,9 @@
         $('#switchToXml').click(showXmlContainer);
         
         $('#synchronize').click(function(){
+            showBlockContainer();
             var xml = Blockly.Xml.textToDom($('#xml').val());
             loadXml(xml);
-            showBlockContainer();
         });
 
         $('.menu').click(function(event){
