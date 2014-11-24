@@ -455,12 +455,46 @@
         }
     </script>
 
-    <script type="text/sjs">    
-        
-        var __sys = require("assets/stratifiedjs/modules/sys.sjs");      
-
+    <script id="__asyncFunc" type="text/sjs">
         // STATE VARIABLE
         var __promptClicked = true;
+
+        function __outputAlert(message) {
+            __waitPrompt();
+            message = __stripHtml(message);
+            $('#output').append('<b>' + message + '</b><br />');
+        }
+
+        
+        function __waitPrompt(){
+            while(!__promptClicked){
+                hold(500);
+            }
+        }
+        function __outputPrompt(message){
+            __waitPrompt();
+            __promptClicked = false
+            var input = '';
+            alertify.prompt(
+                'Input',
+                message,
+                '',
+                function(evt,val){input = val; __promptClicked = true},
+                function(evt,val){input = val; __promptClicked = true}
+            ).set('closable',false);
+
+            __waitPrompt();
+
+            message = __stripHtml(message);
+            $('#output').append((message == '' ? '' : '<b>' + message + '</b><br />') + 
+                __stripHtml(input) + '<br />');
+            return input;
+        }
+    </script>
+
+    <script type="text/sjs">    
+        
+        var __sys = require("assets/stratifiedjs/modules/sys.sjs");    
 
         // initialize blockly
         Blockly.inject(document.getElementById('blocklyDiv'),
@@ -520,40 +554,6 @@
 
         // several functions
 
-        function __outputAlert(message) {
-            __waitPrompt();
-            message = __stripHtml(message);
-            $('#output').append('<b>' + message + '</b><br />');
-        }
-
-        
-        function __waitPrompt(){
-            while(!__promptClicked){
-                hold(500);
-            }
-        }
-        function __outputPrompt(message){
-            __waitPrompt();
-            __promptClicked = false
-            var input = '';
-            alertify.prompt(
-                'Input',
-                message,
-                '',
-                function(evt,val){input = val; __promptClicked = true},
-                function(evt,val){input = val; __promptClicked = true}
-            ).set('closable',false);
-
-            __waitPrompt();
-
-            message = __stripHtml(message);
-            $('#output').append((message == '' ? '' : '<b>' + message + '</b><br />') + 
-                __stripHtml(input) + '<br />');
-            return input;
-        }
-
-        
-
         function __loadXml(xml){
             __clearCode();
             Blockly.Xml.domToWorkspace(Blockly.mainWorkspace,xml);
@@ -566,35 +566,9 @@
             window.LoopTrap = 1000;
             Blockly.JavaScript.INFINITE_LOOP_TRAP =
                     'if (--window.LoopTrap == 0) throw "Infinite loop.";\n';
+
             // prefix code
-            var prefix = 'var __promptClicked = true;\n';
-            prefix += 'function __outputAlert(message) {\n';
-            prefix += '    __waitPrompt();\n';
-            prefix += '    message = __stripHtml(message);\n';
-            prefix += '    $(\'#output\').append(\'<b>\' + message + \'</b><br />\');\n';
-            prefix += '}\n';
-            prefix += 'function __waitPrompt(){\n';
-            prefix += '    while(!__promptClicked){\n';
-            prefix += '        hold(500);\n';
-            prefix += '    }\n';
-            prefix += '}\n';
-            prefix += 'function __outputPrompt(message){\n';
-            prefix += '    __waitPrompt();\n';
-            prefix += '    __promptClicked = false\n';
-            prefix += '    var input = \'\';\n';
-            prefix += '    alertify.prompt(\n';
-            prefix += '        \'Input\',\n';
-            prefix += '        message,\n';
-            prefix += '        \'\',\n';
-            prefix += '        function(evt,val){input = val; __promptClicked = true},\n';
-            prefix += '        function(evt,val){input = val; __promptClicked = true}\n';
-            prefix += '    ).set(\'closable\',false);\n';
-            prefix += '    __waitPrompt();'; 
-            prefix += '    message = __stripHtml(message);\n';
-            prefix += '    $(\'#output\').append((message == \'\' ? \'\' : \'<b>\' + message + \'</b><br />\') + \n';
-            prefix += '        __stripHtml(input) + \'<br />\');\n';
-            prefix += '    return input;\n';
-            prefix += '}';
+            var prefix = $('#__asyncFunc').html();
 
             // code
             var code = Blockly.JavaScript.workspaceToCode();
