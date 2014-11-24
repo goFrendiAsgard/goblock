@@ -89,13 +89,13 @@
                 <div id="blockContainer">
                     <legend>Block</legend>
                     <div class="btnDiv">
-                        <button id="runCode" class="btn btn-primary">
+                        <button id="__runCode" class="btn btn-primary">
                             <i class="glyphicon glyphicon-play"></i> Run
                         </button>
                         <button id="switchToXml" class="btn btn-default">
                             <i class="glyphicon glyphicon-align-justify"></i> XML
                         </button>
-                        <button class="clearCode btn btn-danger">
+                        <button class="__clearCode btn btn-danger">
                             <i class="glyphicon glyphicon-trash"></i> Clear
                         </button>
                     </div>
@@ -111,7 +111,7 @@
                         <button id="switchToBlock" class="btn btn-default">
                             <i class="glyphicon glyphicon-tasks"></i> Block
                         </button>
-                        <button class="clearCode btn btn-danger">
+                        <button class="__clearCode btn btn-danger">
                             <i class="glyphicon glyphicon-trash"></i> Clear
                         </button>
                     </div>
@@ -188,7 +188,7 @@
                     Stop being racist, and start to code.
                 </p>
                 <p>
-                    But honestly, why panda? Okay. One of my friend like panda so much. So it is for her.
+                    But honestly, why panda? Okay. One of my friend like panda so much. <span style="color:white;">徐维美, it's for you :)</span>
                 </p>
 
                 <h3>Who are you?</h3>
@@ -367,9 +367,70 @@
     <script type="text/javascript" src="assets/alertifyjs/alertify.min.js"></script>
     <script type="text/javascript" src="assets/stratifiedjs/stratified.js"></script>
 
-    <script type="text/sjs">       
+    <script type="text/sjs">    
+        // STATE VARIABLE
+        var __promptClicked = true;  
+        
 
-        function arrayToString(val, space_count){
+        // initialize blockly
+        Blockly.inject(document.getElementById('blocklyDiv'),
+        {
+            toolbox: document.getElementById('toolbox'),
+			media: './assets/blockly/media/',
+        });
+
+        // load initial blocks
+        xml = document.getElementById('startBlocks');
+        __loadXml(xml);
+
+        // on change
+        Blockly.addChangeListener(function() {
+            // Generate JavaScript code and display it.
+            Blockly.Python.INFINITE_LOOP_TRAP = null;
+            var code = Blockly.Python.workspaceToCode();
+            $('#pythonCode').html(__stripHtml(code));
+            Blockly.JavaScript.INFINITE_LOOP_TRAP = null;
+            var code = Blockly.JavaScript.workspaceToCode();
+            $('#jsCode').html(__stripHtml(code));
+
+            var xml = Blockly.Xml.workspaceToDom(Blockly.mainWorkspace);
+            $('#xml').html(Blockly.Xml.domToPrettyText(xml));
+        });
+
+        // EVENTS
+
+        $('#__runCode').click(__runCode);
+
+        $('.__clearCode').click(function(){
+            alertify.confirm(
+                'Clear Workspace', 
+                'Are you sure want to clear the workspace?', 
+                function(){ __clearCode();},
+                function(){}
+            ).set('closable',false); 
+        });
+
+        $('#switchToBlock').click(__showBlockContainer);
+
+        $('#switchToXml').click(__showXmlContainer);
+        
+        $('#synchronize').click(function(){
+            __showBlockContainer();
+            var xml = Blockly.Xml.textToDom($('#xml').val());
+            __loadXml(xml);
+        });
+
+        $('.menu').click(function(event){
+            event.preventDefault();
+        });
+
+        $('#homeMenu').click(__showMainContainer);
+        $('#lessonMenu').click(__showLessonContainer);
+        $('#aboutMenu').click(__showAboutContainer);
+
+        // several functions
+
+        function __arrayToString(val, space_count){
             var printed_val = '';
             var spaces = '';
             for(i=0; i<space_count; i++){
@@ -387,7 +448,7 @@
             var i=0;
             for(i=0; i<val.length; i++){
                 if($.isArray(val[i])){
-                    printed_val += arrayToString(val[i],space_count+1);
+                    printed_val += __arrayToString(val[i],space_count+1);
                 }else{
                     printed_val += subArray? spaces+'&nbsp;' : '';
                     printed_val += val[i];
@@ -402,9 +463,9 @@
             return printed_val;
         }
 
-        function stripHtml(val){
+        function __stripHtml(val){
             if($.isArray(val)){
-                val = arrayToString(val,0);
+                val = __arrayToString(val,0);
             }else if($.type(val) === 'string'){
                 val = val.split("&").join("&amp;");
                 val = val.split("<").join("&lt;");
@@ -414,91 +475,38 @@
             return val;
         } 
 
-        var outputAlert = function(message) {
-            message = stripHtml(message);
+        function __outputAlert(message) {
+            message = __stripHtml(message);
             $('#output').append('<b>' + message + '</b><br />');
         }
 
-        var outputPrompt = function(message){
-
-            var clicked = false
+        
+        function __waitPrompt(){
+            while(!__promptClicked){
+                hold(500);
+            }
+        }
+        function __outputPrompt(message){
+            __waitPrompt();
+            __promptClicked = false
             var input = '';
             alertify.prompt(
                 'Input',
                 message,
                 '',
-                function(evt,val){input = val; clicked = true},
-                function(evt,val){input = val; clicked = true}
-            );
-            while(!clicked){
-                hold(500);
-            }
+                function(evt,val){input = val; __promptClicked = true},
+                function(evt,val){input = val; __promptClicked = true}
+            ).set('closable',false);
 
-            message = stripHtml(message);
+            __waitPrompt();
+
+            message = __stripHtml(message);
             $('#output').append((message == '' ? '' : '<b>' + message + '</b><br />') + 
-                stripHtml(input) + '<br />');
+                __stripHtml(input) + '<br />');
             return input;
         }
 
-        // initialize blockly
-        Blockly.inject(document.getElementById('blocklyDiv'),
-        {
-            toolbox: document.getElementById('toolbox'),
-			media: './assets/blockly/media/',
-        });
-
-        // load initial blocks
-        xml = document.getElementById('startBlocks');
-        loadXml(xml);
-
-        // on change
-        Blockly.addChangeListener(function() {
-            // Generate JavaScript code and display it.
-            Blockly.Python.INFINITE_LOOP_TRAP = null;
-            var code = Blockly.Python.workspaceToCode();
-            $('#pythonCode').html(stripHtml(code));
-            Blockly.JavaScript.INFINITE_LOOP_TRAP = null;
-            var code = Blockly.JavaScript.workspaceToCode();
-            $('#jsCode').html(stripHtml(code));
-
-            var xml = Blockly.Xml.workspaceToDom(Blockly.mainWorkspace);
-            $('#xml').html(Blockly.Xml.domToPrettyText(xml));
-        });
-
-        // EVENTS
-
-        $('#runCode').click(runCode);
-
-        $('.clearCode').click(function(){
-            alertify.confirm(
-                'Clear Workspace', 
-                'Are you sure want to clear the workspace?', 
-                function(){ clearCode();},
-                function(){}
-            ); 
-        });
-
-        $('#switchToBlock').click(showBlockContainer);
-
-        $('#switchToXml').click(showXmlContainer);
-        
-        $('#synchronize').click(function(){
-            showBlockContainer();
-            var xml = Blockly.Xml.textToDom($('#xml').val());
-            loadXml(xml);
-        });
-
-        $('.menu').click(function(event){
-            event.preventDefault();
-        });
-
-        $('#homeMenu').click(showMainContainer);
-        $('#lessonMenu').click(showLessonContainer);
-        $('#aboutMenu').click(showAboutContainer);
-
-        // several functions
-
-        function showMainContainer(){
+        function __showMainContainer(){
             $('#menuContainer li').removeClass('active');
             $('#homeMenu').parent('li').addClass('active');
             $('#lessonContainer').hide();
@@ -506,7 +514,7 @@
             $('#mainContainer').show();
         }
 
-        function showLessonContainer(){
+        function __showLessonContainer(){
             $('#menuContainer li').removeClass('active');
             $('#lessonMenu').parent('li').addClass('active');
             $('#lessonMenu').parent('li').addClass('active');
@@ -515,7 +523,7 @@
             $('#lessonContainer').show();
         }
 
-        function showAboutContainer(){
+        function __showAboutContainer(){
             $('#menuContainer li').removeClass('active');
             $('#aboutMenu').parent('li').addClass('active');
             $('#aboutMenu').parent('li').addClass('active');
@@ -524,23 +532,23 @@
             $('#aboutContainer').show();
         }        
 
-        function showBlockContainer(){
+        function __showBlockContainer(){
             $('#xmlContainer').hide();
             $('#blockContainer').show();
         }
 
-        function showXmlContainer(){
+        function __showXmlContainer(){
             $('#blockContainer').hide();
             $('#xmlContainer').show();
         }
 
-        function loadXml(xml){
-            clearCode();
+        function __loadXml(xml){
+            __clearCode();
             Blockly.Xml.domToWorkspace(Blockly.mainWorkspace,xml);
-            runCode();
+            __runCode();
         }
 
-        function runCode() {
+        function __runCode() {
             $('#output').html('');
             // Generate JavaScript code and run it.
             window.LoopTrap = 1000;
@@ -550,15 +558,15 @@
             Blockly.JavaScript.INFINITE_LOOP_TRAP = null;
             try {
                 // do replacement
-                code = code.split("window.alert(").join("outputAlert(");
-                code = code.split("window.prompt(").join("outputPrompt(");
+                code = code.split("window.alert(").join("__outputAlert(");
+                code = code.split("window.prompt(").join("__outputPrompt(");
                 eval(code);
             } catch (e) {
-                outputAlert(e);
+                __outputAlert(e);
             }
         }
 
-        function clearCode() {
+        function __clearCode() {
 			var workspace = Blockly.getMainWorkspace();
 			workspace.clear();
         }
