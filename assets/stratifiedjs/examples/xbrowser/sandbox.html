@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html>
+  <head>
+  <script src="../../stratified.js"></script> 
+  <script type="text/sjs">
+
+function main() {
+
+var c= require('sjs:xbrowser/console').console({target:"container", 
+                                                   collapsed:false});
+
+function initLogging() {
+  if (window['console']) {
+    var old_log = console.log;
+    console.log = function() { c.log.apply(c, arguments); old_log.apply(console, arguments);  };
+  }
+  else {
+    window.console = c;
+  }
+}
+initLogging();
+
+var cmd = document.location.getParameter ? 
+  document.location.getParameter('cmd') :
+  require('sjs:url').parse(document.location).params().cmd;
+if (cmd) c.exec(decodeURIComponent(cmd));
+
+c.focus();
+
+}
+main();
+
+  </script>
+  </head>
+  <body style="background:#fbfbfb;">
+    <span style="font-family:sans-serif;" id="version">StratifiedJS Sandbox</span>
+      <div style="-webkit-box-shadow:rgba(0,0,0,0.1) 0px 4px 4px;height:80%;width:90%;position:absolute;top:10%;left:5%" id="container"></div>
+  </body>
+</html>

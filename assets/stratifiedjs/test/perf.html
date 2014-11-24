@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>SJS perf tests</title>
+    <!--[if lt IE 8]>
+      <script src="json2.js"></script>
+    <![endif]-->
+    <script src="../stratified.js"></script>
+    <script type="text/sjs">
+      require("sjs:test/runner").run({
+        modules: ["./perf/perf-tests.sjs"],
+        base: module.id,
+      });
+    </script>
+  </head>
+</html>

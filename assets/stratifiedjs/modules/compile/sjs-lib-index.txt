@@ -1,0 +1,2 @@
+@lib     StratifiedJS Standard Module Library - Compilation Utilities
+@summary SJS compilation utilities

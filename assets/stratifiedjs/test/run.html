@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>SJS tests</title>
+    <!--[if lt IE 8]>
+      <script src="json2.js"></script>
+    <![endif]-->
+    <script src="../stratified.js"></script>
+    <script type="text/sjs">
+      // we use the test/runner module to run our tests,
+      // but we have an out-of-band test module to verify
+      // that the runner works with enough confidence
+      // to trust the rest of the test suite:
+      waitfor {
+        var runner = require("sjs:test/runner");
+      } and {
+        require('./init_checks.sjs');
+      }
+      var logging = require('sjs:logging');
+      // logging.setLevel(logging.DEBUG);
+
+      var opts = {
+        moduleList: "./_index.txt",
+        base: module.id,
+        logLevel: logging.INFO,
+      };
+
+      if(!require('sjs:test/suite').isBrowser) {
+        var [node_major, node_minor] = process.versions.node.split(".").map(i -> parseInt(i, 10));
+        logging.verbose("node version #{node_major}.#{node_minor}");
+        if (node_major == 0 && node_minor < 9) {
+            opts.allowedGlobals = ['errno']; // bug in child_process (and perhaps others), fixed in 0.9
+        }
+
+        var cutil = require('sjs:cutil');
+        var string = require('sjs:string');
+        var func = require('sjs:function');
+      
+        // when running under node.js, our integration tests
+        // expect a conductance instance to be running on localhost:7071
+        var conductanceInitialized = false, cleanup = -> null;
+        var startConductance = function() {
+          conductanceInitialized = true;
+          var conductance_ctrl = require('./lib/conductance_ctrl');
+          var conductance_port = '7071'
+
+          var conductance_base_url = 'http://localhost:' + conductance_port + '/test/';
+          var ctx = cutil.breaking(brk -> conductance_ctrl.withConductance(conductance_port, brk));
+          cleanup = ctx.resume;
+          require('./lib/testContext').setBaseURL(conductance_base_url);
+        };
+
+        opts.init = function(runner) {
+
+          // inherit from runner.reporter, and amend its reporting functions
+          // with hooks to start/stop conductance integration server as necessary
+          var reporter = runner.reporter = Object.create(runner.reporter);
+          reporter.contextBegin = func.seq(reporter.contextBegin, function(ctx) {
+            if (!conductanceInitialized && ctx.module() .. string.startsWith('integration/')) {
+              startConductance();
+            }
+          });
+          reporter.suiteEnd = func.seq(-> cleanup(), reporter.suiteEnd);
+        }
+      }
+
+      runner.run(opts);
+    </script>
+  </head>
+</html>

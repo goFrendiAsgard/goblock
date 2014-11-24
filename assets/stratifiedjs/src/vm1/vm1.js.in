@@ -1,0 +1,2815 @@
+/*
+ * VM1 Stratified JavaScript Virtual Machine
+ *
+ * Part of StratifiedJS
+ * http://onilabs.com/stratifiedjs
+ *
+ * (c) 2011-2013 Oni Labs, http://onilabs.com
+ *
+ * This file is licensed under the terms of the GPL v2, see
+ * http://www.gnu.org/licenses/gpl-2.0.html
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ * THE SOFTWARE.
+ *
+ */
+
+/*
+Preprocessor flags:
+
+define CLIENTSIDE    : for browser-based VM (as opposed to rocket-hosted)
+define NODEJS        : for nodejs VM (as opposed to rocket/clientside)
+
+define DEBUG_VM      : VM debugging
+
+define HOTPATH       : don't build execution frames unless we have to
+
+OBSOLETE FLAGS:
+    verbose exceptions are always on now; not predicated on this flag anymore:
+define VERBOSE_EXCEPTIONS : add line/file/stack members to exceptions
+                             (requires compiling c1 with VERBOSE_EXCEPTIONS to
+                              get correct values)
+                             XXX We should actually only amend Error objects
+                             where they are *created*. This code is possibly a
+                             bit flaky with exceptions that are thrown by
+                             JS code and caught/rethrown by SJS.
+
+
+    we really don't want async resume:
+define ASYNC_RESUME  : obsolete asynchronous resume code path
+
+*/
+/* define DEBUG_VM 1 */
+#ifdef DEBUG_VM
+#define EF_TYPES
+#define LOG(x) console.log(x);
+// XXX figure out why normal CPP stringification is screwed
+#define ASSERT(X) if(!(X)) { throw new Error("Assertion failed: " + "X" ); }
+#define WHENDEBUG(X) X
+#else
+#define ASSERT(X)
+#define LOG(x)
+#define WHENDEBUG(X)
+#endif
+
+// we don't want to rely on the global 'undefined' symbol; see
+// https://groups.google.com/d/msg/oni-apollo/fNMz2W8S5mU/sYCgrriYj1MJ
+var UNDEF; // == undefined
+
+// on firefox this seems to help, on v8 it doesn't :-/
+//define HOTPATH 1
+
+// maximum size of callstack that we'll record in tail-recursive scenarios:
+#define MAX_CALLSTACK 20
+
+//----------------------------------------------------------------------
+// Control Flow Exceptions
+
+/*
+{
+  __oni_cfx: true,
+  type:      "i"(internal)|"r"(return)|"b"(break)|"c"(continue)|"t"(thrown),
+  val:       value
+}
+*/
+
+#define is_cfx(obj) (obj && obj.__oni_cfx)
+// define is_cfx(obj) (obj instanceof CFException)
+/*function is_cfx(obj) {
+  return obj && obj.__oni_cfx;
+}*/
+
+function CFException_toString() {
+  var rv = this.name+": "+this.message;
+  if (this.__oni_stack) {
+    for (var i=0; i<this.__oni_stack.length; ++i) {
+      var line = this.__oni_stack[i];
+      if (line.length == 1)
+        line = line[0];
+      else
+        line = '    at ' + line.slice(0,2).join(':');
+      rv += '\n' + line;
+    }
+  }
+  return rv;
+}
+
+function adopt_native_stack(e, caller_module) {
+  if(!e.stack)
+    return;
+  if (exports.hostenv !== 'nodejs') {
+    // XXX implement stack adopting on browsers; the sticking point is that the
+    // filename/linenumber information from eval'ed JS scripts is bogus...
+    e.stack = '';
+    return;
+  }
+  var stack = String(e.stack);
+  // Remove default toString() output, which can take form:
+  // - <msg>
+  // - <type>
+  // - <type>: <msg>
+  var firstColon = stack.indexOf(': ');
+  var msgStart = (firstColon === -1) ? 0 : firstColon + 2;
+  
+  // if firstColon appears after a newline, it's not the one we want
+  if (stack.lastIndexOf('\n', msgStart) !== -1) msgStart = 0;
+
+  var msg = String(e.message);
+  if (msg && stack.lastIndexOf(msg, msgStart) == msgStart) {
+    stack = stack.slice(msgStart + msg.length);
+  } else {
+    // remove sole <type>, assuming type ends with 'Error'
+    stack = stack.replace(/^\w*Error/, '');
+  }
+  stack = stack.trim();
+  e.stack = "";
+  var lines = stack.split("\n");
+  var i;
+  for (i=0; i<lines.length; i++) {
+    // TODO: make this check more reliable
+    if((caller_module && lines[i].indexOf(caller_module) !== -1) ||
+       lines[i].indexOf("stratified-node.js") !== -1 ||
+       lines[i].indexOf("stratified.js") !== -1 ) {
+      // we've hit an sjs stack line.
+      break;
+    }
+    e.__oni_stack.push([lines[i]]);
+  }
+}
+
+var token_oniE = {}; // oni-modified exception
+function CFException(type, value, line, file) {
+  this.type = type;
+  this.val = value;
+  // XXX checking for "value instanceof Error" alone doesn't work for some errors on firefox
+  if (type == "t" && 
+      (value instanceof Error || (typeof value == 'object' && value.message))) {
+    if (value._oniE !== token_oniE) {
+      // annotate the exception object with our oni-special fields:
+      value._oniE = token_oniE;
+      value.__oni_stack = value.__oni_stack || [];
+      value.line = line;
+      value.file = file || "unknown SJS source";
+
+      adopt_native_stack(value, file);
+
+      if (!value.hasOwnProperty('toString')) value.toString = CFException_toString;
+    }
+
+    // push current line/file onto stack (if provided):
+    if (line)
+      value.__oni_stack.push([file || 'unknown SJS source', line]);
+  }
+  // this.ef = UNDEF;  // 'execution frame' tag for targetted return/break/continue
+}
+
+var CFETypes = { r:"return", b:"break", c:"continue", blb: "blocklambda break"};
+CFException.prototype = {
+  __oni_cfx : true,
+  toString : function() {
+    if (this.type in CFETypes)
+      return "Unexpected "+CFETypes[this.type]+" statement";
+    else
+      return "Uncaught internal SJS control flow exception ("+this.type+":: "+this.val+")";
+  },
+  mapToJS : function(uncaught) {
+    if (this.type == "t") {
+#if defined (CLIENTSIDE)
+      // 'uncaught' means we know this exception won't be caught by SJS.
+      // We could throw a plain JS error, but browsers have terrible reporting.
+      // Instead, we emulate a good browser's onError handling, with full stack
+      // logging on an unhandled error.
+      // See https://developer.mozilla.org/en-US/docs/Web/API/GlobalEventHandlers.onerror
+      // XXX is there anything browsers do internally to handle errors other than calling onerror?
+      if (uncaught && this.val.__oni_stack) {
+        var handler = window.onerror;
+        var handled = false;
+        var msg = this.val.toString();
+
+        if (handler) {
+          // we could probably extract a proper url & lineno here,
+          // but who cares when we have the entire stacktrace?
+          handled = handler.call(window,
+              msg,
+              "", // url
+              0,  // lineno
+              0,  // column
+              this.val); // exception
+        }
+        if (!handled) {
+          if (console) {
+            if (console.error) console.error(msg);
+            else console.log(msg);
+          }
+        }
+      }
+      else
+#endif // CLIENTSIDE
+        throw this.val;
+    }
+    else if (!this.ef) // XXX DO WE NEED THIS???
+      throw new Error(this.toString());
+    else // this is a 'blb' or 'r' tunneling through a JS functions:
+      throw this;
+  }
+};
+
+
+//----------------------------------------------------------------------
+// Execution Frames
+
+/*
+  Note on `ReturnToParentContinuation` & global `cont` function
+
+  In SJS, we can (asynchronously) build large execution frame trees in
+  a tail-safe way. To ensure that we we can also unravel these trees
+  without blowing the JS stack (by a long chain of
+  cont-returnToParent-cont-returnToParent-... calls), we need to code
+  calls that tear down a tree in continuation passing style.
+
+  Grep the code for ReturnToParentContinuation for more notes.
+
+*/
+#define is_returnToParent(obj) (obj && obj.__oni_rtpc)
+function ReturnToParentContinuation(frame, idx, val) {
+  this.frame = frame;
+  this.idx = idx;
+  this.val = val;
+}
+ReturnToParentContinuation.prototype = {
+  __oni_rtpc: true,
+  execute: function() { return this.frame.cont(this.idx, this.val) }
+};
+
+/*
+  Execution frames' `cont` methods should never be called directly,
+  but always be through this global function. It takes care of
+  executing any `ReturnToParentContinuation`s that the callee might
+  return.
+*/
+function cont(frame, idx, val) {
+  var rv = frame.cont(idx, val);
+  while (is_returnToParent(rv)) {
+    rv = rv.execute();
+  }
+  return rv;
+}
+
+function is_ef(obj) {
+  return obj && obj.__oni_ef;
+}
+exports.is_ef = is_ef;
+
+function setEFProto(t) { for (var p in EF_Proto) t[p] = EF_Proto[p]; }
+//function setEFProto(t) { t.__proto__ = EF_Proto; }
+
+
+// helper to merge callstacks of two execution frames:
+function mergeCallstacks(target_ef, src_ef) {
+  if (target_ef.callstack) {
+    // stack-tests 17
+    
+    // concat stacks; potentially dropping frames in the middle if
+    // we go above MAX_CALLSTACK:
+    target_ef.callstack = target_ef.callstack.concat(src_ef.callstack);
+    if (target_ef.callstack.length > MAX_CALLSTACK)
+      target_ef.callstack.splice(MAX_CALLSTACK/2, 
+                                 target_ef.callstack.length-MAX_CALLSTACK+1, 
+                                 ['    ...(frames omitted)']);
+  }
+  else {
+    // stack-tests 16
+    target_ef.callstack = src_ef.callstack;
+  }
+}
+
+// base prototype object for execution frames
+var EF_Proto = {
+#ifdef EF_TYPES
+  toString: function() { return "<SJS Execution Frame '"+this.type+"'>"; },
+#else
+  toString: function() { return "<suspended SJS>"; },
+#endif
+  __oni_ef : true,
+
+  wait: function() { return this; },
+
+  setChildFrame: function(ef, idx) {
+    if (this.child_frame && this.child_frame.callstack) {
+      // merge callstacks of old & new childframes:
+      mergeCallstacks(ef, this.child_frame);
+    }
+    this.async = true;
+    this.child_frame = ef;
+    ef.parent = this;
+    ef.parent_idx = idx;
+  },
+
+  // quench reentrant resume calls.
+  // This signal is issued before abort() calls, to prevent any resume() calls in our
+  // call tree from firing, in case they are reentrantly executed by finally-code 
+  // in our call tree. See also the tertiary waitfor/and/or sjs-testsuite testcases
+  // 153-156.
+  quench: function() {
+    // see sjs-2-test 'reentrant quench/abort' for why we need to
+    // check for 'this.child_frame' here and in 'abort'
+    if (this.child_frame) 
+      this.child_frame.quench();
+  },
+
+  abort: function() {
+    this.aborted = true;
+    // see sjs-2-test 'reentrant quench/abort' for why we need to
+    // check for 'this.child_frame' here and in 'quench'
+    if (!this.child_frame) {
+      // reentrant abortion
+      return this;
+    }
+    else
+      return this.child_frame.abort();
+  },
+
+  returnToParent: function(val) {
+    if(is_cfx(val) && val.type == 't' && this.callstack && val.val.__oni_stack) {
+      val.val.__oni_stack = val.val.__oni_stack.concat(this.callstack);
+    }
+    if (this.swallow_r) {
+      if (is_cfx(val)) {
+        if (val.type == "r") {
+          if (!val.ef || val.ef == this) 
+            val = val.val;
+        }
+      }
+      else if (is_ef(val))
+        val.swallow_r = this.swallow_r; // pass down flag to child
+      else if (this.swallow_r !== 2)
+        val = UNDEF; // only 'return' returns a value to parent
+    }
+  
+    // Mark this frame as unreturnable. This is used by
+    // blocklambdas to determine if the lexical function container is
+    // still alive.
+    this.unreturnable = true;
+
+    // a little cleanup which might aid GC:
+    // XXX this breaks function-tests.sjs:8
+    // this.env = UNDEF;
+
+    if (this.async) {
+      if (this.parent) {
+        // we would like to call 
+        //   this.parent.cont(this.parent_idx, val) 
+        // here, but this might blow the JS stack.
+        // We encode in continuation-passing style instead; the topmost `cont`
+        // parent of this code path knows how to handle 
+        // ReturnToParentContinuation
+        return new ReturnToParentContinuation(this.parent, this.parent_idx, val);
+
+        // remove parent to aid gc; we can only do this if val != this
+        // (par and alt call through returnToParent via abortInner, which in the 
+        // async case returns their own EF)
+        // XXX empirically this doesn't seem to help much 
+        // if (val !== this) this.parent = UNDEF;
+      }
+      else // noone waiting for result; make sure exceptions get reported
+        if (is_cfx(val)) {
+          val.mapToJS(true);
+        }
+    }
+    else // sync context
+      return val;
+  }
+};
+//EF_Proto.__proto__ = null;
+
+//----------------------------------------------------------------------
+// Instruction nodes
+
+// Token which identifies an object as an instruction node
+// dispatcher (obj.__oni_dis == token_dis)
+var token_dis = {};
+
+// execute an instruction node without mapping exceptions:
+function execIN(node, env) {
+  if (!node || node.__oni_dis != token_dis) {
+    return node; // a literal value
+  }
+  return node.exec(node.ndata, env);
+}
+exports.ex = execIN;
+
+// function bodies: create a seq and exec it. map exceptions.
+// short for __oni_rt.exec(__oni_rt.Seq(...), aobj, thisobj, file)
+// aobj: effective `arguments`
+// tobj: effective `this`
+exports.exseq = function(aobj,tobj,file, args) {
+  var rv = I_seq(args, new Env(aobj,tobj,file));
+//  var rv = (new EF_Seq(args, new Env(aobj,tobj,file))).cont(1);
+  if (is_cfx(rv))
+    return rv.mapToJS(); // throw exceptions, so that we can call this from normal js
+  return rv;
+};
+
+// block lambda bodies: create a seq and exec it. XXX don't map exceptions?
+// short for __oni_rt.exec(__oni_rt.Seq(...), env)
+exports.exbl = function(env, args) {
+  var rv = I_seq(args, env);
+//  var rv = (new EF_Seq(args, env)).cont(1);
+  if (is_cfx(rv))
+    return rv.mapToJS();
+  return rv;
+};
+
+var StratumAborted = exports.StratumAborted = function() {}
+StratumAborted.prototype = new Error("stratum aborted");
+
+
+//   exec: instruction executor function
+//   returns IN constructor function which returns a instruction object
+// For some reason instruction objects created directly without makeINCtor execute slightly faster on chrome and ff 
+// -> removing use of makeINCtor
+//
+//function makeINCtor(exec) {
+//  return function(/* ndata */) {
+//    return {
+//      exec: exec,
+//      ndata: arguments,
+//      __oni_dis: token_dis
+//    };
+//  }
+//}
+
+
+//----------------------------------------------------------------------
+// Execution environment
+/*
+
+  {
+    aobj: 'arguments' object,
+    tobj: 'this' object,
+    file: filename,
+    blbref: function execution frame that blocklambda breaks should
+            target in current environment 
+    blrref: function execution frame that blocklambda returns should
+            target in current environment 
+    blscope: like blbref, but will be cleared at function boundaries. This is
+             to identify the topmost execution frame that a blocklambda break 
+             should return to
+  }
+
+*/
+
+function Env(aobj, tobj, file, blbref, blrref, blscope, fold, branch) { 
+  this.aobj = aobj; // 'arguments' object
+  this.tobj = tobj; // 'this' object
+  this.file = file; // filename
+  this.blbref = blbref;
+  this.blrref = blrref;
+  this.blscope = blscope;
+  this.fold = fold; // place where 'alt' forks
+  this.branch = branch; // id of fork branch. XXX should be merged with 'fold'
+}
+
+function copyEnv(e) {
+  return new Env(e.aobj, e.tobj, e.file, e.blbref, e.blrref, e.blscope, e.fold, e.branch);  
+}
+
+//----------------------------------------------------------------------
+// C : instruction node for function calls with non-blocking args
+// Calls the given function with 'this' set to current environment 
+
+// structure of ndata array:
+#define NDATA_CALL_JSFUNC() ndata[0]
+#define NDATA_CALL_LINENO() ndata[1]
+function I_call(ndata, env) {
+  try {
+    var rv = (NDATA_CALL_JSFUNC()).call(env);
+    if (is_ef(rv)) {
+      // collect callstack on the execution frame:
+      if (!rv.callstack) rv.callstack = [];
+      rv.callstack.push([env.file, NDATA_CALL_LINENO()]);
+    }
+    return rv;
+  }
+  catch (e) {
+    if (is_cfx(e)) {
+      if (e.type == 'blb' && e.ef == env.blscope) {
+        // XXX This is only reached when an fcall is encoded as
+        // nblock, which currently only happens if the blocklambda is
+        // called via a variable, see sjs-testsuite2:26
+        return UNDEF;
+      }
+    } else {
+      e = new CFException("t", e, NDATA_CALL_LINENO(), env.file);
+    }
+    return e;
+  }
+}
+//exports.C = makeINCtor(I_call);
+exports.C = function(f, line) {
+  return {
+    exec: I_call,
+    ndata: [f, line],
+    __oni_dis: token_dis
+  }
+};
+
+//----------------------------------------------------------------------
+// Nb : instruction node for non-blocking, argument-less javascript code 
+// Calls the given function with 'this' set to current environment.
+
+// structure of ndata array:
+#define NDATA_NBLOCK_JSFUNC() ndata[0]
+#define NDATA_NBLOCK_LINENO() ndata[1]
+function I_nblock(ndata, env) {
+  try {
+    return (NDATA_NBLOCK_JSFUNC()).call(env);
+  }
+  catch (e) {
+    if (!is_cfx(e)) {
+      e = new CFException("t", e, NDATA_NBLOCK_LINENO(), env.file);
+    }
+    return e;
+  }
+}
+//exports.Nb = makeINCtor(I_nblock);
+exports.Nb = function(f, line) {
+  return {
+    exec: I_nblock,
+    ndata: [f, line],
+    __oni_dis: token_dis
+  };
+};
+
+
+//----------------------------------------------------------------------
+// Bl : instruction node for block lambdas
+
+// structure of ndata array:
+#define NDATA_BLOCKLAMBDA_JSFUNC() ndata
+function I_blocklambda(ndata, env) {
+  return NDATA_BLOCKLAMBDA_JSFUNC().bind(env);
+}
+//exports.Bl = makeINCtor(I_blocklambda);
+exports.Bl = function(f) {
+  return {
+    exec: I_blocklambda,
+    ndata: f,
+    __oni_dis: token_dis
+  }
+};
+
+//----------------------------------------------------------------------
+// Seq : instruction node for sequential execution of child nodes
+
+// ndata[0] contains flags.
+#define NDATA_SEQ_FLAGS() ndata[0]
+// THESE FLAGS NEED TO BE KEPT IN SYNC WITH THE SEQ_FLAG_'s in kernel-sjs.js.in
+#define NDATA_SEQ_FLAG_NONE 0
+#define NDATA_SEQ_FLAG_FUNCTION 1
+#define NDATA_SEQ_FLAG_SHORTCIRCUIT_OR 2
+#define NDATA_SEQ_FLAG_SHORTCIRCUIT_AND 4
+#define NDATA_SEQ_FLAG_NOTAILCALL 8
+#define NDATA_SEQ_FLAG_UNRETURNABLE 16
+#define NDATA_SEQ_FLAG_IMPLICIT_RETURN 32 
+#define NDATA_SEQ_FLAG_BLOCKLAMBDA 64
+// ndata[1..end] contains sequence of instruction nodes
+
+/*
+  continuation index:
+  1      : start
+  2..end : returning from ndata[n-1] (last one tail-called)  
+ */
+
+function EF_Seq(ndata, env) {
+  this.ndata = ndata;
+  this.env = env;
+
+  if (NDATA_SEQ_FLAGS() & NDATA_SEQ_FLAG_NOTAILCALL) {
+    if (NDATA_SEQ_FLAGS() & NDATA_SEQ_FLAG_BLOCKLAMBDA) {
+      this.env = copyEnv(env);
+      this.env.blbref = env.blscope; // `break` in our scope targets our parent's scope
+      this.env.blrref = env.blrref;
+      this.env.blscope = this; // we're a scope for any `break`s in nested blocklambdas
+    }
+    else {
+      // XXX no need to copy env here?
+      env.blbref = this; // note down function execution frame in environment
+      env.blrref = this;
+      env.blscope = this;
+    }
+  }
+  else if (NDATA_SEQ_FLAGS() & NDATA_SEQ_FLAG_FUNCTION) {
+    this.env = copyEnv(env);
+    if (NDATA_SEQ_FLAGS() & NDATA_SEQ_FLAG_BLOCKLAMBDA)
+      this.env.blbref = env.blscope; // `break` in our scope targets our parent's scope
+
+    // we're a function (blocklambda or normal) but NOT a scope 
+    // for any `break`s in child frames (otherwise the compiler would
+    // have marked us 'notailcall'). clear blscope so that targeted `break` calls will
+    // find their way to the correct scope:
+    this.env.blscope = null;
+  }
+
+  this.tailcall = !(NDATA_SEQ_FLAGS() & NDATA_SEQ_FLAG_NOTAILCALL);
+  //WHENDEBUG(if (!this.tailcall) console.log("no tailcall!!");)
+  // do we 'catch' returns? (also implies that we're catching stray break/continue)
+  // swallow_r == true : 'catch' returns
+  // swallow_r == 2    : allow implicit returns (i.e. last expression returns result)
+  this.swallow_r = NDATA_SEQ_FLAGS() & NDATA_SEQ_FLAG_FUNCTION;
+  if (NDATA_SEQ_FLAGS() & NDATA_SEQ_FLAG_IMPLICIT_RETURN)
+    this.swallow_r = 2;
+
+  // short-circuited?:
+  this.sc = NDATA_SEQ_FLAGS() & (NDATA_SEQ_FLAG_SHORTCIRCUIT_OR |
+                                 NDATA_SEQ_FLAG_SHORTCIRCUIT_AND); 
+
+  // is this a top-level seq (one that can't be return'ed to?)
+  if (NDATA_SEQ_FLAGS() & NDATA_SEQ_FLAG_UNRETURNABLE) {
+    this.unreturnable = true;
+    // mark it as toplevel, for correct error messages and to allow
+    // blocklambda breaks to target this frame:
+    this.toplevel = true; 
+  }
+}
+setEFProto(EF_Seq.prototype={});
+#ifdef EF_TYPES
+EF_Seq.prototype.type = "Seq";
+#endif
+EF_Seq.prototype.cont = function(idx, val) {
+#ifdef DEBUG_VM_XX
+  var getType = function(val) {
+    var sub = val && val.type;
+    return "Seq/" + (sub || "??");
+  };
+  LOG("EF_Seq.prototype.cont(" + idx + " of " + this.ndata.length + ", val[ef=" + is_ef(val) + ",cfx=" + is_cfx(val) + "]) @ " + this.env.file);
+#endif
+
+  if (is_ef(val)) {
+    // child frame being replaced:
+    this.setChildFrame(val, idx);
+  }
+  else {
+    if (is_cfx(val)) {
+      // block lambda break
+      if (val.type == 'blb' && val.ef == this.env.blscope) {
+        val = UNDEF;
+      }
+      else {
+        // pass through other exceptions:
+        return this.returnToParent(val);
+      }
+    }
+    while (idx<this.ndata.length) {
+      if (this.sc && idx > 1) {
+        // short-circuit logic (for '||' & '&&')
+        if (this.sc == NDATA_SEQ_FLAG_SHORTCIRCUIT_OR) {
+          if (val) break; // returns val
+        }
+        else { // == NDATA_SEQ_FLAG_SHORTCIRCUIT_AND
+          if (!val) break; // returns val
+        }
+      }
+      this.child_frame = null; // ensures correct reentrant aborting
+      val = execIN(this.ndata[idx], this.env);
+      if (this.aborted) {
+        // a reentrant abortion
+        if (is_ef(val)) {
+          val.quench(); // not sure this is needed here XXX
+          val = val.abort();
+          return this.returnToParent(val);
+        }
+      }
+      if (++idx == this.ndata.length && this.tailcall) {
+        // tail call optimization: 
+        break;
+      }
+      if (is_cfx(val)) {
+        // handle reentrant blocklambda breaks
+        // (see sjs2-tests:reentrant blocklambda resume/break)
+        if (val.type === 'blb' && val.ef === this.env.blscope)
+          val = undefined;
+        break;
+      }
+      else if (is_ef(val)) {
+        this.setChildFrame(val, idx);
+        return this;
+      }
+    }
+    return this.returnToParent(val);
+  }
+};
+
+#ifdef HOTPATH
+function I_seq(ndata, env) {
+  if (NDATA_SEQ_FLAGS() & NDATA_SEQ_FLAG_NOTAILCALL)
+    return cont(new EF_Seq(ndata, env), 1);
+
+  var sc = NDATA_SEQ_FLAGS() & (NDATA_SEQ_FLAG_SHORTCIRCUIT_OR |
+                                NDATA_SEQ_FLAG_SHORTCIRCUIT_AND); 
+  var idx = 1;
+  var val;
+  var l = ndata.length;
+  while (idx<l) {
+    val = execIN(ndata[idx++], env);
+    if (this.aborted) {
+      // a reentrant abortion
+      if (is_ef(val)) {
+        val.quench(); // not sure this is needed here XXX
+        val = val.abort();
+        return this.returnToParent(val);
+      }
+    }
+
+    if (is_cfx(val)) break;
+    if (is_ef(val)) {
+      // need to create an execution frame for ourselves... 
+      var ef = new EF_Seq(ndata, env);
+      ef.setChildFrame(val, idx);
+      return ef;
+    }
+    if (sc) {
+      if (sc == NDATA_SEQ_FLAG_SHORTCIRCUIT_OR) {
+        if (val) break; // returns val
+      }
+      else { // == NDATA_SEQ_FLAG_SHORTCIRCUIT_AND
+        if (!val) break; // returns val
+      }
+    }
+  }
+
+  if (NDATA_SEQ_FLAGS() & NDATA_SEQ_FLAG_FUNCTION) {
+    if (is_cfx(val)) {
+      if (val.type == "r") { 
+        if (!val.ef)
+          val = val.val;
+      }
+    }
+    else
+      val = UNDEF;
+  }
+  return val;
+}
+#else /* !HOTPATH */
+function I_seq(ndata, env) {
+  return cont(new EF_Seq(ndata, env), 1);
+}
+#endif /* HOTPATH */
+//exports.Seq = makeINCtor(I_seq);
+exports.Seq = function() {
+  return {
+    exec: I_seq,
+    ndata: arguments,
+    __oni_dis: token_dis
+  }
+};
+
+//----------------------------------------------------------------------
+// Sc : simple strict function call
+//
+// executes env.SC_L(arg1, arg2, ...) where arg1..n are strictly
+// evaluated instruction nodes
+
+
+// structure of ndata array:
+#define NDATA_SC_LINE() ndata[0]
+#define NDATA_SC_L() ndata[1]
+#define NDATA_SC_ARGS_OFFSET 2
+// ndata[NDATA_SC_ARGS_OFFSET..end] : sc args
+
+/*
+  continuation index:
+   0 : start
+   1 : returning from args evaluation
+*/
+
+function EF_Sc(ndata, env) {
+  this.ndata = ndata;
+  this.env = env;
+  this.i = NDATA_SC_ARGS_OFFSET;
+  this.pars = [];
+}
+setEFProto(EF_Sc.prototype={});
+#ifdef EF_TYPES
+EF_Sc.prototype.type = "Sc";
+#endif
+
+EF_Sc.prototype.cont = function(idx, val) {
+  if (is_ef(val)) {
+    this.setChildFrame(val, idx);
+  }
+  else if (is_cfx(val)) {
+    return this.returnToParent(val);
+  }
+  else {
+    this.child_frame = null; // prevent callstack copying; stack-tests 20
+    if (idx == 1) {
+      // handle a result that has been passed in
+      this.pars.push(val);
+    }
+    var rv;
+    while (this.i<this.ndata.length) {
+      rv = execIN(this.ndata[this.i], this.env);
+      if (this.aborted) {
+        // a reentrant abortion
+        if (is_ef(rv)) {
+          rv.quench(); // not sure this is needed here XXX
+          rv = rv.abort();
+          return this.returnToParent(rv);
+        }
+      }
+
+      ++this.i;
+      if (is_cfx(rv)) return this.returnToParent(rv);
+      if (is_ef(rv)) {
+        this.setChildFrame(rv, 1);
+        return this;
+      }
+      this.pars.push(rv);
+    }
+    this.child_frame = null;
+
+    // alright, we've got the pars, let's do the call:
+    try {
+        rv = this.NDATA_SC_L().apply(this.env, this.pars);
+    }
+    catch (e) {
+      rv = new CFException("t", e,
+                           this.NDATA_SC_LINE(),
+                           this.env.file);
+    }
+    return this.returnToParent(rv);
+  }
+};
+
+function I_sc(ndata, env) {
+  return cont(new EF_Sc(ndata, env), 0);
+}
+
+//exports.Sc = makeINCtor(I_sc);
+exports.Sc = function() {
+  return {
+    exec: I_sc,
+    ndata: arguments,
+    __oni_dis: token_dis
+  }
+};
+
+//----------------------------------------------------------------------
+// Fcall : instruction node for calling a function 
+
+// IE-safe helper to determine if something is a function
+function testIsFunction(f) {
+  if (typeof f == "function") return true;
+  // ... else, the IE/Safari workarounds (some things like
+  // document.getElementById are not functions)
+  // try 1:
+//  return ((""+f).indexOf("[native code]") != -1) ||
+//    ((""+f).indexOf("Constructor]") != -1);
+  // try 2: (doesn't catch "[object ...]")
+//  return ((""+f).indexOf("[") != -1 )
+  // try 3:
+  // don't catch things like: html::Element[div] (stringification of mho:surface html primitives) 
+  return /(^| )\[[^o]/.test(""+f);
+}  
+
+// structure of ndata array:
+// mode: 0: normal call, 1: reference call, 2: 'new' call
+#define NDATA_FCALL_MODE() ndata[0]
+#define NDATA_FCALL_LINE() ndata[1]
+#define NDATA_L_INDEX 2
+#define NDATA_FCALL_L() ndata[2]
+#define NDATA_FCALL_ARGS_OFFSET 3
+// ndata[NDATA_FCALL_ARGS_OFFSET..end] : fcall args
+
+/*
+  continuation index:
+   0 : start
+   1 : returning from l/pars evaluation
+   2 : returning from 'new' call (need to return 'this.o') 
+*/
+
+function EF_Fcall(ndata, env) {
+  this.ndata = ndata;
+  this.env = env;
+  this.i = NDATA_L_INDEX;
+  this.pars = [];
+}
+setEFProto(EF_Fcall.prototype={});
+#ifdef EF_TYPES
+EF_Fcall.prototype.type = "Fcall";
+#endif
+
+EF_Fcall.prototype.cont = function(idx, val) {
+  if (is_ef(val)) {
+    this.setChildFrame(val, idx);
+  }
+  else if (is_cfx(val)) {
+    return this.returnToParent(val);
+  }
+  else if (idx == 2) {
+    // returning from a 'new' call
+    return this.returnToParent(this.o);
+  }
+  else {
+    if (idx == 1) {
+      // handle a result that has been passed in
+      if (this.i==NDATA_FCALL_ARGS_OFFSET)
+        this.l = val;
+      else
+        this.pars.push(val);
+    }
+    var rv;
+    while (this.i<this.ndata.length) {
+      rv = execIN(this.ndata[this.i], this.env);
+      if (this.aborted) {
+        // a reentrant abortion
+        if (is_ef(rv)) {
+          rv.quench(); // not sure this is needed here XXX
+          rv = rv.abort();
+          return this.returnToParent(rv);
+        }
+      }
+
+      ++this.i;
+      if (is_cfx(rv)) return this.returnToParent(rv);
+      if (is_ef(rv)) {
+        this.child_frame = null; // prevent unnecessary callstack copying
+        this.setChildFrame(rv, 1);
+        return this;
+      }
+      if (this.i==NDATA_FCALL_ARGS_OFFSET)
+        this.l = rv;
+      else
+        this.pars.push(rv);
+    }
+    
+    this.child_frame = null;
+
+    // alright, we've got the left side + pars, let's do the call:
+    try {
+      switch (this.NDATA_FCALL_MODE()) {
+      case 0:
+      // 'normal' call
+      // this optimization gives at least 10% performance boost vs 'eval'
+      if (typeof this.l == "function") {
+        rv = this.l.apply(null, this.pars);
+      } 
+      else if (!testIsFunction(this.l)) {
+        rv = new CFException("t",
+                             new Error("'"+this.l+"' is not a function"),
+                             this.NDATA_FCALL_LINE(),
+                             this.env.file);
+      }
+      else {
+        // a 'builtin' (on IE, maybe others)
+        // can't call apply on it
+        var command = "this.l(";
+        for (var i=0; i<this.pars.length; ++i) {
+          if (i) command +=",";
+          command += "this.pars["+i+"]";
+        }
+        command += ")";
+        try {
+          rv = eval(command);
+        }
+        catch (e) {
+          // we have a bit of a problem now... the command could have
+          // failed because the "function" wasn't a function after
+          // all, or because running the builtin failed. As this is
+          // mainly a problem on windows (maybe also safari?) we'll
+          // take a punt and replace the (cryptic) exception we get
+          // ("this.l isn't a function") by a saner one:
+          rv = new CFException("t",
+                               new Error("'"+this.l+"' is not a function"),
+                               this.NDATA_FCALL_LINE(),
+                               this.env.file);
+        }
+      }
+      break;
+      case 1:
+      // 'reference' call
+      if (typeof this.l[0] === 'undefined') {
+        rv = new CFException("t",
+                             new Error("'"+this.l[1]+"' on '"+this.l[0]+"' is not a function"),
+                             this.NDATA_FCALL_LINE(),
+                             this.env.file);
+      }
+      else if (typeof this.l[0][this.l[1]] == "function") {
+        // 'normal' function
+        // XXX not sure this is actually faster or better than 'eval' below
+        rv = this.l[0][this.l[1]].apply(this.l[0], this.pars);
+      }
+      else if (
+#ifdef CLIENTSIDE
+               /* The reason we predicate this test on !ie is that on
+                  IE certain object methods throw an exception when
+                  accessed as a value rather than a function call.
+                  E.g. for a some xml 'X' returned by XMLHttpRequest
+                  we can call X.getElementsByTagName("foo") but
+                  accessing X.getElementsByTagName throws an
+                  exception "Wrong number of arguments or invalid
+                  property assignment"             */
+               (UA !== "msie") &&
+#endif
+               !testIsFunction(this.l[0][this.l[1]])) {
+        // XXX examine if this test is useful anyway. does it give
+        // us better error messages?
+        rv = new CFException("t",
+                             new Error("'"+this.l[0][this.l[1]]+"' is not a function"),
+                             this.NDATA_FCALL_LINE(),
+                             this.env.file);
+      }
+      else {
+        // a 'builtin' (on IE, maybe others)
+        // can't call apply on it
+        var command = "this.l[0][this.l[1]](";
+        for (var i=0; i<this.pars.length; ++i) {
+          if (i) command +=",";
+          command += "this.pars["+i+"]";
+        }
+        command += ")";
+
+        try {
+          rv = eval(command);
+        }
+        catch (e) {
+          // as above, we have a bit of a problem now... the command
+          // could have failed because the "function" wasn't a
+          // function after all, or because running the builtin
+          // failed. As this is mainly a problem on windows (maybe
+          // also safari?) we'll take a punt and replace the (cryptic)
+          // exception we get ("this.l isn't a function") by a saner
+          // one:
+          rv = new CFException("t",
+                               new Error("'"+this.l[0][this.l[1]]+"' is not a function"),
+                               this.NDATA_FCALL_LINE(),
+                               this.env.file);
+        }
+      }
+      break;
+      case 2:
+      // 'new' call
+      
+      // XXX this sucks big-time. we need to distinguish between
+      // builtin objects and user functions :-(
+      var ctor = this.l;
+#ifdef NODEJS
+      if (ctor && (/\{ \[native code\] \}$/.test(ctor.toString()) || ctor === Buffer)) {
+#else
+      if (ctor && (/\{\s*\[native code\]\s*\}\s*$/.test(ctor.toString()) ||
+                   ctor.apply == undefined /* this last one catches XMLHttpRequest on Safari */)) {
+#endif /* !NODEJS */
+        // ctor is one of the 'builtin' functions. we need to
+        // construct it in a single stage:
+        var pars = this.pars;
+        
+#ifdef NOEVAL
+        // we could use this in the general case, but it's ~5x slower.
+        rv = new (Function.prototype.bind.apply(ctor, [null].concat(pars)));
+#else
+        var command = "new ctor(";
+        for (var i=0; i<pars.length; ++i) {
+          if (i) command +=",";
+          command += "pars["+i+"]";
+        }
+        command += ")";
+        rv = eval(command);
+#endif /* NOEVAL */
+      }
+      else if (!testIsFunction(ctor)) {
+        rv = new CFException("t",
+                             new Error("'"+ctor+"' is not a function"),
+                             this.NDATA_FCALL_LINE(),
+                             this.env.file);
+      }
+      else {
+        // ctor is a 'user' function, which could suspend under our feet.
+        // we have to construct in two stages:
+#ifdef NODEJS
+        this.o = Object.create(ctor.prototype);
+#else
+        var f = function() {};
+        f.prototype = ctor.prototype;
+        this.o = new f();
+#endif
+        rv = ctor.apply(this.o, this.pars);
+        if (is_ef(rv)) {
+          // we need to stay in the picture
+          this.setChildFrame(rv, 2);
+          return this;
+        }
+        else {
+        // special casing for return value handling (return 'o'
+        // instead of rv if rv is not typeof object):
+          if (!rv || "object function".indexOf(typeof rv) == -1) 
+            rv = this.o;
+        }
+      }
+      break;
+      default:
+      rv = new CFException("i", "Invalid Fcall mode");
+      }
+    }
+    catch (e) {
+      // XXX not sure if we should amend this
+      // exception. it might have been thrown by JS code, and I'm
+      // pretty sure if it was thrown by SJS code it will already
+      // have been amended.
+      // The *pragmatic* thing seems to be to annotate.
+//      rv = new CFException("t", e, "passthrough");
+      if (is_cfx(e)) {
+        // handle blocklambda break: 
+        if (e.type == 'blb' && e.ef == this.env.blscope) {
+          rv = UNDEF;
+        }
+        else
+          rv = e;
+      }
+      else
+        rv = new CFException("t", e,
+                             this.NDATA_FCALL_LINE(),
+                             this.env.file);
+    }
+    if (is_ef(rv)) {
+      if (this.aborted) {
+        // reentrant abortion
+        rv = rv.abort();
+        return this.returnToParent(rv);
+      }
+
+      // the call is blocking -> insert ourselves into callstack:
+      if (!rv.callstack) rv.callstack = [];
+      rv.callstack.push([this.env.file, this.NDATA_FCALL_LINE()]);
+    }
+    return this.returnToParent(rv);
+  }
+};
+
+function I_fcall(ndata, env) {
+  return cont(new EF_Fcall(ndata, env), 0);
+}
+
+//exports.Fcall = makeINCtor(I_fcall);
+exports.Fcall = function() {
+  return {
+    exec: I_fcall,
+    ndata: arguments,
+    __oni_dis: token_dis
+  }
+};
+
+//----------------------------------------------------------------------
+// If : instruction node for executing 'if'
+
+// structure of ndata array:
+#define NDATA_IF_TEST() ndata[0]
+#define NDATA_IF_CONSEQUENT() ndata[1]
+#define NDATA_IF_ALTERNATIVE() ndata[2]
+
+/*
+  continuation index:
+   0 : start
+   1 : returning from test evaluation
+*/
+
+function EF_If(ndata, env) {
+  this.ndata = ndata;
+  this.env = env;
+}
+setEFProto(EF_If.prototype={});
+#ifdef EF_TYPES
+EF_If.prototype.type = "If";
+#endif
+
+EF_If.prototype.cont = function(idx, val) {
+  switch (idx) {
+  case 0:
+  //  LOG("IF: exec test")
+  val = execIN(this.NDATA_IF_TEST(), this.env);
+    if (this.aborted) {
+      // a reentrant abortion
+      if (is_ef(val)) {
+        val.quench(); // not sure this is needed here XXX
+        val = val.abort();
+        return this.returnToParent(val);
+      }
+    }
+
+  //  LOG("IF: test execed:"+val)
+  case 1:
+  if (is_cfx(val)) break;
+  if (is_ef(val)) {
+    this.setChildFrame(val, 1);
+    return this;
+  }
+  // tail calls:
+  if (val)
+    val = execIN(this.NDATA_IF_CONSEQUENT(), this.env);
+  else
+    val = execIN(this.NDATA_IF_ALTERNATIVE(), this.env);
+  break;
+  default:
+  val = new CFException("i", "invalid state in EF_If");
+  }
+  return this.returnToParent(val);
+};
+
+function I_if(ndata, env) {
+  return cont(new EF_If(ndata, env), 0);
+}
+
+//exports.If = makeINCtor(I_if);
+exports.If = function(t,c,a) {
+  return {
+    exec: I_if,
+    ndata: [t,c,a],
+    __oni_dis: token_dis
+  }
+};
+
+//----------------------------------------------------------------------
+// Switch: instruction node for executing 'switch() { case/default }'
+
+// exported objected designating a 'default' clause:
+var Default = {};
+exports.Default = Default;
+
+// structure of ndata array:
+#define NDATA_SWITCH_EXP() ndata[0]
+#define NDATA_SWITCH_CLAUSES() ndata[1]
+
+/*
+  continuation index:
+
+phase 0: (evaling switch exp)
+
+   0    : start
+   1    : returning from switch expression evaluation
+
+phase 1: (testing clause exp)
+   -1   : entering from switch exp evaluation
+   0..n : returning from given clause exp 
+
+
+phase 2: (executing clause code)
+
+   0...n : next clause to run
+*/
+
+function EF_Switch(ndata, env) {
+  this.ndata = ndata;
+  this.env = env;
+  this.phase = 0;
+}
+setEFProto(EF_Switch.prototype={});
+#ifdef EF_TYPES
+EF_Switch.prototype.type = "Switch";
+#endif
+
+EF_Switch.prototype.cont = function(idx, val) {
+  switch (this.phase) {
+  case 0: // evaluate switch expression
+  if (idx == 0) {
+    val = execIN(this.NDATA_SWITCH_EXP(), this.env);
+    if (this.aborted) {
+      // a reentrant abortion
+      if (is_ef(val)) {
+        val.quench(); // not sure this is needed here XXX
+        val = val.abort();
+        return this.returnToParent(val);
+      }
+    }
+  }
+  if (is_cfx(val)) return this.returnToParent(val);
+  if (is_ef(val)) {
+    this.setChildFrame(val, 1);
+    return this;
+  }
+  this.phase = 1;
+  this.testval = val;
+  idx = -1;
+  case 1: // test clauses until we find a matching one
+  while (true) {
+    if (idx > -1) { // returning from evaluation of clause test idx
+      if (is_cfx(val)) return this.returnToParent(val);
+      if (is_ef(val)) {
+        this.setChildFrame(val, idx);
+        return this;
+      }
+      else if (val == Default || val == this.testval)
+        break; // go into phase 2!
+    }
+    if (++idx >= this.NDATA_SWITCH_CLAUSES().length)
+      return this.returnToParent(null); // all done; no matching clause found
+    // test next clause:
+    this.child_frame = null; // prevent callstack copying; stack-tests 21
+    val = execIN(this.NDATA_SWITCH_CLAUSES()[idx][0], this.env);
+    if (this.aborted) {
+      // a reentrant abortion
+      if (is_ef(val)) {
+        val.quench(); // not sure this is needed here XXX
+        val = val.abort();
+        return this.returnToParent(val);
+      }
+    }
+  }
+  this.phase = 2;
+  val = 0;
+  case 2: // run clauses
+  while (true) {
+    if (is_ef(val)) {
+      this.setChildFrame(val, idx);
+      return this;
+    }
+    if (is_cfx(val)) {
+      if (val.type == "b") {
+        val = val.val;
+      }
+      return this.returnToParent(val);
+    }
+    if (idx >= this.NDATA_SWITCH_CLAUSES().length) {
+      return this.returnToParent(val);
+    }
+    this.child_frame = null; // prevent callstack copying; stack-tests 22
+    val = execIN(this.NDATA_SWITCH_CLAUSES()[idx][1], this.env);
+    if (this.aborted) {
+      // a reentrant abortion
+      if (is_ef(val)) {
+        val.quench(); // not sure this is needed here XXX
+        val = val.abort();
+        return this.returnToParent(val);
+      }
+    }
+    ++idx;
+  }
+  default:
+  throw new Error("Invalid phase in Switch SJS node");
+  }
+};
+
+function I_switch(ndata, env) {
+  return cont(new EF_Switch(ndata, env), 0);
+}
+
+//exports.Switch = makeINCtor(I_switch);
+exports.Switch = function(exp, clauses) {
+  return {
+    exec: I_switch,
+    ndata: [exp, clauses],
+    __oni_dis: token_dis
+  }
+};
+
+//----------------------------------------------------------------------
+// Try : instruction node for try/catch/finally
+
+// structure of ndata array:
+// ndata[0] contains flags.
+// THESE FLAGS NEED TO BE KEPT IN SYNC WITH THE TRY_FLAG_'s in kernel-sjs.js.in
+#define NDATA_TRY_FLAG_NONE 0
+#define NDATA_TRY_FLAG_CATCHALL 1
+
+#define NDATA_TRY_FLAGS() ndata[0]
+#define NDATA_TRY_TRY_BLOCK() ndata[1]
+#define NDATA_TRY_CATCH_FUNC() ndata[2]
+#define NDATA_TRY_FINALLY_BLOCK() ndata[3]
+#define NDATA_TRY_RETRACT_BLOCK() ndata[4]
+
+/*
+  continuation index not used, we use this.state instead (since we
+  need to know the state when we get an abort):
+
+  0 : start
+  1 : returning from try block
+  2 : returning from catch
+  3 : returning from retract
+  4 : returning from finally
+
+*/
+
+function EF_Try(ndata, env) {
+  this.ndata = ndata;
+  this.env = env;
+  this.state = 0;
+}
+setEFProto(EF_Try.prototype={});
+#ifdef EF_TYPES
+EF_Try.prototype.type = "Try";
+#endif
+
+EF_Try.prototype.cont = function(idx, val) {
+  if (is_ef(val)) {
+    this.setChildFrame(val, this.state);
+  }
+  else {
+    switch (this.state) {
+    case 0:
+    this.state = 1;
+    val = execIN(this.NDATA_TRY_TRY_BLOCK(), this.env);
+
+    if (is_ef(val)) {
+      this.setChildFrame(val);
+      return this;
+    }
+    case 1:
+    // returning from try block
+    this.state = 2;
+    if (!this.aborted &&
+        this.NDATA_TRY_CATCH_FUNC() &&
+        ((is_cfx(val) && val.type == "t") ||
+         this.NDATA_TRY_FLAGS() & NDATA_TRY_FLAG_CATCHALL)) {
+      var v;
+      if (this.NDATA_TRY_FLAGS() & NDATA_TRY_FLAG_CATCHALL) {
+        // we'll pass an array [rv|exception, isexception] to the
+        // catch function
+        v = is_cfx(val) ? [val.val, true] : [val, false];
+      }
+      else // 'normal' exception catching
+        v = val.val;
+      val = this.NDATA_TRY_CATCH_FUNC()(this.env, v);
+
+      // Check for a reentrant abortion triggered by our catch() block
+      // see sjs-2-tests.sjs: reentrant abortion from catch()
+      if (this.aborted && is_ef(val)) {
+        // abort val
+        val = val.abort();
+      } 
+
+      // tail-call optimization:
+      if (!this.NDATA_TRY_RETRACT_BLOCK && !this.NDATA_TRY_FINALLY_BLOCK())
+        return this.returnToParent(val);
+
+
+      if (is_ef(val)) {
+        this.child_frame = null; // prevent callstack copying; stack-tests 23        
+        this.setChildFrame(val);
+        return this;
+      }
+    }
+    case 2:
+    // returning from try/catch
+    this.state = 3;
+    // save value from catch/try (the value from the retract block
+    // never matters):
+    this.rv = val;
+    if (this.aborted && this.NDATA_TRY_RETRACT_BLOCK()) {
+      val = execIN(this.NDATA_TRY_RETRACT_BLOCK(), this.env);
+
+      // tail-call optimization:
+      // XXX this breaks sjs-testsuite2:51
+      //if (!this.NDATA_TRY_FINALLY_BLOCK())
+      //  return this.returnToParent(val);
+
+
+      if (is_ef(val)) {
+        this.child_frame = null; // prevent unnecessary callstack copying
+        this.setChildFrame(val);
+        return this;
+      }
+    }
+    case 3:
+    // returning from try/catch/retract
+    this.state = 4;
+    if (this.NDATA_TRY_FINALLY_BLOCK()) {
+      val = execIN(this.NDATA_TRY_FINALLY_BLOCK(), this.env);
+      // we can't tail-call this, because we might have to return
+      // the stored rv (if it is an exception)
+      if (is_ef(val)) {
+        this.child_frame = null; // prevent unnecessary callstack copying
+        this.setChildFrame(val);
+        return this;
+      }
+    }
+    case 4:
+    // returning from finally        
+    // override res with stored exception (from try or catch) if
+    // val isn't an exception
+    if (is_cfx(this.rv) && !is_cfx(val)) {
+      val = this.rv;
+    }
+    break;
+    default:
+    val = new CFException("i", "invalid state in CF_Try");
+    }
+    return this.returnToParent(val);
+  }
+};
+
+EF_Try.prototype.quench = function() {
+  if (this.state !== 4) // don't quench inside finally block
+    this.child_frame.quench();
+};
+
+EF_Try.prototype.abort = function() {
+  ASSERT(this.aborted !== true) // sanity check; aborted before
+  this.aborted = true;
+  ASSERT(this.state !== 3) // sanity check; aborted before
+  if (this.state !== 4) { // don't abort finally block
+    var val = this.child_frame.abort();
+    if (is_ef(val)) {
+      // we need to wait for the try or catch block, and then let
+      // cont() proceed with retract/finally:
+      this.setChildFrame(val);
+    }
+    else {
+      // attempt to execute retract/finally blocks synchronously:
+
+      // prevent continuation from ending up at parent, we want to feed
+      // it to the abortee directly:
+      this.parent = UNDEF;
+
+      if (cont(this, 0) !== this) {
+        return;
+      }
+      // ... else fall through. we need to block
+    }
+  }
+  return this;
+};
+
+function I_try(ndata, env) {
+  return cont(new EF_Try(ndata, env), 0);
+}
+
+//exports.Try = makeINCtor(I_try);
+exports.Try = function() {
+  return {
+    exec: I_try,
+    ndata: arguments,
+    __oni_dis: token_dis
+  }
+};
+
+//----------------------------------------------------------------------
+// Loop : instruction node for looping constructs
+
+// structure of ndata array:
+#define NDATA_LOOP_INIT_STATE() ndata[0]
+#define NDATA_LOOP_TEST() ndata[1]
+#define NDATA_LOOP_INC() ndata[2]
+#define NDATA_LOOP_BODY(i) ndata[i+1]
+
+/*
+  continuation index:
+   0 : perform test next
+   2 - ndata.length+2 : perform body NDATA_LOOP_BODY+i-2 next
+   1 : perform inc next 
+*/
+
+function EF_Loop(ndata, env) {
+  this.ndata = ndata;
+  this.env = env;
+}
+setEFProto(EF_Loop.prototype={});
+#ifdef EF_TYPES
+EF_Loop.prototype.type = "Loop";
+#endif
+
+EF_Loop.prototype.cont = function(idx, val) {
+  if (is_ef(val)) {
+    this.setChildFrame(val, idx);
+  }
+  else {
+    while (true) {
+      // test:
+      if (idx == 0) {
+        if (is_cfx(val)) {
+          // maybe return value from body here
+          return this.returnToParent(val);
+        }
+        // perform loop test
+        val = execIN(this.NDATA_LOOP_TEST(), this.env);
+        if (this.aborted) {
+          // a reentrant abortion
+          if (is_ef(val)) {
+            val.quench(); // not sure this is needed here XXX
+            val = val.abort();
+            return this.returnToParent(val);
+          }
+        }
+
+        if (is_ef(val)) {
+          this.child_frame = null; // prevent callstack copying; stack-tests 26
+          this.setChildFrame(val, 2);
+          return this;
+        }
+        idx = 2; // body next
+      }
+      // body:
+      if (idx > 1) {
+        if (idx == 2) {
+          // examine return value from loop test:
+          if (!val || is_cfx(val)) {
+            // maybe return value from body here
+            return this.returnToParent(val);
+          }
+        }
+        while (1) {
+          if (idx > 2) {
+            if (is_cfx(val)) {
+              if (val.type == 'blb' && val.ef == this.env.blscope) {
+                // blocklambda return
+                val = UNDEF;
+              }
+              else {
+                if (val.type == "b") {
+                  // break statement
+                  val = UNDEF;
+                }
+                else if (val.type == "c") {
+                  // continue statement
+                  val = UNDEF;
+                  // break out of the loop; pick up again at increment:
+                  break;
+                }
+                return this.returnToParent(val);
+              }
+            }
+            if (idx >= this.ndata.length)
+              break; // pick up at increment
+          }
+            
+          // perform body
+          this.child_frame = null; // ensure correct reentrant aborting & prevent callstack copying 
+          val = execIN(this.NDATA_LOOP_BODY(idx), this.env);
+          if (this.aborted) {
+            // a reentrant abortion
+            if (is_ef(val)) {
+              val.quench(); // not sure this is needed here XXX
+              val = val.abort();
+              return this.returnToParent(val);
+            }
+          }
+          ++idx;
+          if (is_ef(val)) {
+            this.setChildFrame(val, idx);
+            return this;
+          }
+        }
+        idx = 1;
+      }
+      // this point will be reached directly if idx = 1
+      if (this.NDATA_LOOP_INC())  {
+        // perform inc
+        val = execIN(this.NDATA_LOOP_INC(), this.env);
+        if (this.aborted) {
+          // a reentrant abortion
+          if (is_ef(val)) {
+            val.quench(); // not sure this is needed here XXX
+            val = val.abort();
+            return this.returnToParent(val);
+          }
+        }
+
+        if (is_ef(val)) {
+          this.child_frame = null; // prevent callstack copying; stack-tests 27
+          this.setChildFrame(val, 0);
+          return this;
+        }
+      }
+      idx = 0;
+    }
+  }
+};
+
+function I_loop(ndata, env) {
+  return cont(new EF_Loop(ndata, env), NDATA_LOOP_INIT_STATE(), true);
+}
+
+//exports.Loop = makeINCtor(I_loop);
+exports.Loop = function() {
+  return {
+    exec: I_loop,
+    ndata: arguments,
+    __oni_dis: token_dis
+  }
+};
+
+//----------------------------------------------------------------------
+// ForIn : instruction node for 'for-in' loops
+
+// structure of ndata array
+#define NDATA_FORIN_OBJ()  ndata[0]
+#define NDATA_FORIN_LOOPF() ndata[1]
+
+/*
+  continuation index:
+   0   : start
+   1   : returning from evalution of forin obj
+   2   : returning from loopf
+*/
+
+function EF_ForIn(ndata, env) {
+  this.ndata = ndata;
+  this.env = env;
+}
+setEFProto(EF_ForIn.prototype={});
+#ifdef EF_TYPES
+EF_ForIn.prototype.type = "ForIn";
+#endif
+
+EF_ForIn.prototype.cont = function(idx, val) {
+  if (is_ef(val)) {
+    this.setChildFrame(val, idx);
+  }
+  else {
+    if (idx == 0) {
+      val = execIN(this.NDATA_FORIN_OBJ(), this.env);
+      if (this.aborted) {
+        // a reentrant abortion
+        if (is_ef(val)) {
+          val.quench(); // not sure this is needed here XXX
+          val = val.abort();
+          return this.returnToParent(val);
+        }
+      }
+
+      if (is_ef(val)) {
+        this.child_frame = null; // prevent callstack copying
+        this.setChildFrame(val, 1);
+        return this;
+      }
+      idx = 1;
+    }
+    if (idx == 1) {
+      // returning from evaluation of forin obj
+      if (is_cfx(val))
+        return this.returnToParent(val);
+      for (var x in val) {
+        if (typeof this.remainingX === 'undefined') {
+          val = this.NDATA_FORIN_LOOPF()(this.env,x);
+          if (is_cfx(val)) {
+              if (val.type == "b") {
+                // break statement
+                val = UNDEF;
+              }
+              else if (val.type == "c") {
+                // continue
+                val = UNDEF;
+                continue;
+              }
+            return this.returnToParent(val);
+          }
+          if (is_ef(val))
+            this.remainingX = [];
+        }
+        else
+          this.remainingX.push(x);
+      }
+      if (is_ef(val)) {
+        if (!this.remainingX) this.remainingX = [];
+        this.child_frame = null; // prevent callstack copying
+        this.setChildFrame(val, 2);
+        return this;
+      }
+      // all done
+      return this.returnToParent(val);
+    }
+    if (idx == 2) {
+      while (1) {
+        // returning from evaluation of loop
+        if (is_cfx(val)) {
+            if (val.type == "b") {
+              // break
+              val = UNDEF;
+            }
+            else if (val.type == "c") {
+              // continue
+              val = UNDEF;
+              if (this.remainingX.length)
+                continue;
+            }            
+          return this.returnToParent(val);
+        }
+        if (is_ef(val)) {
+          this.child_frame = null; // prevent callstack copying
+          this.setChildFrame(val, 2);
+          return this;
+        }
+        if (!this.remainingX.length) {
+          return this.returnToParent(val);
+        }
+        val = this.NDATA_FORIN_LOOPF()(this.env, this.remainingX.shift());
+        // go round the loop again
+      }
+    }
+  }
+};
+
+function I_forin(ndata, env) {
+  return cont(new EF_ForIn(ndata, env), 0);
+}
+
+//exports.ForIn = makeINCtor(I_forin);
+exports.ForIn = function(obj,loop) {
+  return {
+    exec: I_forin,
+    ndata: [obj,loop],
+    __oni_dis: token_dis
+  }
+};
+
+//----------------------------------------------------------------------
+// Par : stratified par construct
+
+// ndata[0..end] contains sequence of instruction nodes
+
+/*
+  continuation index:
+   -1: start
+   0..end: index of instruction node we're returning from
+*/
+
+function EF_Par(ndata, env) {
+  this.ndata = ndata;
+  this.env = env;
+  this.pending = 0;
+  this.children = new Array(this.ndata.length);
+}
+setEFProto(EF_Par.prototype={});
+#ifdef EF_TYPES
+EF_Par.prototype.type = "Par";
+#endif
+
+EF_Par.prototype.cont = function(idx, val) {
+  if (is_ef(val)) {
+    this.setChildFrame(val, idx);
+  }
+  else {
+    if (idx == -1) {
+      // kick off all children
+      for (var i=0; i<this.ndata.length; ++i) {
+        val = execIN(this.ndata[i], this.env);
+        if (this.aborted) {
+          // this check is to catch the case of reentrant abortion through
+          // suspend/resume
+          if (is_ef(val)) {
+            ++this.pending;
+            this.setChildFrame(val, i);
+            this.quench();
+            return this.abortInner();
+          }
+          return this.pendingCFE;
+        }
+        else if (is_ef(val)) {
+          ++this.pending;
+          this.setChildFrame(val, i);
+        }
+        else if (is_cfx(val)) {
+          // an exception aborts all other pending branches:
+          this.pendingCFE = val;
+          this.quench();
+          return this.abortInner();
+        }
+      }
+    }
+    else {
+      // returning from a suspension
+      --this.pending;
+      this.children[idx] = UNDEF;
+      if (is_cfx(val) && !this.aborted && 
+          !(val.type === 'blb' && val.ef === this.env.blscope)) {
+        // an exception aborts all other pending branches: (but only
+        // if it is not a blb break targetted at us - this can happen
+        // when a break is tail-called)
+        this.pendingCFE = val;
+        this.quench();
+        return this.returnToParent(this.abortInner());
+      }
+    }
+    if (this.pending < 2) {
+      if (!this.pendingCFE) {
+        // 'normal' return path:
+        
+        if (this.pending == 0)
+          return this.returnToParent(val);
+        // make a tail-call if there is only one last pending child:
+        for (var i=0; i<this.children.length; ++i)
+          if (this.children[i])
+            return this.returnToParent(this.children[i]);
+        return this.returnToParent(new CFException("i", "invalid state in Par"));
+      }
+      else {
+        // There is a pending control flow exception which we need to return.
+        // Therefore we can't do a tail call.
+        if (this.pending == 0)
+          return this.returnToParent(this.pendingCFE);
+      }
+    }
+    this.async = true;
+    return this;
+  }
+};
+
+EF_Par.prototype.quench = function() {
+  if (this.aborted) return; // already quenched/aborted internally
+  for (var i=0; i<this.children.length; ++i) {
+    if (this.children[i])
+      this.children[i].quench();
+  }
+};
+
+EF_Par.prototype.abort = function() {
+  // prevent continuation from ending up at parent, we want to feed
+  // it to the abortee directly:
+  this.parent = UNDEF;
+  if (this.aborted) {
+    // we already aborted internally.
+    // can delete pendingCFE; our caller is not interested in it
+    this.pendingCFE = UNDEF;
+    return this;
+  }
+  return this.abortInner();
+};
+
+EF_Par.prototype.abortInner = function() {
+  // this function is both called for outside aborts (through
+  // 'this.abort') as well as "internal" aborts (which occur when a
+  // branch excepts)
+  this.aborted = true;
+  for (var i=0; i<this.children.length; ++i)
+    if (this.children[i]) {
+      var val = this.children[i].abort();
+      if (is_ef(val)) // need to wait on this one...
+        this.setChildFrame(val, i);
+      else {
+        --this.pending;
+        this.children[i] = UNDEF;
+      }
+    }
+  if (!this.pending) // all done
+    return this.pendingCFE; // if there is no pending cfe, this is just 'undefined', which is ok.
+  // we need to wait:
+  this.async = true;
+  return this;
+};
+
+EF_Par.prototype.setChildFrame = function(ef, idx) {
+  if (this.children[idx] && this.children[idx].callstack) {
+    // merge callstacks of old & new childframes (stack-tests 28)
+    mergeCallstacks(ef, this.children[idx]);
+  }
+  this.children[idx] = ef;
+  ef.parent = this;
+  ef.parent_idx = idx;
+};
+
+function I_par(ndata, env) {
+  return cont(new EF_Par(ndata, env), -1);
+}
+
+//exports.Par = makeINCtor(I_par);
+exports.Par = function() {
+  return {
+    exec: I_par,
+    ndata: arguments,
+    __oni_dis: token_dis
+  }
+};
+
+//----------------------------------------------------------------------
+// Alt : stratified alt construct
+
+// ndata[0..end] contains sequence of instruction nodes
+
+/*
+  continuation index:
+   -1: start
+   0..end: index of instruction node we're returning from
+*/
+
+function EF_Alt(ndata, env) {
+  this.ndata = ndata;
+  this.env = env;
+
+  this.pending = 0;
+  this.children = new Array(this.ndata.length);
+}
+setEFProto(EF_Alt.prototype={});
+#ifdef EF_TYPES
+EF_Alt.prototype.type = "Alt";
+#endif
+
+EF_Alt.prototype.cont = function(idx, val) {
+  if (is_ef(val)) {
+    this.setChildFrame(val, idx);
+  }
+  else {
+    if (idx == -1) {
+      // kick off all children
+      for (var i=0; i<this.ndata.length; ++i) {
+        // create a new environment for 'collapse' support
+        // XXX it sucks that we have to create a new environment for each branch here 
+        var env = copyEnv(this.env);
+        env.fold = this;
+        env.branch = i;
+        val = execIN(this.ndata[i], env);
+                     
+        if (this.aborted) {
+          // the check for !aborted here is to catch the case of
+          // reentrant abortion through suspend/resume
+          if (is_ef(val)) {
+            ++this.pending;
+            this.setChildFrame(val, i);
+            this.quench();
+            return this.abortInner();
+          }
+          return this.pendingRV;
+        }
+        else if (is_ef(val)) {
+          ++this.pending;
+          this.setChildFrame(val, i);
+        }
+        else {
+          // an exception or real value aborts all other pending branches:
+          this.pendingRV = val;
+          this.quench();
+          return this.abortInner();
+        }
+      }
+    }
+    else {
+      // returning from a suspension. 
+      --this.pending;
+      this.children[idx] = UNDEF;
+      if (this.collapsing) {
+        // we're returning from an async abort after collapsing
+        // (uncommon case; see comment below)
+        if (this.pending == 1) {
+          // only our collapsing branch is left; continue with it
+          var cf = this.collapsing.cf;
+          this.collapsing = UNDEF;
+          cont(cf, 1);
+        }
+        return;
+      }
+      else {
+        // 'normal' case
+        // abort all pending branches
+        if (!this.aborted) {
+          this.pendingRV = val;
+          this.quench();
+          return this.returnToParent(this.abortInner());
+        }
+        if (this.pending == 0)
+          return this.returnToParent(this.pendingRV);
+      }
+    }
+    this.async = true;
+    return this;
+  }
+};
+
+EF_Alt.prototype.quench = function(except) {
+  if (this.aborted) return; // already quenched/aborted internally
+  if (this.collapsing) {
+    // we're being quenched after a collapse; just quench the collapsing branch
+    this.children[this.collapsing.branch].quench();
+  }
+  else {
+    // common case, quench all branches (possibly except 'except')
+    for (var i=0; i<this.children.length; ++i) {
+      if (i!== except && this.children[i])
+        this.children[i].quench();
+    }
+  }
+};
+
+EF_Alt.prototype.abort = function() {
+  this.parent = UNDEF;
+  if (this.aborted) {
+    this.pendingRV = UNDEF;
+    return this;
+  }
+  return this.abortInner();
+};
+
+EF_Alt.prototype.abortInner = function() {
+  // see Par::abortInner for more details
+  this.aborted = true;
+  if (this.collapsing) {
+    // we're being aborted after a collapse; just need to abort the collapsing branch
+    var branch = this.collapsing.branch;
+    this.collapsing = UNDEF;
+    var val = this.children[branch].abort();
+    if (is_ef(val)) // need to wait
+      this.setChildFrame(val, branch);
+    else {
+      --this.pending;
+      this.children[branch] = UNDEF;
+    }
+  }
+  else {
+    // common case: abort all branches
+    for (var i=0; i<this.children.length; ++i)
+      if (this.children[i]) {
+        var val = this.children[i].abort();
+        if (is_ef(val)) // need to wait
+          this.setChildFrame(val, i);
+        else {
+          --this.pending;
+          this.children[i] = UNDEF;
+        }
+      }
+  }
+  if (!this.pending)
+    return this.pendingRV;
+  this.async = true;
+  return this;
+};
+
+EF_Alt.prototype.setChildFrame = function(ef, idx) {
+  if (this.children[idx] && this.children[idx].callstack) {
+    // merge callstacks of old & new childframes (stack-tests 29)
+    mergeCallstacks(ef, this.children[idx]);
+  }
+  this.children[idx] = ef;
+  ef.parent = this;
+  ef.parent_idx = idx;
+};
+
+EF_Alt.prototype.docollapse = function(branch, cf) {
+  // abort all children apart from 'branch'
+  this.quench(branch);
+  for (var i=0; i<this.children.length; ++i) {
+    if (i == branch) continue;
+    if (this.children[i]) {
+      var val = this.children[i].abort();
+      if (is_ef(val)) // need to wait
+        this.setChildFrame(val, i);
+      else {
+        --this.pending;
+        this.children[i] = UNDEF;
+      }
+    }
+  }
+
+  if (this.pending <= 1) // =0 for sync case, =1 for async case 
+    return true;
+  // ... else we need to wait
+  // this only happens if there is an asynchronous finally-clause 
+  // in one of the aborted branches (i.e. not a very common case)
+  this.collapsing = { branch:branch, cf:cf};
+  return false;
+};
+
+function I_alt(ndata, env) {
+  return cont(new EF_Alt(ndata, env), -1);
+}
+
+//exports.Alt = makeINCtor(I_alt);
+exports.Alt = function() {
+  return {
+    exec: I_alt,
+    ndata: arguments,
+    __oni_dis: token_dis
+  }
+};
+
+//----------------------------------------------------------------------
+// Suspend: stratified suspend operation
+
+#ifdef ASYNC_RESUME
+var ResumeQueue = {
+  messages: [],
+  pickup_pending: false,
+  post: function(resume_struct) {
+    this.messages.push(resume_struct);
+    if (!this.pickup_pending) {
+      this.pickup_pending = true;
+#ifdef CLIENTSIDE
+      setTimeout(function() { ResumeQueue.pickup(); }, 0);
+#else
+      callAsync(function() { ResumeQueue.pickup(); });
+#endif
+    }
+  },
+  pickup: function() {
+    this.pickup_pending = false;
+    var ms = this.messages;
+    this.messages = [];
+    for (var i=0; i<ms.length; ++i) {
+      var m = ms[i];
+      cont(m[0],m[1],m[2]);
+    }
+  }
+};
+exports.Q = ResumeQueue;
+#endif
+
+// structure of ndata array:
+#define NDATA_SUSPEND_SUSPENDFUNC() ndata[0]
+#define NDATA_SUSPEND_RETURNFUNC() ndata[1]
+
+/*
+  continuation index:
+  0: start
+  1: returning from execution of suspend function
+  2: returning from execution of resume function
+  3: returning from abortion of suspend function
+
+  state variables:
+  returning: resume function has been called or suspend threw
+  suspendCompleted: suspend block has executed completely
+  retvals: return values as passed into resume function
+*/
+
+function EF_Suspend(ndata, env) {
+  this.ndata = ndata;
+  this.env = env;
+}
+setEFProto(EF_Suspend.prototype={});
+#ifdef EF_TYPES
+EF_Suspend.prototype.type = "Suspend";
+#endif
+
+EF_Suspend.prototype.cont = function(idx, val) {
+  if (is_ef(val)) {
+    ASSERT(idx == 1 || idx == 3) //(others shouldn't rebase)
+    this.setChildFrame(val, idx);
+  }
+  else {
+    switch (idx) {
+    case 0:
+    try {
+      var ef = this;
+#ifdef ASYNC_RESUME
+      var resumefunc = function() { ResumeQueue.post([ef,2,arguments]); };
+#else
+  // XXX We could return something from resumefunc
+  var resumefunc = function() {
+    try {
+      cont(ef, 2, arguments)
+    }
+    catch(e) {
+      var s = function() { throw e; };
+#if defined (CLIENTSIDE)
+      setTimeout(s, 0);
+#elif defined (NODEJS)
+      process.nextTick(s);
+#else
+      callAsync(s);
+#endif
+    }
+  };
+      
+#endif
+      //      LOG("executing suspend")
+      val = this.NDATA_SUSPEND_SUSPENDFUNC()(this.env, resumefunc);
+    }
+    catch (e) {
+      // XXX is this required??
+      val = new CFException("t", e);
+    }
+    //    LOG('done executing suspend')
+    // At this point we might have received a reentrant callback
+    // from the resume function!!
+    if (this.returning) {
+      //      LOG('reentrant cb')
+      if (is_ef(val)) {
+        ASSERT(!this.child_frame)
+        // processing up to here has been synchronous; we still need to abort
+        this.setChildFrame(val, /* not relevant */null);
+        this.quench();
+        val = this.abort();
+        if (is_ef(val)) {
+          // wait for the abort to finish
+          this.setChildFrame(val, 3);
+          // get parent to wait for us:
+          this.async = true;
+          return this;
+        }
+        // ... else fall through
+      }
+      return cont(this, 3, null);
+    }
+    
+    if (is_ef(val)) {
+      this.setChildFrame(val, 1);
+      return this;
+    }
+    case 1:
+    // returning from execution of suspend function
+    if (is_cfx(val)) {
+      this.returning = true;
+      break;
+    }
+    this.suspendCompleted = true;
+    // suspend:
+    this.async = true;
+    return this;
+    case 2:
+    // returning from execution of resume function.        
+    // Note that this might happen reentrantly, while we're still
+    // processing the suspend block!!!
+    if (this.returning) {
+      // this is a trailing resume which we can safely ignore
+      return;
+    }
+    this.returning = true;
+    if (is_cfx(val)) {
+      // sanity check
+      // this shouldn't happen
+      val = new CFException("i", "Suspend: Resume function threw ("+val.toString()+")");
+      break;
+    }
+    this.retvals = val;
+    if (!this.suspendCompleted) {
+      // abort the suspend block:
+      if (!this.child_frame) {
+        // The suspend block is still executing synchronously.
+        // This is a reentrant invocation of 'resume'.
+        // We'll pick up with processing again when the suspend block is done
+        this.returning = true;
+        return;
+      }
+      else {
+        this.quench();
+        val = this.abort();
+        if (is_ef(val)) {
+          // wait for the abort to finish
+          this.setChildFrame(val, 3);
+          return this;
+        }
+        // ... else fall through to case 3
+        //        LOG('synchronous abortion')
+          }
+    }
+    case 3:
+    // set values with return function:
+    try {
+      this.NDATA_SUSPEND_RETURNFUNC().apply(this.env, this.retvals);
+      val = UNDEF;
+    }
+    catch (e) {
+      val = new CFException("i", "Suspend: Return function threw ("+e+")");
+    }
+    break;
+    default:
+    val = new CFException("i", "Invalid state in Suspend ("+idx+")");
+    }
+    return this.returnToParent(val);
+  }
+};
+
+EF_Suspend.prototype.quench = function() {
+  this.returning = true; // prevent resume() calls from having any effect
+  if (!this.suspendCompleted)
+    this.child_frame.quench();
+};
+
+EF_Suspend.prototype.abort = function() {
+  //  LOG('SUSPEND abort (childf='+this.child_frame+')')
+  this.returning = true;
+  if (!this.suspendCompleted)
+    return this.child_frame.abort();
+};
+
+function I_sus(ndata, env) {
+  return cont(new EF_Suspend(ndata, env), 0);
+}
+
+//exports.Suspend = makeINCtor(I_sus);
+exports.Suspend = function(s,r) {
+  return {
+    exec: I_sus,
+    ndata: [s,r],
+    __oni_dis: token_dis
+  }
+};
+
+//----------------------------------------------------------------------
+// spawn
+
+// structure of ndata array:
+#define NDATA_SPAWN_LINE() ndata[0]
+#define NDATA_SPAWN_EXP() ndata[1]
+
+// continuation index:
+// 0: start
+// 1: returning from async execution
+  
+function EF_Spawn(ndata, env, notifyAsync, notifyVal) {
+  this.ndata = ndata;
+  this.env = env;
+  this.notifyAsync = notifyAsync;
+  this.notifyVal = notifyVal;
+}
+setEFProto(EF_Spawn.prototype={});
+#ifdef EF_TYPES
+EF_Spawn.prototype.type = "Spawn";
+#endif
+
+EF_Spawn.prototype.cont = function(idx, val) {
+  if (idx == 0)
+    val = execIN(this.NDATA_SPAWN_EXP(), this.env);
+  
+  if (is_ef(val)) {
+    this.setChildFrame(val, 1);
+    if (idx == 0)
+      this.notifyAsync();
+  }
+  else {
+    this.notifyVal(val);
+  }
+};
+
+EF_Spawn.prototype.abort = function() {
+  this.aborted = true;
+  if (this.child_frame) {
+    var val = this.child_frame.abort();
+    if (is_ef(val)) {
+      this.notifyAsync();
+      this.setChildFrame(val, 1);
+    }
+  }
+};
+
+function EF_SpawnWaitFrame(waitarr) {
+  this.waitarr = waitarr;
+  waitarr.push(this);
+}
+setEFProto(EF_SpawnWaitFrame.prototype={});
+#ifdef EF_TYPES
+EF_SpawnWaitFrame.prototype.type = "Spawn";
+#endif
+EF_SpawnWaitFrame.prototype.quench = function() {};
+EF_SpawnWaitFrame.prototype.abort = function() {
+  var idx = this.waitarr.indexOf(this); // assert != -1
+  this.waitarr.splice(idx, 1);
+}
+EF_SpawnWaitFrame.prototype.cont = function(val) {
+  if (this.parent)
+    cont(this.parent, this.parent_idx, val);
+}
+
+function I_spawn(ndata, env) {
+  var val, async, have_val, picked_up=false;
+  var waitarr = [];
+  var stratum = {
+    abort : function() {
+      if (!async) return;
+      ef.quench();
+      ef.abort();
+      async = false;
+      val =  new CFException("t",
+                             new StratumAborted(),
+                             NDATA_SPAWN_LINE(),
+                             env.file);
+      while (waitarr.length)
+        cont(waitarr.shift(), val);
+    },
+    value : function() {
+      if (!async) { picked_up=true; return val; }
+      return new EF_SpawnWaitFrame(waitarr);
+    },
+    // waitforValue deprecated:
+    waitforValue : function() { return this.value() },
+    running : function() { return async; },
+    waiting : function() {
+      return waitarr.length;
+    },
+    toString: function() { return "[object Stratum]"; }
+  };
+      
+  function notifyAsync() {
+    async = true;
+  }
+  function notifyVal(_val) {
+    if (val !== undefined) // this guard is important so that a
+      return;              // reentrant 'stratum aborted' exception
+                           // doesn't get overwritten by a later result
+    val = _val;
+    async = false;
+    if (!waitarr.length) {
+      // make sure exceptions that noone is waiting on get reported in
+      // console. Only report stray control flow exceptions & exceptions that
+      // are instanceof Error;
+      // IE shows a popup for uncaught exceptions, and exceptions
+      // without linenumbers etc are very confusing
+      if (is_cfx(val) && (val.type != 't' || val.val instanceof Error)) {
+        // XXX unfortunately stray control flow exceptions, such as
+        // e.g. returns from blocklambdas, will not have line numbers
+        // attached. Maybe we shouldn't report them?
+        //
+        // It is essential that we throw the exception *asynchronously*
+        // when async = false. Otherwise it will end up at our
+        // caller. For simplicity we always throw asynchronously:
+        setTimeout(function() { 
+          // We only throw if the value hasn't been picked up in the
+          // meanwhile. This is for cases where we have:
+          //   var stratum = spawn synchronous_throw_here;
+          //   stratum.value();
+          // We want to prevent the exception feeding to the user twice in this case
+          if (!picked_up)
+            val.mapToJS(true); 
+        }, 0);
+      }
+    }
+    else
+      while (waitarr.length)
+        cont(waitarr.shift(), val);
+    
+  }
+  var ef = new EF_Spawn(ndata, env, notifyAsync, notifyVal);
+  cont(ef, 0);
+  return stratum;
+}
+  
+//exports.Spawn = makeINCtor(I_spawn);
+exports.Spawn = function(line, exp) {
+  return {
+    exec: I_spawn,
+    ndata: [line, exp],
+    __oni_dis: token_dis
+  }
+};
+
+//----------------------------------------------------------------------
+// collapse
+
+// structure of ndata array:
+#define NDATA_COLLAPSE_LINE() ndata
+
+// continuation index:
+// 0: start
+// 1: returning from async execution
+  
+function EF_Collapse(ndata, env) {
+  this.ndata = ndata;
+  this.env = env;
+}
+setEFProto(EF_Collapse.prototype={});
+#ifdef EF_TYPES
+EF_Collapse.prototype.type = "Collapse";
+#endif
+
+// mark us as a collapse frame
+EF_Collapse.prototype.__oni_collapse = true;
+
+EF_Collapse.prototype.cont = function(idx, val) {
+  if (idx == 0) {
+    var fold = this.env.fold;
+    if (!fold)
+      return new CFException("t", new Error("Unexpected collapse statement"),
+                             this.NDATA_COLLAPSE_LINE(), this.env.file);
+    if (fold.docollapse(this.env.branch, this))
+      return true;
+    // else ... we're going async
+    this.async = true;
+    return this;
+  }
+  else if (idx == 1) // returning from collapsing
+    return this.returnToParent(true);
+  else 
+    return this.returnToParent(new CFException("t", "Internal error in SJS runtime (collapse)",
+                                               this.NDATA_COLLAPSE_LINE(), this.env.file));
+};
+
+// don't need to do anything for quenching/aborting. we'll never be prodded by upstream after an abort.
+EF_Collapse.prototype.quench = function() {};
+EF_Collapse.prototype.abort = function() {};
+
+function I_collapse(ndata, env) {
+  return cont(new EF_Collapse(ndata, env), 0);
+}
+  
+//exports.Collapse = makeINCtor(I_collapse);
+exports.Collapse = function(line) {
+  return {
+    exec: I_collapse,
+    ndata: line,
+    __oni_dis: token_dis
+  }
+};
+
+//----------------------------------------------------------------------
+
+#if defined (CLIENTSIDE)
+exports.G = window;
+#elif defined (NODEJS)
+exports.G = global;
+#endif
+
+  
+//----------------------------------------------------------------------
+// builtin strict functions
+
+function dummy() {}
+
+// setTimeout has a minimum delay of 4ms; we want hold(0) to be faster
+// see e.g. https://github.com/NobleJS/setImmediate/blob/master/setImmediate.js
+var hold0, clear0;
+if (exports.G.setImmediate) {
+  hold0 = exports.G.setImmediate;
+  clear0 = exports.G.clearImmediate;
+}
+else if (exports.G.postMessage && !exports.G.importScripts) {
+  var postMessageIsAsync = true;
+  var oldOnMessage = exports.G.onmessage;
+  exports.G.onmessage = function() {
+    postMessageIsAsync = false;
+  };
+  exports.G.postMessage("", "*");
+  exports.G.onmessage = oldOnMessage;
+  if (postMessageIsAsync) {
+    // install an event handler on `global` for the `message` event;
+    // draws heavily from https://github.com/NobleJS/setImmediate/blob/master/setImmediate.js
+    var MESSAGE_PREFIX = "com.onilabs.hold0" + Math.random();
+
+    var tasks = {};
+
+    function isStringAndStartsWith(string, putativeStart) {
+      return typeof string === 'string' && string.substring(0, putativeStart.length) === putativeStart;
+    }
+    
+    function onGlobalMessage(event) {
+      if (event.source === exports.G && 
+          isStringAndStartsWith(event.data, MESSAGE_PREFIX)) {
+        var id = event.data.substring(MESSAGE_PREFIX.length);
+        var f;
+        if ((f = tasks[id])) {
+          delete tasks[id];
+          f();
+        }
+      }
+    }
+
+    if (exports.G.addEventListener) {
+      exports.G.addEventListener("message", onGlobalMessage, false);
+    }
+    else {
+      exports.G.attachEvent("onmessage", onGlobalMessage);
+    }
+
+    var id_counter = 1;
+
+    var hold0 = function(f) {
+      var id = id_counter++;
+      tasks[id] = f;
+      exports.G.postMessage(MESSAGE_PREFIX + id, "*");
+      return id;
+    };
+    
+    var clear0 = function(id) {
+      delete tasks[id];
+    };
+  }
+}
+
+if (!hold0) {
+  hold0 = function(co) { return setTimeout(co, 0) };
+  clear0 = clearTimeout;
+}
+
+exports.Hold = function(duration_ms) {
+  if (duration_ms === UNDEF)
+    return { __oni_ef: true, wait: function() { return this; }, quench: dummy, abort: dummy };
+  if (duration_ms === 0) {
+    var sus = { __oni_ef: true, 
+                wait: function() { return this },
+                abort: dummy,
+                quench: function() { sus = null; clear0(this.co); },
+                co: hold0(function() { 
+                  if (sus && sus.parent) 
+                    cont(sus.parent, sus.parent_idx, UNDEF);
+                })
+              };
+    return sus;
+  }
+  else {
+    var sus = { __oni_ef: true,
+                wait: function() { return this },
+                abort: dummy,
+#if defined (CLIENTSIDE) || defined (NODEJS)
+                quench: function() { sus = null; clearTimeout(this.co); }
+#else
+                quench: function() { sus = null; this.co.cancel(); }
+#endif
+              };
+    sus.co = setTimeout(function() { if (sus && sus.parent) cont(sus.parent, sus.parent_idx, UNDEF); },
+                        duration_ms);
+    return sus;
+  }
+};
+
+exports.Throw = function(exp, line, file) { return new CFException("t", exp, line, file); };
+
+exports.Arr = function(/*args*/) { return Array.prototype.slice.call(arguments, 0); };
+
+exports.Obj = function(/*args*/) {
+  // note comment in kernel-sjs.js.in::ph_obj_lit about the way props
+  // are encoded into arguments object
+  var obj = new Object();
+  for (var i=0; i<arguments[0].length; ++i)
+    obj[arguments[0][i]] = arguments[i+1];
+  return obj;
+};
+
+function QuasiProto(parts) {this.parts=parts;}
+exports.QuasiProto = QuasiProto;
+
+exports.Quasi = function(/*args*/) {
+  return new QuasiProto(Array.prototype.slice.call(arguments, 0));
+};
+
+exports.Return = function(exp) {
+  return new CFException("r", exp);
+};
+
+exports.Break = function(lbl) {
+  return new CFException("b", lbl);
+};
+
+exports.Cont = function(lbl) {
+  return new CFException("c", lbl);
+};
+
+exports.BlBreak = function(env, lbl) {
+  var e = new CFException('blb', lbl);
+  if (!env.blbref) throw new Error("Internal runtime error; no reference frame in BlBreak");
+  if (env.blbref.unreturnable && !env.blbref.toplevel) // the return scope is not active anymore!
+    throw new Error("Blocklambda break to inactive scope");
+  e.ef = env.blbref;
+  return e;
+};
+
+exports.BlReturn = function(exp) {
+  var e = new CFException('r', exp);
+  if (!this.blrref) throw new Error("Internal runtime error; no reference frame in BlReturn");
+  if (this.blrref.unreturnable) { 
+    if (this.blrref.toplevel)
+      throw new Error("Invalid blocklambda 'return' statement; 'return' is only allowed in blocklambdas that are nested in functions");
+    else {
+      // return scope not active anymore!
+      throw new Error("Blocklambda return to inactive function");
+    }
+  }
+  e.ef = this.blrref;
+  return e;
+};
+
+exports.With = function(exp, bodyf) {
+  return bodyf(this, exp);
+};
+
+exports.join_str = function() {
+  var rv = '';
+  for (var i=0,l=arguments.length;i<l;++i)
+    rv += arguments[i];
+  return rv;
+};
+
+exports.infix = {
+  '+':   function(a,b) { return a+b; },
+  '-':   function(a,b) { return a-b; },
+  '*':   function(a,b) { return a*b; },
+  '/':   function(a,b) { return a/b; },
+  '%':   function(a,b) { return a%b; },
+  '<<':  function(a,b) { return a<<b; },
+  '>>':  function(a,b) { return a>>b; },
+  '>>>': function(a,b) { return a>>>b; },
+  '<':   function(a,b) { return a<b; },
+  '>':   function(a,b) { return a>b; },
+  '<=':  function(a,b) { return a<=b; },
+  '>=':  function(a,b) { return a>=b; },
+  '==':  function(a,b) { return a==b; },
+  '!=':  function(a,b) { return a!=b; },
+  '===': function(a,b) { return a===b; },
+  '!==': function(a,b) { return a!==b; },
+  '&':   function(a,b) { return a&b; },
+  '^':   function(a,b) { return a^b; },
+  '|':   function(a,b) { return a|b; },
+  ',':   function(a,b) { return a,b; },
+  'instanceof':
+         function(a,b) { return a instanceof b; },
+  'in':  function(a,b) { return a in b; }
+};
+
+#if defined (CLIENTSIDE)
+//----------------------------------------------------------------------
+// UA sniffing
+var UA = navigator.userAgent.toLowerCase();
+if (UA.indexOf(" chrome/") >= 0)
+  UA = "chrome";
+ else if (UA.indexOf(" firefox/") >= 0)
+   UA = "firefox";
+ else if (UA.indexOf(" safari/") >= 0)
+   UA = "safari";
+ else if (UA.indexOf(" msie ") >= 0)
+   UA = "msie";
+ else
+   UA = "unknown";
+exports.hostenv = "xbrowser";
+#elif defined (NODEJS)
+var UA = "nodejs";
+exports.hostenv = "nodejs";
+#endif
+exports.UA = UA;
+

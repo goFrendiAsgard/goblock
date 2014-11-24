@@ -1,0 +1,25 @@
+// Default conductance configuration
+
+@ = require('mho:std');
+
+var root = @url.normalize("../", module.id) .. @url.toPath;
+exports.serve = function(args) {
+  @server.run({
+    address: @Port(7071),
+    routes: [
+      @route.SystemRoutes(),
+      @Route('http/post_echo', {
+        POST: (req) -> req.response.end(req.body)
+      }),
+      @Route('http/fail', {
+        GET: function(req) {
+          req .. @setStatus(500);
+          req.response.end("failure response data");
+        }
+      }),
+      @route.CodeDirectory(root),
+    ]
+    .. @route.LogRequests(@logging.INFO)
+    .. @route.AllowCORS()
+  });
+};

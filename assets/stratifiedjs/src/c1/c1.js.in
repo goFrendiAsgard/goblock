@@ -1,0 +1,2032 @@
+/*
+ * C1 Stratified JavaScript parser 
+ *
+ * Part of StratifiedJS
+ * http://onilabs.com/stratifiedjs
+ *
+ * (c) 2011 Oni Labs, http://onilabs.com
+ *
+ * This file is licensed under the terms of the GPL v2, see
+ * http://www.gnu.org/licenses/gpl-2.0.html
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ * THE SOFTWARE.
+ *
+ */
+
+/*
+
+ *** OVERVIEW ***
+
+ This parser needs to be preprocessed with CPP (the C preprocessor)
+ and a 'kernel' file to yield a full compiler. There are currently
+ three kernels, each implementing a different compiler:
+ 
+  kernel-js.js.in    : plain JS compiler (just for sanity checking)
+  kernel-jsmin.js.in : JS/SJS minifier/stringifier
+  kernel-sjs.js.in   : SJS compiler (targetting stratifiedjs vm)
+
+ Which kernel file is included is determined by preprocessor flags;
+ see below.
+
+ For each JS construct, the parser makes a macro call, e.g. GEN_WHILE
+ for a 'while' statement. The actual macro implementations are in the
+ kernel files - see the full list of macros that kernel files need to
+ implement below.
+
+ This somewhat weird arrangement is so that we can build different
+ compilers from the same parser source, but we don't have to build a
+ generic AST. A generic AST (like e.g. Narcissus produces it) needs to
+ be retraversed to do something useful with it, whereas with the macro
+ approach we can perform syntax-directed translation tasks at the same
+ time as parsing the source. We could use function calls instead of
+ macros, but macros lead to smaller source and faster compilers.
+
+ Most of the macros are expected to return a "parse value" for the
+ given construct (this can be a syntax tree node, a string, nothing,
+ or whatever). The parser feeds the parse values of expressions to the
+ enclosing expression. The ultimate result of the compilation is
+ whatever END_SCRIPT() returns. E.g. the following program:
+
+  1 + 2
+
+ would generate something like the following sequence of macro calls:
+
+  BEGIN_SCRIPT(context)
+  GEN_LITERAL("number", "1", ctx) // remember return value as 'A'
+  GEN_LITERAL("number", "2", ctx) // remember return value as 'B'
+  GEN_INFIX_OP(A, '+', B, ctx) // remember return value as 'C'
+  GEN_EXP_STMT(C, ctx) // remember return value as 'D'
+  ADD_SCRIPT_STMT(D, ctx)
+  END_SCRIPT(ctx) // return value is the result of compilation
+
+ The best way to understand how the macros fit together is to look at
+ kernel-js.js.in.
+
+ * INTERNALS
+
+ As a parsing technique, we first tokenize the stream using two big
+ context-sensitve regular expressions (TOKENIZER_SA and
+ TOKENIZER_OP). The tokenizer switches between these two, depending on
+ whether we're in a 'statement/argument' position, or in an 'operator'
+ position - this is required because in JavaScript certain constructs
+ have different meanings in different contexts. E.g. a '/' can be the
+ start of a regular expression (in a "statement/argument" position) or
+ a division operator (in an "operator position").
+
+ Next, we use the "Pratt parsing technique"
+ (http://en.wikipedia.org/wiki/Pratt_parser). This is a version of
+ recursive descent parsing where we encode operator precedence
+ information directly into semantic tokens (see 'SemanticToken' class,
+ below). A good introduction to Pratt parsing for JS is at
+ http://javascript.crockford.com/tdop/tdop.html. What Douglas
+ Crockford calls 'lbp', 'nud', and 'led', we call 
+ 'excbp' (expression continuation binding power), 
+ 'expsf' (expression start function) and
+ 'excf'  (expression continuation function), respectively.
+
+
+ *** PREPROCESSOR FLAGS ***
+
+(These flags are also valid in kernel files)
+
+one of these required:
+   define C1_KERNEL_JS
+   define C1_KERNEL_SJS
+   define C1_KERNEL_DEPS
+   define C1_KERNEL_JSMIN  : compiles with the given kernel (and sets #define SJS appropriately)
+
+general:
+   define DEBUG_C1 : c1 debugging
+   define VERBOSE_COMPILE_ERRORS : extra detail on compile errors (only interesting when debugging c1)
+   define ECMA_GETTERS_SETTERS : allow ecma-style getters/setters
+   define SJS_CORE : parse core SJS statements (set below)
+   define MULTILINE_STRINGS : allow strings to include newlines; map to '\n' (set below)
+   define SJS_USING: parse SJS's "using" keyword
+   define SJS___JS: parse SJS's "__js" keyword
+   define SJS_DESTRUCTURE: allow destructuring assignments (see http://wiki.ecmascript.org/doku.php?id=harmony:destructuring)
+   define SJS_BLOCKLAMBDA: allow block lambdas (see http://wiki.ecmascript.org/doku.php?id=strawman:block_lambda_revival)
+   define SJS_ARROWS: allow arrays (fat & thin) (see http://wiki.ecmascript.org/doku.php?id=harmony:arrow_function_syntax ; coffeescript)
+   define SJS_DOUBLEDOT: allow double dot call syntax
+   define SJS_DOUBLECOLON: allow double colon call syntax
+   define SJS_ALTERNATE_NAMESPACE: allow '@' and '@identifier'
+   define INTERPOLATING_STRINGS: allow strings with ruby-like interpolation
+   define QUASIS: allow quasi templates (`foo#{bar}baz`)
+   define METHOD_DEFINITIONS: allows methods on objects to be specified like { a (pars) { body } }
+   define ONE_SIDED_CONDITIONALS: allows `foo ? bar` expressions (i.e. `foo ? bar : baz` without alternative `baz`). in the `false` case they yield `undefined`
+
+for C1_KERNEL_JSMIN:
+   define STRINGIFY  : encodes minified js/sjs as a string.
+
+for C1_KERNEL_SJS:  OBSOLETE! VERBOSE EXCEPTIONS ARE ALWAYS USED NOW, NOT
+                    PREDICATED ON THIS FLAG ANYMORE
+   define VERBOSE_EXCEPTIONS: add lineNumber/fileName info to VM nodes.
+   
+*/
+/* define DEBUG_C1 1 */
+#ifdef DEBUG_C1
+#define LOG(x) if (pctx.log) process.stderr.write(x+' ');
+#define LOGM(x) if (pctx.log) process.stderr.write(x+' ');
+#else
+#define LOG(x)
+#define LOGM(x)
+#endif
+
+/*
+
+ *** MACROS TO BE IMPLEMENTED BY KERNEL FILES ***
+
+Misc:
+=====
+
+HANDLE_NEWLINES(n, pctx)
+  Note: only called for newlines outside of ml-strings!
+  
+Contexts:
+=========
+
+BEGIN_SCRIPT(pctx)
+ADD_SCRIPT_STMT(stmt, pctx)
+END_SCRIPT(pctx)
+
+BEGIN_FBODY(pctx , implicit_return)
+ADD_FBODY_STMT(stmt, pctx)
+END_FBODY(pctx , implicit_return)
+   'implicit_return' is a flag to indicate whether the function should return
+   the value of its last expression. It is only meaningful when 
+   'METHOD_DEFINITIONS' is turned on.
+
+BEGIN_BLOCK(pctx)
+ADD_BLOCK_STMT(stmt, pctx)
+END_BLOCK(pctx)
+
+BEGIN_CASE_CLAUSE(cexp, pctx)
+ADD_CASE_CLAUSE_STMT(stmt, pctx)
+END_CASE_CLAUSE(pctx)
+
+- called for do-while/while/for/for-in bodies:
+BEGIN_LOOP_SCOPE(pctx)
+END_LOOP_SCOPE(pctx)
+
+- called for switch bodies:
+BEGIN_SWITCH_SCOPE(pctx)
+END_SWITCH_SCOPE(pctx)
+
+- if SJS_BLOCKLAMBDA is defined:
+BEGIN_BLAMBDABODY(pctx)
+ADD_BLAMBDABODY_STMT(stmt, pctx)
+END_BLAMBDABODY(pctx)
+
+Statements:
+===========
+
+GEN_EMPTY_STMT(pctx)
+GEN_EXP_STMT(exp, pctx)
+GEN_LBL_STMT(lbl, stmt, pctx)
+GEN_FUN_DECL(fname, pars, body, pctx)
+GEN_VAR_DECL(decls, pctx)
+  decls = array of decl
+  decl = [id_or_pattern, optional initializer]
+GEN_IF(test, consequent, alternative, pctx)
+GEN_DO_WHILE(body, test, pctx)
+GEN_WHILE(test, body, pctx)
+GEN_FOR(init_exp, decls, test_exp, inc_exp, body, pctx)
+GEN_FOR_IN(lhs_exp, decl, obj_exp, body, pctx)
+GEN_CONTINUE(lbl, pctx)
+GEN_BREAK(lbl, pctx)
+GEN_RETURN(exp, pctx)
+GEN_WITH(exp, body, pctx)
+GEN_SWITCH(exp, clauses, pctx)
+GEN_THROW(exp, pctx)
+GEN_TRY(block, crf, pctx)
+    crf is [ [catch_id,catch_block,catchall?]|null, null, finally_block|null ]
+    (ammended for SJS, see below)
+
+Expressions:
+============
+
+GEN_INFIX_OP(left, id, right, pctx)
+  id: + - * / % << >> >>> < > <= >= == != === !== & ^ | && || ,
+      instanceof in
+GEN_ASSIGN_OP(left, id, right, pctx)
+  id: = *= /= %= += -= <<= >>= >>>= &= ^= |=
+GEN_PREFIX_OP(id, right, pctx)
+  id: ++ -- delete void typeof + - ~ ! (for SJS also: 'spawn')
+GEN_POSTFIX_OP(left, id, pctx)
+  id: ++ --
+GEN_LITERAL(type, value, pctx)
+GEN_IDENTIFIER(name, pctx)
+GEN_OBJ_LIT(props, pctx)
+  props : array of ["prop", string|id, val]
+          if ECMA_GETTERS_SETTERS is defined, also:
+                   ["get", string|id, function_body]
+                   ["set", string|id, id, function_body]
+          if SJS_DESTRUCTURE is defined, also: (destructure pattern)
+                   ["pat", string|id, line]
+          if METHOD_DEFINITIONS is defined, also:
+                   ["method", string|id, function]
+GEN_ARR_LIT(elements, pctx)
+GEN_ELISION(pctx)
+GEN_DOT_ACCESSOR(l, name, pctx)
+GEN_NEW(exp, args, pctx)
+GEN_IDX_ACCESSOR(l, idxexp, pctx)
+GEN_FUN_CALL(l, args, pctx)
+GEN_FUN_EXP(fname, pars, body, pctx, implicit_return)
+  -- see END_FBODY above for 'implicit_return'
+GEN_CONDITIONAL(test, consequent, alternative, pctx)
+GEN_GROUP(e, pctx)
+GEN_THIS(pctx)
+GEN_TRUE(pctx)
+GEN_FALSE(pctx)
+GEN_NULL(pctx)
+
+Stratified constructs:
+======================
+
+GEN_PREFIX_OP(id, right, pctx) takes another operator: 'spawn'
+
+GEN_WAITFOR_ANDOR(op, blocks, crf, pctx)
+  op: 'and' | 'or'
+  crf: see GEN_TRY
+BEGIN_SUSPEND_BLOCK(pctx)
+END_SUSPEND_BLOCK(pctx)
+GEN_SUSPEND(has_var, decls, block, crf, pctx)
+GEN_COLLAPSE(pctx)
+  crf: see GEN_TRY
+GEN_TRY(block, crf, pctx) 
+    crf is [ [catch_id,catch_block,catchall?]|null, retract_block|null, finally_block|null ]
+    (instead of the non-SJS version above)
+
+- if SJS_USING is set:
+
+GEN_USING(isvar, vname, exp, body, pctx)
+
+- if SJS___JS is set:
+
+BEGIN___JS_BLOCK(pctx)
+END___JS_BLOCK(pctx)
+GEN___JS(body, pctx)
+
+- if SJS_BLOCKLAMBDA is set:
+GEN_BLOCKLAMBDA(pars, body, pctx)
+
+- if SJS_ARROWS is set:
+GEN_THIN_ARROW(body_exp, pctx)
+GEN_THIN_ARROW_WITH_PARS(pars_exp, body_exp, pctx)
+GEN_FAT_ARROW(body_exp, pctx)
+GEN_FAT_ARROW_WITH_PARS(pars_exp, body_exp, pctx)
+
+- if SJS_DOUBLEDOT is set
+GEN_DOUBLEDOT_CALL(l, r, pctx)
+
+- if SJS_DOUBLECOLON is set
+GEN_DOUBLECOLON_CALL(l, r, pctx)
+
+- if SJS_ALTERNATE_NAMESPACE is set
+GEN_ALTERNATE_NAMESPACE_OBJ(pctx)
+GEN_ALTERNATE_NAMESPACE_IDENTIFIER(name, pctx)
+
+- if INTERPOLATING_STRINGS is set:
+GEN_INTERPOLATING_STR(parts, pctx)
+
+- if QUASIS is set:
+GEN_QUASI(parts, pctx) with even parts=strings, odd parts=expressions
+
+*/
+
+#if defined(C1_KERNEL_JS)
+
+#include "kernel-js.js.in"
+
+#elif defined(C1_KERNEL_SJS)
+
+#define SJS_CORE 1
+#define MULTILINE_STRINGS 1
+#define SJS_USING 1
+#define SJS___JS 1
+#define SJS_DESTRUCTURE 1
+#define SJS_BLOCKLAMBDA 1
+#define SJS_ARROWS 1
+#define SJS_DOUBLEDOT 1
+#define SJS_DOUBLECOLON 1
+#define SJS_ALTERNATE_NAMESPACE 1
+#define INTERPOLATING_STRINGS 1
+#define QUASIS 1
+#define ONE_SIDED_CONDITIONALS 1
+#include "kernel-sjs.js.in"
+
+#elif defined(C1_KERNEL_JSMIN)
+
+#define SJS_CORE 1
+#define MULTILINE_STRINGS 1
+#define SJS_USING 1
+#define SJS___JS 1
+#define SJS_DESTRUCTURE 1
+#define SJS_BLOCKLAMBDA 1
+#define SJS_ARROWS 1
+#define SJS_DOUBLEDOT 1
+#define SJS_DOUBLECOLON 1
+#define SJS_ALTERNATE_NAMESPACE 1
+#define INTERPOLATING_STRINGS 1
+#define QUASIS 1
+#define ONE_SIDED_CONDITIONALS 1
+#include "kernel-jsmin.js.in"
+
+/**
+   @executable
+#ifdef STRINGIFY
+   @module  compile/stringify
+   @summary SJS source code stringifier
+   @home    sjs:compile/stringify
+ 
+   @function compile
+   @summary  Minify a string of SJS source code into a javascript string literal
+   @param    {String} [src]
+   @param    {optional Object} [settings]
+   @setting  {Boolean} [keeplines] Maintain line numbers
+   @return   {String} Minified SJS as a string literal
+#else /* !STRINGIFY */
+   @module  compile/minify
+   @summary SJS source code minifier
+   @home    sjs:compile/minify
+
+   @function compile
+   @summary  Minify a string of SJS source code
+   @param    {String} [src]
+   @param    {optional Object} [settings]
+   @setting  {Boolean} [keeplines] Maintain line numbers
+   @return   {String} Minified SJS
+#endif /* STRINGIFY */
+*/
+
+
+#elif defined(C1_KERNEL_DEPS)
+
+#define SJS_CORE 1
+#define MULTILINE_STRINGS 1
+#define SJS_USING 1
+#define SJS___JS 1
+#define SJS_DESTRUCTURE 1
+#define SJS_BLOCKLAMBDA 1
+#define SJS_ARROWS 1
+#define SJS_DOUBLEDOT 1
+#define SJS_DOUBLECOLON 1
+#define SJS_ALTERNATE_NAMESPACE 1
+#define INTERPOLATING_STRINGS 1
+#define QUASIS 1
+#define ONE_SIDED_CONDITIONALS 1
+#include "kernel-deps.js.in"
+
+#else
+
+#error "no kernel defined"
+
+#endif
+
+//----------------------------------------------------------------------
+// Helpers
+
+function Hash() {}
+Hash.prototype = {
+  lookup: function(key) { return this["$"+key]; },
+  put: function(key, val) { this["$"+key] = val; },
+  del: function(key) { delete this["$"+key]; }
+};
+
+//----------------------------------------------------------------------
+// Tokenizer
+
+// PAT_NBWS == \s+ without \n or \r
+#define PAT_NBWS [ \f\t\v\u00A0\u2028\u2029]+
+//define PAT_NBWS \\s+
+// we ignore '//'-style comments as well as hashbangs (XXX not quite right)
+#define PAT_NBCOMMENT \/\/.*|#!.*
+#define PAT_NBIGNORE (?:PAT_NBWS|PAT_NBCOMMENT)*
+
+// whitespace/comments with newlines
+#define PAT_NEWLINE (?:\r\n|\n|\r)
+#define PAT_DOT [^\r\n]
+#define PAT_DOTALL (?:PAT_DOT|PAT_NEWLINE)
+// doesn't work on IE: define PAT_COMMENT \/\*[^]*?\*\/
+#define PAT_COMMENT \/\*(?:.|\n|\r)*?\*\/
+#define PAT_NEWLINES (?:PAT_NEWLINE|PAT_COMMENT)+
+
+#define PAT_NUMLIT (?:0[xX][\da-fA-F]+)|(?:(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?)
+
+#define PAT_REGEXLIT \/(?:\\.|\[(?:\\PAT_DOT|[^\n\r\]])*\]|[^\[\/\r\n])+\/[gimy]*
+
+#define PAT_OPERATOR4 >>>=
+#define PAT_OPERATOR3 ===|!==|>>>|<<=|>>=
+
+#ifdef SJS_ARROWS
+#ifdef SJS_DOUBLEDOT
+#ifdef SJS_DOUBLECOLON
+#define PAT_OPERATOR2 ==|!=|->|=>|>>|<<|<=|>=|--|\+\+|\|\||&&|\.\.|\:\:|[-*\/%+&^|]=
+#else
+#define PAT_OPERATOR2 ==|!=|->|=>|>>|<<|<=|>=|--|\+\+|\|\||&&|\.\.|[-*\/%+&^|]=
+#endif /* !SJS_DOUBLECOLON */
+#else /* !SJS_DOUBLEDOT */
+#define PAT_OPERATOR2 ==|!=|->|=>|>>|<<|<=|>=|--|\+\+|\|\||&&|[-*\/%+&^|]=
+#endif
+#else
+#define PAT_OPERATOR2 ==|!=|>>|<<|<=|>=|--|\+\+|\|\||&&|[-*\/%+&^|]=
+#endif
+
+#ifdef INTERPOLATING_STRINGS
+#define PAT_OPERATOR1 [;,?:|^&=<>+\-*\/%!~.\[\]{}()\"`]
+#else
+#define PAT_OPERATOR1 [;,?:|^&=<>+\-*\/%!~.\[\]{}()`]
+#endif
+
+#ifdef SJS_ALTERNATE_NAMESPACE
+#define PAT_IDENTIFIER [$@_\w]+
+#else
+// XXX unicode
+#define PAT_IDENTIFIER [$_\w]+
+#endif
+
+// symbols that can appear in an 'statement/argument position':
+#define PAT_ARGSYMBOL PAT_OPERATOR2|PAT_OPERATOR1|PAT_IDENTIFIER
+// symbols that can appear in an 'operator position':
+#define PAT_SYMBOL PAT_OPERATOR4|PAT_OPERATOR3|PAT_ARGSYMBOL
+
+#define PAT_STRLIT_SGL '(?:\\PAT_DOT|[^\\\'\r\n])*'
+#ifdef INTERPOLATING_STRINGS
+#define PAT_STRLIT PAT_STRLIT_SGL
+#else
+#define PAT_STRLIT_DBL "(?:\\PAT_DOT|[^\\\"\r\n])*"
+#define PAT_STRLIT PAT_STRLIT_SGL|PAT_STRLIT_DBL
+#endif
+
+#ifdef MULTILINE_STRINGS
+#define PAT_ML_STRLIT_SGL '(?:\\(?:PAT_DOTALL)|[^\\\'])*'
+#ifdef INTERPOLATING_STRINGS
+#define PAT_ML_STRLIT PAT_ML_STRLIT_SGL
+#else
+#define PAT_ML_STRLIT_DBL "(?:\\(?:PAT_DOTALL)|[^\\\"])*"
+#define PAT_ML_STRLIT PAT_ML_STRLIT_SGL|PAT_ML_STRLIT_DBL
+#endif
+#endif
+
+#define PAT_INVALID \S+
+
+// tokenizer for tokens in a statement/argument position:
+#ifdef MULTILINE_STRINGS
+var TOKENIZER_SA = /PAT_NBIGNORE(?:(PAT_NEWLINES)|(PAT_NUMLIT)|(PAT_REGEXLIT)|(PAT_ARGSYMBOL)|(PAT_STRLIT)|(PAT_ML_STRLIT)|(PAT_INVALID))/g;
+#else
+var TOKENIZER_SA = /PAT_NBIGNORE(?:(PAT_NEWLINES)|(PAT_NUMLIT)|(PAT_REGEXLIT)|(PAT_ARGSYMBOL)|(PAT_STRLIT)|(PAT_INVALID))/g;
+#endif
+
+#define SA_NEWLINES_MATCH 1
+#define SA_NUMLIT_MATCH 2
+#define SA_REGEXLIT_MATCH 3
+#define SA_ARGSYMBOL_MATCH 4
+#define SA_STRLIT_MATCH 5
+#ifdef MULTILINE_STRINGS
+#define SA_ML_STRLIT_MATCH 6
+#define SA_INVALID_MATCH 7
+#else
+#define SA_INVALID_MATCH 6
+#endif
+
+// tokenizer for tokens in an operator position:
+var TOKENIZER_OP = /PAT_NBIGNORE(?:(PAT_NEWLINES)|(PAT_SYMBOL))/g;
+
+#define OP_NEWLINES_MATCH 1
+#define OP_SYMBOL_MATCH 2
+
+#ifdef INTERPOLATING_STRINGS
+// tokenizer for tokens in an interpolating string position:
+var TOKENIZER_IS = /((?:\\PAT_DOT|\#(?!\{)|[^#\\\"\r\n])+)|(\\PAT_NEWLINE)|(PAT_NEWLINE)|(\"|\#\{)/g;
+#define IS_CONTENT_MATCH 1
+#define IS_ESCAPED_NEWLINE_MATCH 2
+#define IS_NEWLINE_MATCH 3
+#define IS_OPERATOR_MATCH 4
+#endif
+
+#ifdef QUASIS
+// tokenizer for tokens in an quasi-literal:
+var TOKENIZER_QUASI = /((?:\\PAT_DOT|\$(?![\{a-zA-Z_$@])|[^$\\\`\r\n])+)|(\\PAT_NEWLINE)|(PAT_NEWLINE)|(\`|\$\{|\$(?=[a-zA-Z_$@]))/g;
+#define QUASI_CONTENT_MATCH 1
+#define QUASI_ESCAPED_NEWLINE_MATCH 2
+#define QUASI_NEWLINE_MATCH 3
+#define QUASI_OPERATOR_MATCH 4
+#endif
+
+//----------------------------------------------------------------------
+// Syntax Table
+
+function SemanticToken() {}
+SemanticToken.prototype = {
+  //----------------------------------------------------------------------
+  // parser 'api'
+
+  // expression starter function
+#ifdef VERBOSE_COMPILE_ERRORS
+  exsf: function(pctx) { throw new Error("Unexpected token '" + this + "' (exsf missing)"); },
+#else
+  exsf: function(pctx) { throw new Error("Unexpected '" + this + "'"); },
+#endif
+  // expression continuation binding power
+  excbp: 0,
+
+  // expression continuation
+#ifdef VERBOSE_COMPILE_ERRORS
+  excf: function(left, pctx) { throw new Error("Unexpected token '" + this + "' (excf missing)"); },
+#else
+  excf: function(left, pctx) { throw new Error("Unexpected '" + this + "'"); },
+#endif
+  // statement function
+  stmtf: null,
+
+  // tokenizer for next token:
+  tokenizer: TOKENIZER_SA,
+  
+  //----------------------------------------------------------------------
+  // helpers
+  
+  toString: function() { return "'"+this.id+"'"; },
+
+  //----------------------------------------------------------------------
+  // semantic token construction 'api'
+  
+  exs: function(f) {
+    this.exsf = f;
+    return this;
+  },
+  exc: function(bp, f) {
+    this.excbp = bp;
+    if (f) this.excf = f;
+    return this;
+  },
+  stmt: function(f) {
+    this.stmtf = f;
+    return this;
+  },
+
+  // encode infix operation
+  ifx: function(bp, right_assoc) {
+    this.excbp = bp;
+    if (right_assoc) bp -= .5;
+    this.excf = function(left, pctx) {
+      var right = parseExp(pctx, bp);
+      LOGM('infix_op('+this.id+')')
+      GEN_INFIX_OP(left, this.id, right, pctx)
+    };
+    return this;
+  },
+  // encode assignment operation
+  asg: function(bp, right_assoc) {
+    this.excbp = bp;
+    if (right_assoc) bp -= .5;
+    this.excf = function(left, pctx) {
+      var right = parseExp(pctx, bp);
+      LOGM('assign_op('+this.id+')')
+      GEN_ASSIGN_OP(left, this.id, right, pctx)
+    };
+    return this;
+  },
+  // encode prefix operation
+  pre: function(bp) {
+    return this.exs(function(pctx) {
+      var right = parseExp(pctx, bp);
+      LOGM('prefix_op')
+      GEN_PREFIX_OP(this.id, right, pctx)
+    });
+  },
+  // encode postfix operation
+  pst: function(bp) {
+    return this.exc(bp, function(left, pctx) {
+      LOGM('postfix_op')
+      GEN_POSTFIX_OP(left, this.id, pctx)
+    });
+  }  
+};
+
+//-----
+function Literal(type, value) {
+  this.id = type;
+  this.value = value;
+}
+Literal.prototype = new SemanticToken();
+Literal.prototype.tokenizer = TOKENIZER_OP;
+#ifdef VERBOSE_COMPILE_ERRORS
+Literal.prototype.toString = function() { return this.id + "('" + this.value + "')"; };
+#else
+Literal.prototype.toString = function() { return "literal '"+this.value+"'"; };
+#endif
+Literal.prototype.exsf = function(pctx) {
+  LOGM('literal')
+  GEN_LITERAL(this.id, this.value, pctx)
+};
+
+#ifdef SJS_ALTERNATE_NAMESPACE
+//-----
+function Identifier(value) {
+  if (value.charAt(0) === '@') {
+    this.alternate = true;
+    this.id = "<@id>";
+    this.value = value.substr(1);
+  }
+  else
+    this.value = value;
+}
+Identifier.prototype = new Literal("<id>");
+Identifier.prototype.exsf = function(pctx) {
+  if (this.alternate === true) {
+    if (this.value.length) {
+      LOGM('@identifier('+this.value+')')
+      GEN_ALTERNATE_NAMESPACE_IDENTIFIER(this.value, pctx)
+    }
+    else {
+      LOGM('@ object')
+      GEN_ALTERNATE_NAMESPACE_OBJ(pctx)
+    }
+  }
+  else {
+    LOGM('identifier('+this.value+')')
+    GEN_IDENTIFIER(this.value, pctx)
+  }
+};
+#else /* ! SJS_ALTERNATE_NAMESPACE */
+//-----
+function Identifier(value) {
+  this.value = value;
+}
+Identifier.prototype = new Literal("<id>");
+Identifier.prototype.alternate = false;
+Identifier.prototype.exsf = function(pctx) {
+  LOGM('identifier('+this.value+')')
+  GEN_IDENTIFIER(this.value, pctx)
+};
+
+#ifndef VERBOSE_COMPILE_ERRORS
+Identifier.prototype.toString = function() { return "identifier '"+this.value+"'";};
+#endif
+#endif /* SJS_ALTERNATE_NAMESPACE */
+
+//-----
+// base syntax table
+var ST = new Hash();
+function S(id, tokenizer) {
+  var t = new SemanticToken();
+  t.id = id;
+  if (tokenizer)
+    t.tokenizer = tokenizer;
+  ST.put(id, t);
+  return t;
+}
+
+/*
+BP: Binding Power
+P: Precedence
+A: Associativity (L: left, R: right)
+*: Designates an SJS-specific construct
+
+BP  P  A    Operator      Operand Types                  Operation Performed
+270  1 L     []           MemberExp Expression        
+       L     .            MemberExp Identifier        
+       R     new          MemberExp Arguments        
+260  2 L     ( )          CallExpression Arguments       Function Call
+       L     { }          CallExpression BlockArguments  Block Lambda Call
+  (    L     []           CallExpression Expression        )
+  (    L     .            CallExpression Identifier        )  
+*255   L     ..           ArgExp CallExpression          Double Dot Call
+250  3 n/a   ++           LeftHandSideExp                PostfixIncrement
+       n/a   --           LeftHandSideExp                PostfixDecrement
+240  4 R     delete       UnaryExp                       Call Delete Method
+       R     void         UnaryExp                       Eval and Return undefined
+       R     typeof       UnaryExp                       Return Type of an Object
+  (    R     ++           UnaryExp                       PrefixIncrement )
+  (    R     --           UnaryExp                       PrefixDecrement )
+       R     +            UnaryExp                       UnaryPlus
+       R     -            UnaryExp                       UnaryMinus
+       R     ~            UnaryExp                       BitwiseNot
+       R     !            UnaryExp                       LogicalNot
+230  5 L     *            MultExp UnaryExp               Multiplication
+       L     /            MultExp UnaryExp               Division
+       L     %            MultExp UnaryExp               Remainder
+220  6 L     +            AddExp MultExp                 Addition
+       L     -            AddExp MultExp                 Subtraction
+210  7 L     <<           ShiftExp AddExp                BitwiseLeftShift
+       L     >>           ShiftExp AddExp                SignedRightShift
+       L     >>>          ShiftExp AddExp                UnsignedRightShift
+*205   R     ::           CallExpression ArgExp          Double Colon Call
+200  8 L     <            RelExp ShiftExp                LessThanComparison
+       L     >            RelExp ShiftExp                GreaterThanComparison
+       L     <=           RelExp ShiftExp                LessThanOrEqualComparison
+       L     >=           RelExp ShiftExp                GreaterThanOrEqualComparison
+       L     instanceof   RelExp ShiftExp                Call HasInstance Method
+       L     in           RelExp ShiftExp                Call HasProperty Method
+190 9  L     ==           EqualExp RelExp                IsEqual
+       L     !=           EqualExp RelExp                IsNotEqual
+       L     ===          EqualExp RelExp                IsStrictlyEqual
+       L     !==          EqualExp RelExp                IsStrictlyNotEqual
+180 10 L     &            BitwiseAndExp EqualExp         BitwiseAnd
+170 11 L     ^            BitwiseXorExp EqualExp         Bitwise Xor
+160 12 L     |            BitwiseOrExp EqualExp          BitwiseOr
+150 13 L     &&           LogicalAndExp BitwiseOrExp     LogicalAnd
+140 14 L     ||           LogicalOrExp LogicalAndExp     LogicalOr
+130 15 R     ? :          LogicalOrExp AssignExp AssignExp   ConditionalExpression
+120 16 R      =           LeftHandSideExp AssignExp      AssignmentExpression
+       R     *=           LeftHandSideExp AssignExp      AssignmentWithMultiplication
+       R     /=           LeftHandSideExp AssignExp      AssignmentWithDivision
+       R     %=           LeftHandSideExp AssignExp      AssignmentWithRemainder
+       R     +=           LeftHandSideExp AssignExp      AssignmentWithAddition
+       R     -=           LeftHandSideExp AssignExp      AssignmentWithSubtraction
+       R     <<=          LeftHandSideExp AssignExp      AssignmentWithBitwiseLeftShift
+       R     >>=          LeftHandSideExp AssignExp      AssignmentWithSignedRightShift
+       R     >>>=         LeftHandSideExp AssignExp      AssignmentWithUnsignedRightShift
+       R     &=           LeftHandSideExp AssignExp      AssignmentWithBitwiseAnd
+       R     ^=           LeftHandSideExp AssignExp      AssignmentWithBitwiseOr
+       R     |=           LeftHandSideExp AssignExp      AssignmentWithLogicalNot
+*      R     ->           Args AssignExp                 Thin Arrow 
+*      R     ->           AssignExp                      Thin Arrow (prefix form)
+*      R     =>           Args AssignExp                 Fat Arrow
+*      R     =>           AssignExp                      Fat Arrow (prefix form)
+*115         spawn        SpawnExp                       StratifiedJS 'spawn'
+110 17 L     ,            Expression AssignExp           SequentialEvaluation
+
+expressions up to BP 100
+
+*/
+
+#define BP_CALLEXP 260
+#define BP_ASSIGN 120
+#define BP_COMMA 110
+
+S("[").
+  // array literal
+  exs(function(pctx) {
+    var elements = [];
+    while (pctx.token.id != "]") {
+      if (elements.length) scan(pctx, ",");
+      if (pctx.token.id == ",") {
+        elements.push((function(pctx) { LOGM('elision') GEN_ELISION(pctx) })(pctx));
+      }
+      else if (pctx.token.id == "]")
+        break; // allows trailing ','
+      else
+        elements.push(parseExp(pctx, BP_COMMA));
+    }
+    scan(pctx, "]");
+    LOGM('arr_lit')
+    GEN_ARR_LIT(elements, pctx)
+  }).
+  // indexed property access
+  exc(270, function(l, pctx) {
+    var idxexp = parseExp(pctx);
+    scan(pctx, "]");
+    LOGM('idx_accessor')
+    GEN_IDX_ACCESSOR(l, idxexp, pctx)
+  });
+
+S(".").exc(270, function(l, pctx) {
+  if (pctx.token.id != "<id>")
+    throw new Error("Expected an identifier, found '"+pctx.token+"' instead");
+  var name = pctx.token.value;
+  scan(pctx);
+  LOGM('dot_accessor')
+  GEN_DOT_ACCESSOR(l, name, pctx)
+});
+
+S("new").exs(function(pctx) {
+  var exp = parseExp(pctx, BP_CALLEXP);
+  var args = [];
+  if (pctx.token.id == "(") {
+    scan(pctx); // swallow '('
+    while (pctx.token.id != ")") {
+      if (args.length) scan(pctx, ",");
+      args.push(parseExp(pctx, BP_COMMA));
+    }
+    scan(pctx, ")");
+  }
+  LOGM('new')
+  GEN_NEW(exp, args, pctx)
+});
+
+S("(").
+  // grouping/parameter list
+  exs(function (pctx) {
+#ifdef SJS_ARROWS
+    if (pctx.token.id == ')') {
+      // empty parameter list
+      var op = scan(pctx, ')');
+      if (op.id != '->' &&
+          op.id != '=>')
+        throw new Error("Was expecting '->' or '=>' after empty parameter list, but saw '"+pctx.token.id+"'");
+      scan(pctx);
+      return op.exsf(pctx);
+    }
+#endif
+    var e = parseExp(pctx);
+    scan(pctx, ")");
+    LOGM('group')
+    GEN_GROUP(e, pctx)
+  }).
+  // function call
+  exc(260, function(l, pctx) {
+    var args = [];
+    while (pctx.token.id != ")") {
+      if (args.length) scan(pctx, ",");
+      args.push(parseExp(pctx, BP_COMMA)); // only parse up to comma
+    }
+    scan(pctx, ")");
+#ifdef SJS_BLOCKLAMBDA
+    // special case for blocklambdas: pull the blocklambda into the argument list
+    // f(a,b,c) {|..| ...} --> f(a,b,c,{|..| ...})
+    if (pctx.token.id == '{') {
+      // look ahead for '|' or '||'
+      TOKENIZER_SA.lastIndex = pctx.lastIndex;
+      while (1) {
+        var matches = TOKENIZER_SA.exec(pctx.src);
+        if (matches && 
+            (matches[SA_ARGSYMBOL_MATCH] == '|' ||
+             matches[SA_ARGSYMBOL_MATCH] == '||')) {
+          // ok, we've got a blocklambda -> pull it in
+          args.push(parseBlockLambda(scan(pctx).id, pctx));
+        }
+        else if (matches && matches[SA_NEWLINES_MATCH]) {
+          continue;
+        }
+        break;
+      }
+    }
+#endif
+
+    LOGM('fun_call')
+    GEN_FUN_CALL(l, args, pctx)
+  });
+
+#ifdef SJS_DOUBLEDOT
+S("..").exc(255, function(l, pctx) {
+  var r = parseExp(pctx, 255);
+  LOGM('doubledot')
+  GEN_DOUBLEDOT_CALL(l,r,pctx)
+});
+#endif
+
+S("++").pre(240).pst(250).asi_restricted = true;
+S("--").pre(240).pst(250).asi_restricted = true;
+
+S("delete").pre(240);
+S("void").pre(240);
+S("typeof").pre(240);
+S("+").pre(240).ifx(220);
+S("-").pre(240).ifx(220);
+S("~").pre(240); 
+S("!").pre(240);
+
+S("*").ifx(230);
+S("/").ifx(230);
+S("%").ifx(230);
+
+// +,-: see above
+
+S("<<").ifx(210);
+S(">>").ifx(210);
+S(">>>").ifx(210);
+
+#ifdef SJS_DOUBLECOLON
+S("::").exc(205, function(l, pctx) {
+  var r = parseExp(pctx, 204.5);
+  LOGM('doublecolon')
+  GEN_DOUBLECOLON_CALL(l,r,pctx)
+});
+#endif
+
+
+S("<").ifx(200);
+S(">").ifx(200);
+S("<=").ifx(200);
+S(">=").ifx(200);
+S("instanceof").ifx(200);
+
+S("in").ifx(200);
+
+S("==").ifx(190);
+S("!=").ifx(190);
+S("===").ifx(190);
+S("!==").ifx(190);
+
+S("&").ifx(180);
+S("^").ifx(170);
+S("|").ifx(160);
+S("&&").ifx(150);
+S("||").ifx(140);
+
+S("?").exc(130, function(test, pctx) {
+  var consequent = parseExp(pctx, BP_COMMA);
+#ifdef ONE_SIDED_CONDITIONALS
+  if (pctx.token.id == ":") {
+    scan(pctx, ":");
+    var alternative = parseExp(pctx, BP_COMMA);
+  }
+#else
+  scan(pctx, ":");
+  var alternative = parseExp(pctx, BP_COMMA);
+#endif
+  LOGM('conditional')
+  GEN_CONDITIONAL(test, consequent, alternative, pctx)
+});
+
+S("=").asg(BP_ASSIGN, true);
+S("*=").asg(120, true);
+S("/=").asg(120, true);
+S("%=").asg(120, true);
+S("+=").asg(120, true);
+S("-=").asg(120, true);
+S("<<=").asg(120, true);
+S(">>=").asg(120, true);
+S(">>>=").asg(120, true);
+S("&=").asg(120, true);
+S("^=").asg(120, true);
+S("|=").asg(120, true);
+
+#ifdef SJS_ARROWS
+S("->")
+  // prefix form without parameters expression
+  .exs(function(pctx) {
+    var body = parseExp(pctx, 119.5); // 119.5 because of right-associativity
+    LOGM('thinarray/prefix')
+    GEN_THIN_ARROW(body, pctx)
+  })
+  // infix form with parameters expression
+  .exc(120, function(left, pctx) {
+    var body = parseExp(pctx, 119.5);
+    LOGM('thinarray/infix')
+    GEN_THIN_ARROW_WITH_PARS(left, body, pctx)
+  });
+S("=>")
+  // prefix form without parameters expression
+  .exs(function(pctx) {
+    var body = parseExp(pctx, 119.5); // 119.5 because of right-associativity
+    LOGM('fatarray/prefix')
+    GEN_FAT_ARROW(body, pctx)
+  })
+  // infix form with parameters expression
+  .exc(120, function(left, pctx) {
+    var body = parseExp(pctx, 119.5);
+    LOGM('fatarray/infix')
+    GEN_FAT_ARROW_WITH_PARS(left, body, pctx)
+  });
+#endif
+
+#ifdef SJS_CORE
+S("spawn").pre(115);
+#endif
+
+S(",").ifx(BP_COMMA, true);
+
+// helper to parse a token into a valid property name:
+function parsePropertyName(token, pctx) {
+  var id = token.id;
+#ifdef SJS_ALTERNATE_NAMESPACE
+  if (id == "<@id>")
+    return '@'+token.value;
+#endif // SJS_ALTERNATE_NAMESPACE
+  if (id == "<id>"
+      || id == "<string>" || id == "<number>")
+    return token.value;
+#ifdef INTERPOLATING_STRINGS
+  if (id == '"') {
+    if ((token = scan(pctx)).id != "<string>" ||
+        scan(pctx, undefined, TOKENIZER_IS).id != 'istr-"')
+      throw new Error("Non-literal strings can't be used as property names ("+token+")");
+    return '"'+token.value+'"';
+  }
+#endif
+  throw new Error("Invalid object literal syntax; property name expected, but saw "+token);
+}
+
+function parseBlock(pctx) {
+  LOGM('block<')
+  BEGIN_BLOCK(pctx)
+  while (pctx.token.id != "}") {
+    var stmt = parseStmt(pctx);
+    LOGM('+block_stmt')
+    ADD_BLOCK_STMT(stmt, pctx)
+  }
+  scan(pctx, "}");
+  LOGM('>block')
+  END_BLOCK(pctx)
+}
+
+#ifdef SJS_BLOCKLAMBDA
+function parseBlockLambdaBody(pctx) {
+  LOGM('blamdabody<')
+  BEGIN_BLAMBDABODY(pctx)
+  while (pctx.token.id != "}") {
+    var stmt = parseStmt(pctx);
+    LOGM('+blamdabody_stmt')
+    ADD_BLAMBDABODY_STMT(stmt, pctx);
+  }
+  scan(pctx, "}");
+  LOGM('>blamdabody')
+  END_BLAMBDABODY(pctx)
+}
+function parseBlockLambda(start, pctx) {
+  // collect parameters
+  var pars;
+  if (start == '||') {
+    pars = [];
+    scan(pctx);
+  } else {
+    pars = parseFunctionParams(pctx, '|', '|');
+  }
+
+  var body = parseBlockLambdaBody(pctx);
+  LOGM('blocklambda')
+  GEN_BLOCKLAMBDA(pars, body, pctx)
+}
+#endif /* SJS_BLOCKLAMBDA */
+
+S("{").
+  exs(function(pctx) {
+#ifdef SJS_BLOCKLAMBDA
+    var start = pctx.token.id;
+    if (start == "|" || start == "||") {
+      // block lambda */
+      return parseBlockLambda(start, pctx);
+    }
+    else {
+#endif /* SJS_BLOCKLAMBDA */
+      // object literal:
+      var props = [];
+      while (pctx.token.id != "}") {
+        if (props.length) scan(pctx, ",");
+        var prop = pctx.token;
+        if (prop.id == "}")
+          break; // allows trailing ','
+        prop = parsePropertyName(prop, pctx);
+        scan(pctx);
+        if (pctx.token.id == ":") {
+          // 'normal' property
+          scan(pctx);
+          var exp = parseExp(pctx, BP_COMMA); // only parse up to comma
+          props.push(["prop",prop,exp]);
+        }
+#ifdef ECMA_GETTERS_SETTERS
+        else if (prop == "get") {
+          // property getter
+          prop = parsePropertyName(pctx.token, pctx);
+          scan(pctx);
+          scan(pctx, "(");
+          scan(pctx, ")");
+          var body = parseFunctionBody(pctx);
+          props.push(["get", prop, body]);
+        }
+        else if (prop == "set") {
+          // property setter
+          prop = parsePropertyName(pctx.token, pctx);
+          scan(pctx);
+          var pars = parseFunctionParams(pctx);
+          var body = parseFunctionBody(pctx);
+          if (pars.length != 1)
+            throw new Error("Exactly one parameter expected in property setter definition");
+          props.push(["set", prop, pars[0], body]);
+        }
+#endif /* ECMA_GETTERS_SETTERS */
+#ifdef METHOD_DEFINITIONS
+        else if (pctx.token.id == "(") {
+          props.push(["method",prop,parseMethod(pctx)]);
+        }
+#endif /* METHOD_DEFINITIONS */
+#ifdef SJS_DESTRUCTURE
+        else if (pctx.token.id == "}" || pctx.token.id == ",") {
+          if (prop.charAt(0) == "'" || prop.charAt(0) == '"')
+            throw new Error("Quoted identifiers not allowed in destructuring patterns ("+prop+")");
+          props.push(["pat", prop, pctx.line]);
+        }
+#endif /* SJS_DESTRUCTURE */
+        else
+          throw new Error("Unexpected token '"+pctx.token+"'");
+      }
+      scan(pctx, "}", TOKENIZER_OP); // note the special tokenizer case here
+      LOGM('obj_lit')
+      GEN_OBJ_LIT(props, pctx)
+#ifdef SJS_BLOCKLAMBDA
+    }
+#endif /* SJS_BLOCKLAMBDA */
+  }).
+#ifdef SJS_BLOCKLAMBDA
+  // block lambda call:
+  exc(260, function(l, pctx) {
+    var start = pctx.token.id;
+    if (start != "|" && start != "||")
+      throw new Error("Unexpected token '"+pctx.token+"' - was expecting '|' or '||'");
+    var args = [parseBlockLambda(start, pctx)];
+    LOGM('fun_call')
+    GEN_FUN_CALL(l, args, pctx);
+  }).
+#endif /* SJS_BLOCKLAMBD */
+  // block:
+  stmt(parseBlock);
+
+// deliminators
+S(";").stmt(function(pctx) { LOGM('empty_stmt') GEN_EMPTY_STMT(pctx) });
+S(")", TOKENIZER_OP);
+S("]", TOKENIZER_OP);
+S("}"); // note the special tokenizer case for object literals, above
+S(":");
+
+S("<eof>").
+  exs(function(pctx) { throw new Error("Unexpected end of input (exs)"); }).
+  stmt(function(pctx) { throw new Error("Unexpected end of input (stmt)"); });
+
+// statements/misc
+
+// helper to parse a function body:
+function parseFunctionBody(pctx, implicit_return) {
+  LOGM('fbody<')
+  BEGIN_FBODY(pctx, implicit_return)
+  scan(pctx, "{");
+  while (pctx.token.id != "}") {
+    var stmt = parseStmt(pctx);
+    LOGM('+fbody_stmt')
+    ADD_FBODY_STMT(stmt, pctx)
+  }
+  scan(pctx, "}");
+  LOGM('>fbody')
+  END_FBODY(pctx, implicit_return)
+}
+
+function parseFunctionParam(pctx) {
+  var t = pctx.token;
+  scan(pctx);
+  var left = t.exsf(pctx);
+  while (pctx.token.id != '|' && pctx.token.excbp > BP_COMMA) {
+    t = pctx.token;
+    scan(pctx);
+    left = t.excf(left, pctx);
+  }
+  return left;
+}
+
+function parseFunctionParams(pctx, starttok, endtok) {
+  if (!starttok) { starttok = '('; endtok = ')'; }
+  var pars = [];
+  scan(pctx, starttok);
+  while (pctx.token.id != endtok) {
+    if (pars.length)
+      scan(pctx, ",");
+    switch(pctx.token.id) {
+#ifdef SJS_DESTRUCTURE
+      case "{":
+      case "[":
+        pars.push(parseFunctionParam(pctx));
+        break;
+#endif
+      case "<id>":
+        pars.push(pctx.token.exsf(pctx));
+        scan(pctx);
+        break;
+      default:
+        throw new Error("Expected function parameter but found '"+pctx.token+"'");
+    }
+    token = pctx.token;
+  }
+  scan(pctx, endtok);
+  return pars;
+}
+
+#ifdef METHOD_DEFINITIONS
+// parse an abbreviated-syntax method (as in { x() { ... }, y() { ... } })
+function parseMethod(pctx) {
+  //console.log("**** Deprecated method definition syntax in "+pctx.filename+":"+pctx.line);
+  var pars = parseFunctionParams(pctx);
+  var body = parseFunctionBody(pctx, true);
+  LOGM('method_exp()')
+  GEN_FUN_EXP("", pars, body, pctx, true)
+}
+#endif
+
+S("function").
+  // expression function form ('function expression')
+  exs(function(pctx) {
+    var fname = "";
+    if (pctx.token.id == "<id>") {
+      fname = pctx.token.value;
+      scan(pctx);
+    }
+    var pars = parseFunctionParams(pctx);
+    var body = parseFunctionBody(pctx);
+    LOGM('fun_exp('+(fname||'')+')')
+    GEN_FUN_EXP(fname, pars, body, pctx, false)
+  }).
+  // statement function form ('function declaration')
+  stmt(function(pctx) {
+    if (pctx.token.id != "<id>") throw new Error("Malformed function declaration");
+    var fname = pctx.token.value;
+    scan(pctx);
+    var pars = parseFunctionParams(pctx);
+    var body = parseFunctionBody(pctx);
+    LOGM('fun_decl')
+    GEN_FUN_DECL(fname, pars, body, pctx)
+  });
+
+S("this", TOKENIZER_OP).exs(function(pctx) { LOGM('this') GEN_THIS(pctx) });
+S("true", TOKENIZER_OP).exs(function(pctx) { LOGM('true') GEN_TRUE(pctx) });
+S("false", TOKENIZER_OP).exs(function(pctx) { LOGM('false') GEN_FALSE(pctx) });
+S("null", TOKENIZER_OP).exs(function(pctx) { LOGM('null') GEN_NULL(pctx) });
+
+#ifdef SJS_CORE
+S("collapse", TOKENIZER_OP).exs(function(pctx) { LOGM('collapse') GEN_COLLAPSE(pctx) });
+#endif
+
+#ifdef INTERPOLATING_STRINGS
+S('"', TOKENIZER_IS).exs(function(pctx) {
+  var parts = [], last=-1;
+  while (pctx.token.id != 'istr-"') {
+    switch (pctx.token.id) {
+    case "<string>":
+      // XXX not sure this retrospective collecting of adjacent
+      // strings makes sense here; maybe this should be built into the
+      // tokenization. (The problem is that the tokenizer splits
+      // strings on '\n')
+      if (last!=-1 && typeof parts[last] == 'string') {
+        parts[last] += pctx.token.value;
+      }
+      else {
+        parts.push(pctx.token.value);
+        ++last;
+      }
+      break;
+    case 'istr-#{':
+      scan(pctx);
+      // we push an array to distinguish from strings:
+      // (the kernel might generate a string for 'parseExp', which would leave
+      // no way to distinguish between expressions and literal parts of the string
+      // in GEN_INTERPOLATING_STR).
+      parts.push([parseExp(pctx)]); 
+      ++last;
+      break;
+    case "<eof>":
+      throw new Error("Unterminated string");
+      break;
+    default:
+      throw new Error("Internal parser error: Unknown token in string ("+pctx.token+")");
+    }
+    scan(pctx, undefined, TOKENIZER_IS);
+  }
+  scan(pctx);
+
+  if (last == -1) {
+    parts.push('');
+    last = 0;
+  }
+
+  if (last == 0 && typeof parts[0] == 'string') {
+    var val = '"'+parts[0]+'"';
+    GEN_LITERAL('<string>',val,pctx)
+  }
+  GEN_INTERPOLATING_STR(parts, pctx)
+});
+
+S('istr-#{', TOKENIZER_SA);
+S('istr-"', TOKENIZER_OP);
+#endif
+
+#ifdef QUASIS
+S('`', TOKENIZER_QUASI).exs(function(pctx) {
+  var parts = [], current=0;
+  while (pctx.token.id != 'quasi-`') {
+    switch (pctx.token.id) {
+    case '<string>':
+      // strings always go into an even position. If we get a string
+      // with current=odd it means the tokenizer gave us two adjacent
+      // strings (can happen because the tokenizer splits strings on
+      // '\n'). In this case we append the new string to the last string:
+      if (current % 2)
+        parts[current-1] += pctx.token.value;
+      else {
+        parts.push(pctx.token.value);
+        ++current;
+      }
+      break;
+    case 'quasi-${':
+      scan(pctx);
+      // expressions always go into an odd position. If we're in an even
+      // position we insert an empty string:
+      if ((current % 2) == 0) {
+        parts.push('');
+        ++current;
+      }
+      parts.push(parseExp(pctx));
+      ++current;
+      break;
+    case 'quasi-$':
+      // expressions always go into an odd position. If we're in an even
+      // position we insert an empty string:
+      if ((current % 2) == 0) {
+        parts.push('');
+        ++current;
+      }
+      parts.push(parseQuasiInlineEscape(pctx));
+      ++current;
+      break;
+
+    case '<eof>':
+      throw new Error('Unterminated string');
+      break;
+    default:
+      throw new Error('Internal parser error: Unknown token in string ('+pctx.token+')');
+    }
+    scan(pctx, undefined, TOKENIZER_QUASI);
+  }
+  scan(pctx);
+  
+  // xxx can this happen?
+  if (current == 0) {
+    parts.push('');
+  }
+
+  GEN_QUASI(parts, pctx);
+});
+
+function parseQuasiInlineEscape(pctx) {
+  // scan an identifier:
+  var identifier = scan(pctx);
+  if (pctx.token.id !== "<id>" && pctx.token.id !== "<@id>") throw new Error("Unexpected " + pctx.token + " in quasi template");
+  if (pctx.src.charAt(pctx.lastIndex) != '(') {
+    // $variable
+    return identifier.exsf(pctx);
+  }
+  else {
+    scan(pctx); // consume identifier
+    scan(pctx, '('); // consume '('
+    // $func(args)
+    var args = [];
+    while (pctx.token.id != ')') {
+      if (args.length) scan(pctx, ',');
+      args.push(parseExp(pctx, BP_COMMA)); // only parse up to comma
+    }
+    GEN_FUN_CALL(identifier.exsf(pctx), args, pctx)
+  }
+}
+
+S('quasi-${', TOKENIZER_SA);
+S('quasi-$', TOKENIZER_SA);
+S('quasi-`', TOKENIZER_OP);
+#else
+S('`'); // no support for quasis; disallow "`"
+#endif
+
+function isStmtTermination(token) {
+  return token.id == ";" || token.id == "}" || token.id == "<eof>";
+}
+
+function parseStmtTermination(pctx) {
+  if (pctx.token.id != "}" && pctx.token.id != "<eof>" && !pctx.newline)
+    scan(pctx, ";");
+}
+
+function parseVarDecls(pctx, noIn) {
+  var decls = [];
+  var parse = noIn ? parseExpNoIn : parseExp;
+  do {
+    if (decls.length) scan(pctx, ",");
+    var id_or_pattern = parse(pctx, BP_ASSIGN);
+    if (pctx.token.id == "=") {
+      scan(pctx);
+      var initialiser = parse(pctx, BP_COMMA);
+      decls.push([id_or_pattern, initialiser]);
+    }
+    else
+      decls.push([id_or_pattern]);
+  } while (pctx.token.id == ",");
+  return decls;
+}
+    
+S("var").stmt(function(pctx) {
+  var decls = parseVarDecls(pctx);
+  parseStmtTermination(pctx);
+  LOGM('var_decl')
+  GEN_VAR_DECL(decls, pctx)
+});
+
+S("else");
+
+S("if").stmt(function(pctx) {
+  scan(pctx, "(");
+  var test = parseExp(pctx);
+  scan(pctx, ")");
+  var consequent = parseStmt(pctx);
+  var alternative = null;
+  if (pctx.token.id == "else") {
+    scan(pctx);
+    alternative = parseStmt(pctx);
+  }
+  LOGM('if')
+  GEN_IF(test, consequent, alternative, pctx)
+});
+
+S("while").stmt(function(pctx) {
+  scan(pctx, "(");
+  var test = parseExp(pctx);
+  scan(pctx, ")");
+  BEGIN_LOOP_SCOPE(pctx)
+  var body = parseStmt(pctx);
+  END_LOOP_SCOPE(pctx)
+  LOGM('while')
+  GEN_WHILE(test, body, pctx)
+});
+
+S("do").stmt(function(pctx) {
+  BEGIN_LOOP_SCOPE(pctx)
+  var body = parseStmt(pctx);
+  END_LOOP_SCOPE(pctx)
+  scan(pctx, "while");
+  scan(pctx, "(");
+  var test = parseExp(pctx);
+  scan(pctx, ")");
+  parseStmtTermination(pctx);
+  LOGM('do_while')
+  GEN_DO_WHILE(body, test, pctx)
+});
+
+S("for").stmt(function(pctx) {
+  scan(pctx, "(");
+  var start_exp = null;
+  var decls = null;
+  if (pctx.token.id == "var") {
+    scan(pctx); // consume 'var'
+    decls = parseVarDecls(pctx, true);
+  }
+  else {
+    if (pctx.token.id != ';')
+      start_exp = parseExpNoIn(pctx);
+  }
+
+  if (pctx.token.id == ";") {
+    scan(pctx);
+    var test_exp = null;
+    if (pctx.token.id != ";")
+      test_exp = parseExp(pctx);
+    scan(pctx, ";");
+    var inc_exp = null;
+    if (pctx.token.id != ")")
+      inc_exp = parseExp(pctx);
+    scan(pctx, ")");
+    BEGIN_LOOP_SCOPE(pctx)
+    var body = parseStmt(pctx);
+    END_LOOP_SCOPE(pctx)
+    LOGM('for')
+    GEN_FOR(start_exp, decls, test_exp, inc_exp, body, pctx)
+  }
+  else if (pctx.token.id == "in") {
+    scan(pctx);
+    //XXX check that start_exp is a valid LHS
+    if (decls && decls.length > 1)
+      throw new Error("More than one variable declaration in for-in loop");
+    var obj_exp = parseExp(pctx);
+    scan(pctx, ")");
+    BEGIN_LOOP_SCOPE(pctx)
+    var body = parseStmt(pctx);
+    END_LOOP_SCOPE(pctx)
+    var decl = decls ? decls[0] : null;
+    LOGM('for_in')
+    GEN_FOR_IN(start_exp, decl, obj_exp, body, pctx)
+  }
+  else
+    throw new Error("Unexpected token '"+pctx.token+"' in for-statement");
+});
+
+S("continue").stmt(function(pctx) {
+  var label = null;
+  if (pctx.token.id == "<id>" && !pctx.newline) {
+    label = pctx.token.value;
+    scan(pctx);
+  }
+  parseStmtTermination(pctx);
+  LOGM('continue')
+  GEN_CONTINUE(label, pctx)
+});
+
+S("break").stmt(function(pctx) {
+  var label = null;
+  if (pctx.token.id == "<id>" && !pctx.newline) {
+    label = pctx.token.value;
+    scan(pctx);
+  }
+  parseStmtTermination(pctx);
+  LOGM('break')
+  GEN_BREAK(label, pctx)
+});
+
+S("return").stmt(function(pctx) {
+  var exp = null;
+  if (!isStmtTermination(pctx.token) && !pctx.newline)
+    exp = parseExp(pctx);
+  parseStmtTermination(pctx);
+  LOGM('return')
+  GEN_RETURN(exp, pctx)
+});
+
+S("with").stmt(function(pctx) {
+  scan(pctx, "(");
+  var exp = parseExp(pctx);
+  scan(pctx, ")");
+  var body = parseStmt(pctx);
+  LOGM('with')
+  GEN_WITH(exp, body, pctx)
+});
+
+S("case");
+S("default");
+
+S("switch").stmt(function(pctx) {
+  scan(pctx, "(");
+  var exp = parseExp(pctx);
+  scan(pctx, ")");
+  scan(pctx, "{");
+  BEGIN_SWITCH_SCOPE(pctx)
+  var clauses = [];
+  while (pctx.token.id != "}") {
+    var clause_exp = null;
+    if (pctx.token.id == "case") {
+      scan(pctx);
+      clause_exp = parseExp(pctx);
+    }
+    else if (pctx.token.id == "default") {
+      scan(pctx);
+    }
+    else
+      throw new Error("Invalid token '"+pctx.token+"' in switch statement");
+    scan(pctx, ":");
+    LOGM('case_clause<')
+    BEGIN_CASE_CLAUSE(clause_exp, pctx)
+    while (pctx.token.id != "case" && pctx.token.id != "default" && pctx.token.id != "}") {
+      var stmt = parseStmt(pctx);
+      LOGM('+case_clause_stmt')
+      ADD_CASE_CLAUSE_STMT(stmt, pctx)
+    }
+    clauses.push((function(pctx) { LOGM('>case_clause') END_CASE_CLAUSE(pctx) })(pctx));
+  }
+  END_SWITCH_SCOPE(pctx)
+  scan(pctx, "}");
+  LOGM('switch')
+  GEN_SWITCH(exp, clauses, pctx)
+});
+
+S("throw").stmt(function(pctx) {
+  if (pctx.newline) throw new Error("Illegal newline after throw");
+  var exp = parseExp(pctx);
+  parseStmtTermination(pctx);
+  LOGM('throw')
+  GEN_THROW(exp, pctx);
+});
+
+S("catch");
+S("finally");
+
+// parse catch-retract-finally
+// returns [ [catch_id,catch_block,catchall?]|null,
+//           retract|null,
+//           finally|null ]
+function parseCRF(pctx) {
+  var rv = [];
+  var a = null;
+  if (pctx.token.id == "catch"
+#ifdef SJS_CORE
+      // XXX catchall should only work for try, not for waitfor!
+      || pctx.token.value == "catchall" // XXX maybe use a real syntax token
+#endif
+     ) {
+    var all = pctx.token.value == "catchall";
+    a = [];
+    scan(pctx);
+    a.push(scan(pctx, "(").value);
+    scan(pctx, "<id>");
+    scan(pctx, ")");
+    scan(pctx, "{");
+    a.push(parseBlock(pctx));
+#ifdef SJS_CORE
+    a.push(all);
+#endif
+  }
+  rv.push(a);
+#ifdef SJS_CORE
+  if (pctx.token.value == "retract") { // XXX maybe use a real syntax token
+    scan(pctx);
+    scan(pctx, "{");
+    rv.push(parseBlock(pctx));
+  }
+  else
+    rv.push(null);
+#else
+  // retract is SJS-only
+  rv.push(null);
+#endif
+  if (pctx.token.id == "finally") {
+    scan(pctx);
+    scan(pctx, "{");
+    rv.push(parseBlock(pctx));
+  }
+  else
+    rv.push(null);
+  return rv;
+}
+
+#ifdef SJS_CORE
+S("try").stmt(function(pctx) {
+  scan(pctx, "{");
+  var block = parseBlock(pctx);
+  var op = pctx.token.value; // XXX maybe use proper syntax token
+  if (op != "and" && op != "or") {
+    // conventional 'try'
+    var crf = parseCRF(pctx);
+    if (!crf[0] && !crf[1] && !crf[2])
+      throw new Error("Missing 'catch', 'finally' or 'retract' after 'try'");
+    LOGM('try')
+    GEN_TRY(block, crf, pctx)
+  }
+  else {
+    var blocks = [block];
+    do {
+      scan(pctx);
+      scan(pctx, "{");
+      blocks.push(parseBlock(pctx));
+    } while (pctx.token.value == op);
+    var crf = parseCRF(pctx);
+    LOGM('waitfor_andor')
+    GEN_WAITFOR_ANDOR(op, blocks, crf, pctx)
+  }
+});
+#else
+S("try").stmt(function(pctx) {
+  scan(pctx, "{");
+  var block = parseBlock(pctx);
+  var crf = parseCRF(pctx);
+  if (!crf[0] && !crf[2])
+    throw new Error("Missing 'catch' or 'finally' after 'try'");
+  LOGM('try')
+  GEN_TRY(block, crf, pctx)
+});
+#endif
+
+#ifdef SJS_CORE
+S("waitfor").stmt(function(pctx) {
+  if (pctx.token.id == "{") {
+    // DEPRECATED and/or forms
+    scan(pctx, "{");
+    var blocks = [parseBlock(pctx)];
+    var op = pctx.token.value; // XXX maybe use syntax token
+    if (op != "and" && op != "or") throw new Error("Missing 'and' or 'or' after 'waitfor' block");
+    do {
+      scan(pctx);
+      scan(pctx, "{");
+      blocks.push(parseBlock(pctx));
+    } while (pctx.token.value == op);
+    var crf = parseCRF(pctx);
+    LOGM('waitfor_andor')
+    GEN_WAITFOR_ANDOR(op, blocks, crf, pctx)
+  }
+  else {
+    // suspend form
+    scan(pctx, "(");
+    var has_var = (pctx.token.id == "var");
+    if (has_var) scan(pctx);
+    var decls = [];
+    if (pctx.token.id == ")") {
+      if (has_var) throw new Error("Missing variables in waitfor(var)");
+    }
+    else
+      decls = parseVarDecls(pctx);
+    scan(pctx, ")");
+    scan(pctx, "{");
+    LOGM('suspend<')
+    BEGIN_SUSPEND_BLOCK(pctx)
+    var block = parseBlock(pctx);
+    var crf = parseCRF(pctx);
+    LOGM('>suspend')
+    END_SUSPEND_BLOCK(pctx)
+    LOGM('suspend')
+    GEN_SUSPEND(has_var, decls, block, crf, pctx)
+  }    
+});
+
+#endif /* SJS_CORE */
+
+#ifdef SJS_USING
+S("using").stmt(function(pctx) {
+  var has_var;
+  scan(pctx, "(");
+  if (has_var = (pctx.token.id == "var"))
+    scan(pctx);
+  var lhs, exp;
+  var e1 = parseExp(pctx, BP_ASSIGN); // parse expression up to '=' at most
+  if (pctx.token.id == "=") {
+    lhs = e1; // need to check in kernel that lhs is a variable!
+    scan(pctx);
+    exp = parseExp(pctx);
+  }
+  else {
+    if (has_var)
+      throw new Error("Syntax error in 'using' expression");
+    exp = e1;
+  }
+  scan(pctx, ")");
+  var body = parseStmt(pctx);
+  LOGM('using')
+  GEN_USING(has_var, lhs, exp, body, pctx)
+});
+#endif /* SJS_USING */
+
+#ifdef SJS___JS
+S("__js").stmt(function(pctx) {
+  LOGM('__js<')
+  BEGIN___JS_BLOCK(pctx)
+  var body = parseStmt(pctx);
+  LOGM('>__js')
+  END___JS_BLOCK(pctx)
+  LOGM('__js')
+  GEN___JS(body, pctx)
+});
+#endif /* SJS___JS */
+
+
+// reserved keywords:
+S("abstract");
+S("boolean");
+S("byte");
+S("char");
+S("class");
+S("const");
+S("debugger");
+S("double");
+S("enum");
+S("export");
+S("extends");
+S("final");
+S("float");
+S("goto");
+S("implements");
+S("import");
+S("int");
+S("interface");
+S("long");
+S("native");
+S("package");
+S("private");
+S("protected");
+S("public");
+S("short");
+S("static");
+S("super");
+S("synchronized");
+S("throws");
+S("transient");
+S("volatile");
+
+//----------------------------------------------------------------------
+// Parser
+
+function makeParserContext(src, settings) {
+  var ctx = {
+    src       : src,
+    line      : 1,
+    lastIndex : 0,
+    token     : null
+  };
+
+  if (settings)
+    for (var a in settings)
+      ctx[a] = settings[a];
+
+  return ctx;
+}
+
+
+function compile(src, settings) {
+  // XXX The regexps of our lexer currently assume that there is never
+  // a '//' comment on the last line of the source text. This will
+  // currently match as separate /'s, since we're not checking for
+  // '$'.  We could amend our regexps and amend the check for EOF
+  // below in the scan function, or we can ensure there's always a
+  // '\n' at the end. Doing the latter for now, since I suspect it
+  // wins performance-wise:
+
+  var pctx = makeParserContext(src+"\n", settings);
+  try {
+    return parseScript(pctx);
+  }
+  catch (e) {
+    var mes = e.mes || e;
+    var line = e.line || pctx.line;
+    var exception = new Error("SJS syntax error "+(pctx.filename?"in "+pctx.filename+",": "at") +" line " + line + ": " + mes);
+    exception.compileError = {message: mes, line: line};
+    throw exception;
+  }
+}
+exports.compile = compile;
+
+function parseScript(pctx) {
+  BEGIN_SCRIPT(pctx)
+  scan(pctx);
+  while (pctx.token.id != "<eof>") {
+    var stmt = parseStmt(pctx);
+    LOGM('+script_stmt')
+    ADD_SCRIPT_STMT(stmt, pctx);
+  }
+  END_SCRIPT(pctx)
+}
+
+function parseStmt(pctx) {
+  var t = pctx.token;
+  scan(pctx);
+  if (t.stmtf) {
+    // a specialized statement construct
+    return t.stmtf(pctx);
+  }
+  else if (t.id == "<id>" && pctx.token.id == ":") {
+    // a labelled statement
+    scan(pctx); // consume ':'
+    // XXX should maybe code this in non-recursive style:
+    var stmt = parseStmt(pctx);
+    LOGM('lbl_stmt')
+    GEN_LBL_STMT(t.value, stmt, pctx)
+  }
+  else {
+    // an expression statement
+    var exp = parseExp(pctx, 0, t);
+    parseStmtTermination(pctx);
+    LOGM('exp_stmt')
+    GEN_EXP_STMT(exp, pctx)
+  }
+}
+
+// bp: binding power of enclosing exp, t: optional next token 
+function parseExp(pctx, bp, t) {
+  bp = bp || 0;
+  if (!t) {
+    t = pctx.token;
+    scan(pctx);
+  }
+  var left = t.exsf(pctx);
+  while (bp < pctx.token.excbp) {
+    t = pctx.token;
+    // automatic semicolon insertion:
+    if (pctx.newline && t.asi_restricted)
+      return left;
+    scan(pctx);
+    left = t.excf(left, pctx);
+  }
+  return left;
+}
+
+// parse up to keyword 'in' ( where bp might be < bp(in) )
+function parseExpNoIn(pctx, bp, t) {
+  bp = bp || 0;
+  if (!t) {
+    t = pctx.token;
+    scan(pctx);
+  }
+  var left = t.exsf(pctx);
+  while (bp < pctx.token.excbp && pctx.token.id != 'in') {
+    t = pctx.token;
+    // automatic semicolon insertion:
+    if (pctx.newline && t.asi_restricted)
+      return left;
+    scan(pctx);
+    left = t.excf(left, pctx);
+  }
+  return left;
+}
+
+
+function scan(pctx, id, tokenizer) {
+  if (!tokenizer) {
+    if (pctx.token)
+      tokenizer = pctx.token.tokenizer;
+    else
+      tokenizer = TOKENIZER_SA;
+  }
+  
+  if (id && (!pctx.token || pctx.token.id != id))
+    throw new Error("Unexpected " + pctx.token);
+  pctx.token = null;
+  pctx.newline = 0;
+  while (!pctx.token) {
+    tokenizer.lastIndex = pctx.lastIndex;
+    var matches = tokenizer.exec(pctx.src);
+    if (!matches) {
+      pctx.token = ST.lookup("<eof>");
+      break;
+    }
+    pctx.lastIndex = tokenizer.lastIndex;
+
+    if (tokenizer == TOKENIZER_SA) {
+      if (matches[SA_ARGSYMBOL_MATCH]) {
+        pctx.token = ST.lookup(matches[SA_ARGSYMBOL_MATCH]);
+        if (!pctx.token) {
+          pctx.token = new Identifier(matches[SA_ARGSYMBOL_MATCH]);
+        }
+      }
+      else if (matches[SA_NEWLINES_MATCH]) {
+        var m = matches[SA_NEWLINES_MATCH].match(/PAT_NEWLINE/g);
+        if (m) {
+          pctx.line += m.length;
+          pctx.newline += m.length;
+          HANDLE_NEWLINES(m.length, pctx)
+        }
+        // go round loop again
+      }
+      else if (matches[SA_STRLIT_MATCH])
+        pctx.token = new Literal("<string>", matches[SA_STRLIT_MATCH]);
+#ifdef MULTILINE_STRINGS
+      else if (matches[SA_ML_STRLIT_MATCH]) {
+        var val = matches[SA_ML_STRLIT_MATCH];
+        var m = val.match(/PAT_NEWLINE/g);
+        pctx.line += m.length;
+        pctx.newline += m.length;
+        val = val.replace(/\\PAT_NEWLINE/g, "").replace(/PAT_NEWLINE/g, "\\n");
+        pctx.token = new Literal("<string>", val);
+      }
+#endif
+      else if (matches[SA_NUMLIT_MATCH])
+        pctx.token = new Literal("<number>", matches[SA_NUMLIT_MATCH]);
+      else if (matches[SA_REGEXLIT_MATCH])
+        pctx.token = new Literal("<regex>", matches[SA_REGEXLIT_MATCH]);
+      else if (matches[SA_INVALID_MATCH])
+        throw new Error("Unexpected characters: '"+matches[SA_INVALID_MATCH]+"'");
+      else
+        throw new Error("Internal scanner error");
+      //print("sa:"+pctx.token);
+    }
+    else if (tokenizer == TOKENIZER_OP) { // tokenizer == TOKENIZER_OP
+      if (matches[OP_SYMBOL_MATCH]) {
+        pctx.token = ST.lookup(matches[OP_SYMBOL_MATCH]);
+        if (!pctx.token) {
+          pctx.token = new Identifier(matches[OP_SYMBOL_MATCH]);
+        }
+      }
+      else if (matches[OP_NEWLINES_MATCH]) {
+        var m = matches[OP_NEWLINES_MATCH].match(/PAT_NEWLINE/g);
+        if (m) {
+          pctx.line += m.length;
+          pctx.newline += m.length;
+          HANDLE_NEWLINES(m.length, pctx)
+        }
+        // go round loop again
+      }
+      else {
+        // We might be in an SA position after an omitted
+        // newline. switch tokenizers and try again. The SA tokenizer will
+        // bail if it can't match a token either.
+        tokenizer = TOKENIZER_SA;
+        // go round loop again
+      }
+      //print("op:"+pctx.token);
+    }
+#ifdef INTERPOLATING_STRINGS
+    else if (tokenizer == TOKENIZER_IS) { 
+      // interpolating string tokenizer
+      if (matches[IS_CONTENT_MATCH])
+        pctx.token = new Literal("<string>", matches[IS_CONTENT_MATCH]);
+      else if (matches[IS_ESCAPED_NEWLINE_MATCH]) {
+        ++pctx.line;
+        ++pctx.newline;
+        // go round loop again
+      }
+      else if (matches[IS_NEWLINE_MATCH]) {
+        ++pctx.line;
+        ++pctx.newline;
+        pctx.token = new Literal("<string>", '\\n');
+      }
+      else if (matches[IS_OPERATOR_MATCH]) {
+        pctx.token = ST.lookup("istr-"+matches[IS_OPERATOR_MATCH]);
+      }
+    }
+#endif
+#ifdef QUASIS
+    else if (tokenizer == TOKENIZER_QUASI) {
+      // quasiliteral tokenizer
+      if (matches[QUASI_CONTENT_MATCH])
+        pctx.token = new Literal("<string>", matches[QUASI_CONTENT_MATCH]);
+      else if (matches[QUASI_ESCAPED_NEWLINE_MATCH]) {
+        ++pctx.line;
+        ++pctx.newline;
+        // go round loop again
+      }
+      else if (matches[QUASI_NEWLINE_MATCH]) {
+        ++pctx.line;
+        ++pctx.newline;
+        pctx.token = new Literal("<string>", '\\n');
+      }
+      else if (matches[QUASI_OPERATOR_MATCH]) {
+        pctx.token = ST.lookup("quasi-"+matches[QUASI_OPERATOR_MATCH]);
+      }
+    }
+#endif
+    else
+      throw new Error("Internal scanner error: no tokenizer");
+  }
+  return pctx.token;
+}
+

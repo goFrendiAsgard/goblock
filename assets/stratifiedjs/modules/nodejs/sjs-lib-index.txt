@@ -1,0 +1,2 @@
+@lib     StratifiedJS Standard Module Library - NodeJS Modules
+@summary Collection of [nodejs](http://nodejs.org)-related modules.

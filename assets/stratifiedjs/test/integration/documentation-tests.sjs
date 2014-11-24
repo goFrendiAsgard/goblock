@@ -1,0 +1,1 @@
+require('./documentation').testLibrary('sjs:');

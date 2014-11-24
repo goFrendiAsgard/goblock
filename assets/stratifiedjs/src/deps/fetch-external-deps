@@ -1,0 +1,57 @@
+#!/usr/bin/env sjs
+// vim: syntax=sjs
+
+var path = require('path');
+var fs      = require('sjs:nodejs/fs');
+var childProcess    = require('sjs:nodejs/child-process');
+var read    = require('sjs:nodejs/stream').read;
+var { merge } = require('sjs:object');
+
+var run = function(cmd, args, opts) {
+  console.log(" + #{cmd} #{args.join(' ')}");
+  return childProcess.run(cmd, args, ({stdio:'inherit'} .. merge(opts)));
+}
+
+// make sure we're in the right directory
+var here = path.dirname(process.argv[1]);
+process.chdir(here);
+
+var sources = getSources();
+for (var i=0; i<sources.length; ++i) {
+  var src = sources[i];
+  if (run('git', ['status', '--porcelain', src.dir], {stdio: [0,'pipe', 2]}).stdout.length) {
+    console.log('directory '+src.dir+' not clean -> ignoring');
+    continue;
+  }
+  if (fs.exists(src.dir+'.git')) {
+    console.log('directory '+src.dir+' already contains a git repository -> ignoring');
+    continue;
+  }
+  var fullpath = path.join(here, src.dir);
+  console.log("Replacing directory #{fullpath} with github repository at #{src.repo}");
+  console.log('Sure you want to proceed? [y/N]');
+  if (read(process.stdin).toString().toLowerCase() != 'y\n') {
+    console.log('Skipping '+fs.realpath(src.dir));
+    continue;
+  }
+  run('rm', ['-rf', src.dir]);
+  console.log('Cloning external repo');
+  run('git', ['clone', src.repo, src.dir]);
+  console.log('Checking out revision '+src.commit);
+  run('git', ['checkout', src.commit], {cwd: src.dir});
+  console.log('Reapplying our patches');
+  run('git', ['checkout', '--'], {cwd: src.dir});
+}
+
+
+// helpers:
+
+function getSources() {
+  var src = fs.readFile('sources.txt').toString().split("\n");
+  var matches, rv = [];
+  for (var i=0; i<src.length; ++i) {
+    if ((matches = /^([^#][^ ]*)\s+([^ ]+)\s+([^ ]+)/.exec(src[i])))
+      rv.push({dir: matches[1], repo: matches[2], commit: matches[3]});
+  }
+  return rv;
+}

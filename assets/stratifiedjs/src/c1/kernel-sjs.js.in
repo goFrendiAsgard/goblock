@@ -1,0 +1,1919 @@
+/*
+ * C1 SJS -> StratifiedJS VM compiler kernel 
+ *
+ * Part of StratifiedJS
+ * http://onilabs.com/stratifiedjs
+ *
+ * (c) 2011 Oni Labs, http://onilabs.com
+ *
+ * This file is licensed under the terms of the GPL v2, see
+ * http://www.gnu.org/licenses/gpl-2.0.html
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ * THE SOFTWARE.
+ *
+*/
+/**
+   @module  compile/sjs
+   @executable
+   @summary SJS Compiler
+   @home    sjs:compile/sjs
+
+   @function compile
+   @summary  Compile a string of SJS source code into JavaScript
+   @param    {String} [src]
+   @param    {optional Object} [settings]
+   @setting  {String} [filename]
+   @return   {String} Compiled JavaScript
+
+
+@docsoff */
+
+
+#ifdef DEBUG_C1
+// XXX figure out why normal CPP stringification is screwed
+#define ASSERT(X) if(!(X)) { throw new Error("Assertion failed: " + "X" ); }
+#define WHENDEBUG(X) X
+#else
+#define ASSERT(X)
+#define WHENDEBUG(X)
+#endif
+
+// THESE FLAGS NEED TO BE KEPT IN SYNC WITH THE NDATA_SEQ_FLAG_'s in vm1.js.in
+#define SEQ_FLAG_NONE 0
+#define SEQ_FLAG_FUNCTION 1
+#define SEQ_FLAG_SHORTCIRCUIT_OR 2
+#define SEQ_FLAG_SHORTCIRCUIT_AND 4
+#define SEQ_FLAG_NOTAILCALL 8
+#define SEQ_FLAG_UNRETURNABLE 16
+#define SEQ_FLAG_IMPLICIT_RETURN 32
+#define SEQ_FLAG_BLOCKLAMBDA 64
+
+// THESE FLAGS NEED TO BE KEPT IN SYNC WITH THE NDATA_TRY_FLAG_'s in vm1.js.in
+#define TRY_FLAG_NONE 0
+#define TRY_FLAG_CATCHALL 1
+
+//----------------------------------------------------------------------
+// helpers:
+
+// fscoped_ctx > 0 makes this a 'function expression context', where
+// function declarations automatically become scoped like function
+// expressions. This is required within waitfor() {}
+
+// for blocklambda support, we have another two flags for decl_scopes:
+// bl=true means that this is a block lambda scope
+// notail=true mean that this scope is being targetted by returns from 
+// blocklambdas and can't be tail-optimized
+
+// for 'break' and 'continue' encoding, we have the following decl_scope flags:
+// continue_scope > 0 : we're in a scope (besides possibly a blocklambda) where 
+//                      'continue' can be called (while, do-while, for, for-in)
+// break_scope > 0 : we're in a scope (besides possibly a blocklambda) where 
+//                   'break' can be called (while, do-while, for, for-in, switch)
+function push_decl_scope(pctx, bl) {
+  pctx.decl_scopes.push({vars:[], funs:"", fscoped_ctx:0, bl:bl, 
+                         continue_scope:0, break_scope:0});
+  if (bl) {
+    var prev = pctx.decl_scopes[pctx.decl_scopes.length-2];
+    prev.notail = true;
+  }
+}
+
+function collect_decls(decls) {
+  var rv = "";
+  if (decls.vars.length)
+    rv += "var "+decls.vars.join(",")+";";
+  rv += decls.funs;
+  return rv;
+}
+
+function top_decl_scope(pctx) {
+  return pctx.decl_scopes[pctx.decl_scopes.length-1];
+}
+
+function push_stmt_scope(pctx) {
+  pctx.stmt_scopes.push({seq:[]});
+}
+function pop_stmt_scope(pctx, pre, post) {
+  var seq = pctx.stmt_scopes.pop().seq;
+  var rv = "";
+  if (seq.length) {
+    if (pctx.js_ctx == 0) {
+      if (pre)
+        rv += pre;
+      for (var i=0; i<seq.length; ++i) {
+        var v = seq[i].v();
+        LOG('POP('+v+')');
+        if (v.length) {
+          if (i || pre) rv += ",";
+          rv += v;
+        }
+      }
+      if (post)
+        rv += post;
+    }
+    else {
+      // non-blocking context
+      for (var i=0; i<seq.length; ++i)
+        rv += seq[i].nb();      
+    }
+  }
+  return rv; 
+}
+
+function top_stmt_scope(pctx) {
+  return pctx.stmt_scopes[pctx.stmt_scopes.length-1];
+}
+
+//----------------------------------------------------------------------
+// misc
+
+#define HANDLE_NEWLINES(n, pctx) /**/
+
+#ifdef SJS_ALTERNATE_NAMESPACE
+#define WRAP_RHS_IF_ALTNS(left, right) if(left.name === '__oni_altns') right = 'Object.create('+right+')'
+#else
+#define WRAP_RHS_IF_ALTNS(left, right) /**/
+#endif
+
+//----------------------------------------------------------------------
+// contexts:
+
+#define BEGIN_SCRIPT(pctx)                              \
+  begin_script(pctx);
+
+function begin_script(pctx) {
+  // decode code generation mode settings:
+  switch(pctx.mode) {
+  case "debug":
+    pctx.allow_nblock = false;
+    pctx.full_nblock = false;
+    break;
+  case "optimize":
+    pctx.allow_nblock = true;
+    pctx.full_nblock = true;
+    break;
+  case "normal":
+  default:
+    pctx.allow_nblock = true;
+    pctx.full_nblock = false;    
+  }
+  
+  if (typeof pctx.scopes !== 'undefined')
+    throw new Error("Internal parser error: Nested script");
+  // pctx.decl_scopes is where we collect declarations
+  pctx.decl_scopes = [];
+  // ... and pctx.stmt_scopes where we collect (block) statements. 
+  // stmt_scopes are always nested in decl_scopes, but for simplicity we
+  // store both at top level in pctx
+  pctx.stmt_scopes = [];
+  // js_ctx > 0 makes it a noblocking js context (i.e. __js {...}):
+  pctx.js_ctx = 0;
+
+  push_decl_scope(pctx);
+  push_stmt_scope(pctx);
+}
+
+#define ADD_SCRIPT_STMT(stmt, pctx) add_stmt(stmt, pctx);
+
+// add statement to the top decl & stmt scope:
+function add_stmt(stmt, pctx) {
+  if (stmt == ph_empty_stmt) return; // empty statement
+  if (stmt.is_compound_stmt) {
+    // recursively unroll compound statement
+    for (var i=0; i<stmt.stmts.length; ++i)
+      add_stmt(stmt.stmts[i], pctx);
+    return;
+  }
+  else if (stmt.is_var_decl) {
+    stmt.collect_var_decls(top_decl_scope(pctx).vars);
+    if (stmt.is_empty) return;
+    // ... else fall through to encode initializer
+
+  }
+  else if (stmt.is_fun_decl) {
+    top_decl_scope(pctx).funs += stmt.fun_decl();
+    return;
+  }
+  
+  // 'normal' statement
+  var seq = top_stmt_scope(pctx).seq;
+  if (stmt.is_nblock && pctx.js_ctx==0) {
+    // collect nblocks, but only in a non-nblock context
+    var last = seq.length ? seq[seq.length-1] : null;
+    if (!last || !last.is_nblock_seq) {
+      last = new ph_nblock_seq(pctx);
+      seq.push(last);
+    }
+    last.pushStmt(stmt);
+  }
+  else
+    seq.push(stmt);
+}
+
+#define END_SCRIPT(pctx) return end_script(pctx);
+function end_script(pctx) {
+  var decls = pctx.decl_scopes.pop();
+  var rv = collect_decls(decls) +
+    pop_stmt_scope(pctx,
+                   (pctx.globalReturn ? "return " : "") + 
+                   "__oni_rt.exseq(this.arguments,this,"+pctx.filename+",["+(SEQ_FLAG_UNRETURNABLE|SEQ_FLAG_NOTAILCALL),
+                   "])");
+  return rv;
+}
+
+#define BEGIN_BLOCK(pctx)                       \
+  push_stmt_scope(pctx);
+
+#define ADD_BLOCK_STMT(stmt, pctx)              \
+  add_stmt(stmt, pctx);
+
+
+// convert all statements accumulated in top_stmt_scope into a single
+// (block) statement
+// XXX this is a bit of a mess
+function pop_block(pctx) {
+  switch (top_stmt_scope(pctx).seq.length) {
+  case 1:
+    var stmt = pctx.stmt_scopes.pop().seq[0];
+    // ensure that it doesn't get declared again:
+    stmt.is_var_decl = false;
+    return stmt;
+  case 0:
+    pctx.stmt_scopes.pop();
+    return ph_empty_stmt;
+  default:
+    return new ph_block(pop_stmt_scope(pctx));
+  }
+}
+#define END_BLOCK(pctx) return pop_block(pctx);
+
+//----------------------------------------------------------------------
+
+#define BEGIN_LOOP_SCOPE(pctx)   ++top_decl_scope(pctx).break_scope;    \
+                                 ++top_decl_scope(pctx).continue_scope;
+
+#define END_LOOP_SCOPE(pctx)     --top_decl_scope(pctx).break_scope;    \
+                                 --top_decl_scope(pctx).continue_scope;
+
+#define BEGIN_SWITCH_SCOPE(pctx) ++top_decl_scope(pctx).break_scope;
+
+#define END_SWITCH_SCOPE(pctx)   --top_decl_scope(pctx).break_scope;
+
+//----------------------------------------------------------------------
+
+function nblock_val_to_val(v,r,l) {
+  var rv = "__oni_rt.Nb(function(){";
+  if (r) rv += "return ";
+  return rv + v + "},"+(l||0)+")";
+}
+
+function ph() {
+}
+ph.prototype = {
+  is_nblock: false,
+  // get the blocking value for the node: (see ph_loop for meaning of accept_list)
+  v  : function(accept_list) {
+    if (this.is_nblock && this.nblock_val)
+      return nblock_val_to_val(this.nblock_val(), this.is_value, this.line);
+    else
+      return this.val(accept_list);
+  },
+  // get the nonblocking value for the node:
+  nb : function() {
+    // we're deliberately not checking is_nblock; this is to allow explicit
+    // nb forcing by the caller (__js{}-construct)
+    if (this.nblock_val)
+      return this.nblock_val();
+    else
+      throw new Error("Illegal statement in __js block");
+  }
+};
+
+//----------------------------------------------------------------------
+
+
+function ph_block(seq) {
+  this.seq = seq;
+}
+ph_block.prototype = new ph(WHENDEBUG("ph_block"));
+ph_block.prototype.nblock_val = function() {
+  return this.seq;
+};
+ph_block.prototype.val = function(accept_list) {
+  return this.seq.length ?
+         (accept_list ? this.seq :
+          "__oni_rt.Seq("+SEQ_FLAG_NONE+","+this.seq+")") :
+         "0"; /*XXX suboptimal */
+}
+
+#define BEGIN_CASE_CLAUSE(cexp, pctx)           \
+  push_stmt_scope(pctx);                        \
+  top_stmt_scope(pctx).exp = cexp;
+
+#define ADD_CASE_CLAUSE_STMT(stmt, pctx)        \
+  add_stmt(stmt, pctx);
+
+#define END_CASE_CLAUSE(pctx)                                   \
+  return [top_stmt_scope(pctx).exp, pop_block(pctx)];
+
+#define GEN_SWITCH return new ph_switch(exp, clauses);
+function ph_switch(exp, clauses) {
+  this.exp = exp;
+  this.clauses = clauses;
+}
+ph_switch.prototype = new ph(WHENDEBUG("ph_switch"));
+ph_switch.prototype.nblock_val = function() {
+  // this is (currently) only called in a forced non-blocking context (__js):
+  var rv = "switch("+this.exp.nb()+"){";
+  for (var i=0,l=this.clauses.length; i<l; ++i) {
+    var clause = this.clauses[i];
+    rv += (clause[0] ? "case "+clause[0].nb()+":" : "default:") + clause[1].nb();
+  }
+  return rv + "}";
+};
+ph_switch.prototype.val = function() {
+//    var clauses = "["+this.clauses.join(",")+"]";
+  var clauses="[";
+  for (var i=0,l=this.clauses.length; i<l; ++i) {
+    var clause = this.clauses[i];
+    if (i) clauses += ",";
+    clauses += "["+(clause[0] ? clause[0].v() : "__oni_rt.Default")+","+clause[1].v()+"]";
+  }
+  clauses+="]";  
+  return "__oni_rt.Switch("+this.exp.v()+","+clauses+")";
+};
+
+//----------------------------------------------------------------------
+// functions:
+
+#define BEGIN_FBODY(pctx,dummy)                 \
+  push_decl_scope(pctx);                        \
+  push_stmt_scope(pctx);
+
+#define ADD_FBODY_STMT(stmt, pctx) add_stmt(stmt, pctx);
+
+#define END_FBODY(pctx,implicit_return)                                 \
+  var decls = pctx.decl_scopes.pop();                                   \
+  var flags = SEQ_FLAG_FUNCTION;                                        \
+    if (decls.notail) flags += SEQ_FLAG_NOTAILCALL;                     \
+    if (implicit_return) flags += SEQ_FLAG_IMPLICIT_RETURN;             \
+  return collect_decls(decls) +                                         \
+    pop_stmt_scope(pctx, "return __oni_rt.exseq(arguments,this,"+pctx.filename+",["+flags, \
+    "])");
+
+#define GEN_FUN_EXP(fname, pars, body, pctx, implicit_return) return new ph_fun_exp(fname, pars, body, pctx, implicit_return);
+function ph_fun_exp(fname, pars, body, pctx, implicit_return) {
+  this.is_nblock = pctx.allow_nblock;
+
+  // special case to allow method definition syntax in __js and get the 
+  // right return semantics.
+  // we expect the body to contain just one expression; everyhing else is 
+  // illegal in __js.
+  if (implicit_return && pctx.js_ctx)
+    body = "return "+body;
+
+  // XXX gotto be careful here. Under some circumstances, IE doesn't
+  // like fnames in function expressions:
+  //  function x () { var y; function z() { y = function y() {}; } z(); return y; }
+  // Here, x() returns 'undefined' (because of the function name 'y'
+  // somehow shadowing the variable 'y')
+  
+  // See also http://kangax.github.com/nfe/
+
+  // Mostly this is a pathological case, but it is also the kind of
+  // pattern that fscoped functions appear in, so we encode these
+  // without names. (see gen_fun_decl below). We could code *ALL* fun
+  // expressions without an fname - but this will break some code
+  // (e.g. our testcase:
+  // var x = function e(n) { return n==1?1:e(n-1)*n; }; x(5); } )
+
+  this.code = "function "+fname+gen_function_header(pars)+body+"}";
+}
+ph_fun_exp.prototype = new ph(WHENDEBUG("ph_fun_exp"));
+//ph_fun_exp.prototype.is_literal = true; funs are special kinds of literals; we override 'v' instead:
+ph_fun_exp.prototype.v = function() {
+  return this.code;
+};
+ph_fun_exp.prototype.nblock_val = function() { return this.code; };
+
+#define GEN_FUN_DECL(fname, pars, body, pctx) return gen_fun_decl(fname, pars, body, pctx);
+function gen_fun_decl(fname, pars, body, pctx) {
+  if (top_decl_scope(pctx).fscoped_ctx) {
+    // XXX see comment under ph_fun_exp as to why we encode ph_fun_exp without
+    // name. this breaks some pathological cases.
+    return gen_var_decl([[new ph_identifier(fname,pctx), new ph_fun_exp(/*fname*/"", pars, body, pctx)]], pctx);
+  }
+  else
+    return new ph_fun_decl(fname, pars, body, pctx);
+}
+
+function ph_fun_decl(fname, pars, body, pctx) {
+  this.code = "function "+fname+gen_function_header(pars)+body+"}";
+}
+ph_fun_decl.prototype = new ph(WHENDEBUG("ph_fun_decl"));
+ph_fun_decl.prototype.is_fun_decl = true;
+  /* 'nblock_val', 'is_nblock', 'val' not needed for fun decls */
+ph_fun_decl.prototype.fun_decl = function() { return this.code; };
+
+//----------------------------------------------------------------------
+// statements:
+
+
+// nblock sequence:
+function ph_nblock_seq() {
+  this.stmts = [];
+}
+ph_nblock_seq.prototype = new ph(WHENDEBUG("ph_nblock_seq"));
+ph_nblock_seq.prototype.is_nblock = true;
+ph_nblock_seq.prototype.is_nblock_seq = true;
+ph_nblock_seq.prototype.pushStmt = function(stmt) {
+ this.stmts.push(stmt);
+ if (typeof this.line === 'undefined') this.line = this.stmts[0].line;
+};
+
+/* 
+   If we only have one child, then sometimes its v() expression is more 
+   consise than wrapping by Nb() (as ph_nblock does). E.g. literals can be 
+   expressed verbatim.
+   In practice it's not worth it (it's a very uncommon pattern)
+
+ph_nblock_seq.prototype.v = function(accept_list) {
+  if (this.stmts.length == 1) 
+    return this.stmts[0].v(accept_list);
+  else
+    return ph.prototype.v.call(this, accept_list);  
+};
+*/
+ph_nblock_seq.prototype.nblock_val = function() {
+    var rv = "";
+    for (var i=0; i<this.stmts.length-1; ++i) {
+      rv += this.stmts[i].nb();
+    }
+    if (this.stmts[i].is_value)
+      rv += "return ";
+    rv += this.stmts[i].nb();
+    return rv;
+};
+
+
+function ph_compound_stmt(pctx) {
+  this.stmts = [];
+  this.pctx = pctx;
+}
+ph_compound_stmt.prototype = new ph(WHENDEBUG("ph_compound_stmt"));
+ph_compound_stmt.prototype.is_compound_stmt = true;
+ph_compound_stmt.prototype.toBlock = function() {
+    push_stmt_scope(this.pctx);
+    add_stmt(this, this.pctx);
+    return pop_block(this.pctx);
+}
+
+#define GEN_EXP_STMT(exp, pctx) return new ph_exp_stmt(exp, pctx);
+function ph_exp_stmt(exp, pctx) {
+  this.exp = exp;
+  this.line = this.exp.line;
+  this.is_nblock = exp.is_nblock;
+}
+ph_exp_stmt.prototype = new ph(WHENDEBUG("ph_exp_stmt"));
+ph_exp_stmt.prototype.is_value = true;
+ph_exp_stmt.prototype.nblock_val = function() { return this.exp.nb()+";"; };
+ph_exp_stmt.prototype.v = function(accept_list) { return this.exp.v(accept_list); }
+
+#define GEN_VAR_DECL(decls, pctx) return gen_var_decl(decls, pctx);
+//XXX this is really hacky and suboptimal
+function gen_var_compound(decls, pctx) {
+  var rv = new ph_compound_stmt(pctx);
+  for (var i=0; i<decls.length; ++i)
+    rv.stmts.push(new ph_var_decl(decls[i], pctx));
+  return rv;
+}  
+
+function gen_var_decl(decls, pctx) {
+  return gen_var_compound(decls, pctx).toBlock();
+}
+
+function ph_var_decl(d, pctx) {
+  this.d = d;
+  if (!this.d[0].is_id) 
+#ifdef SJS_DESTRUCTURE
+    this.is_dest = true;
+#else
+  throw new Error("Invalid expression in variable declaration");
+#endif
+  this.is_empty = this.d.length<2;
+  this.pctx = pctx;
+  this.line = pctx.line;
+  if (!this.is_empty)
+    this.is_nblock = pctx.allow_nblock && d[1].is_nblock
+#ifdef SJS_DESTRUCTURE
+    && !this.is_dest;   // XXX destructuring var decls can't be encoded as nblock yet
+#endif
+}
+ph_var_decl.prototype = new ph(WHENDEBUG("ph_var_decl"));
+ph_var_decl.prototype.is_var_decl = true;
+ph_var_decl.prototype.collect_var_decls = function(vars) { 
+#ifdef SJS_DESTRUCTURE
+  try {
+    this.d[0].collect_var_decls(vars);
+  }
+  catch (e) {
+    throw new Error("Invalid syntax in variable declaration");
+  }
+#else
+  vars.push(this.d[0].name); 
+#endif
+};
+ph_var_decl.prototype.nblock_val = function() {
+  ASSERT(!this.is_empty)
+  return this.d[0].name+"="+this.d[1].nb()+";";
+};
+ph_var_decl.prototype.val = function() {
+  ASSERT(!this.is_empty)
+#ifdef SJS_DESTRUCTURE
+  if (this.is_dest) {
+    // XXX this is the wrong pctx!!
+    return (new ph_assign_op(this.d[0], '=', this.d[1], this.pctx)).val();
+  }
+  else
+#endif
+  // XXX Need to handle special case of "var arguments = XXX"
+    return "__oni_rt.Sc("+this.line+",function(_oniX){return "+this.d[0].name+
+      "=_oniX;},"+this.d[1].v()+")";
+}; 
+
+#define GEN_IF(test, consequent, alternative, pctx) \
+  return new ph_if(test, consequent, alternative, pctx);
+function ph_if(t, c, a, pctx) {
+  this.t = t;
+  this.c = c;
+  this.a = a;
+  this.line = t.line;
+  this.file = pctx.filename;
+  // XXX DEBUG|NDEBUG
+  this.is_nblock = pctx.full_nblock &&
+                   t.is_nblock && c.is_nblock && (!a || a.is_nblock)
+}
+ph_if.prototype = new ph(WHENDEBUG("ph_if"));
+ph_if.prototype.nblock_val = function() {
+  var rv = "if("+this.t.nb()+"){"+this.c.nb()+"}";
+  if (this.a)
+    rv += "else{"+this.a.nb()+"}";
+  return rv;
+};
+
+ph_if.prototype.val = function() {
+  var rv;
+  var c = this.c.v();
+  if (this.t.is_nblock) {
+    // half-nblock encoding
+    rv = "__oni_rt.Nb(function(){if("+this.t.nb()+
+      ")return __oni_rt.ex("+c+",this);";
+    if (this.a)
+      rv += "else return __oni_rt.ex("+this.a.v()+",this);";
+    return rv+"},"+this.line+")";
+  }
+  else {
+    // test is blocking -> full blocking encoding
+    rv = "__oni_rt.If("+this.t.v()+","+c;
+    if (this.a)
+      rv += ","+this.a.v();
+    return rv + ")";
+  }
+};
+
+/*
+  __oni_rt.Try(flags,try_node,catch_func(env,v),finally_node,retract_node)
+*/
+
+#define GEN_TRY(block, crf, pctx) \
+  return new ph_try(block, crf, pctx);
+function ph_try(block, crf, pctx) {
+  this.block = block;
+  this.crf = crf;
+  this.file = pctx.filename;
+}
+ph_try.prototype = new ph(WHENDEBUG("ph_try"));
+ph_try.prototype.nblock_val = function() {
+  // this is currently only called in a forced (__js) non-blocking context
+  var rv = "try{"+this.block.nb()+"}";
+  if (this.crf[0]) {
+    if (this.crf[0][2]) throw new Error("catchall statement not allowed in __js block");
+    rv += "catch("+this.crf[0][0]+"){"+this.crf[0][1].nb()+"}";
+  }
+  if (this.crf[1]) throw new Error("retract statement not allowed in __js block");
+  if (this.crf[2])
+    rv += "finally{"+this.crf[2].nb()+"}";
+  return rv;
+};
+ph_try.prototype.val = function() {
+    var tb = this.block.v();
+    var rv = "__oni_rt.Try("+((this.crf[0] && this.crf[0][2])? TRY_FLAG_CATCHALL:TRY_FLAG_NONE);
+    rv+=","+tb;
+    if (this.crf[0]) {
+      var cb = this.crf[0][1].v();
+      rv += ",function(__oni_env,"+this.crf[0][0]+"){";
+      if (cb.length)
+        rv += "return __oni_rt.ex("+cb+",__oni_env)";
+      rv +="}";
+    }
+    else
+      rv += ",0";
+    
+    if (this.crf[2]) {
+      var fb = this.crf[2].v();
+        rv += ","+fb;
+    }
+    else
+      rv += ",0";
+
+    if (this.crf[1]) {
+      var rb = this.crf[1].v();
+      rv += ","+rb;
+    }
+    return rv+")";
+}
+
+#define GEN_EMPTY_STMT(pctx) return ph_empty_stmt;
+var ph_empty_stmt = new ph(WHENDEBUG("ph_empty_stmt"));
+ph_empty_stmt.is_nblock = true;
+ph_empty_stmt.nblock_val = function() { return ';'; };
+ph_empty_stmt.v = function() { return '0'; };
+
+#define GEN_THROW(exp, pctx) return new ph_throw(exp, pctx);
+function ph_throw(exp, pctx) {
+  this.exp = exp;
+  this.line = exp.line;
+  this.file = pctx.filename;
+  this.is_nblock = pctx.full_nblock && exp.is_nblock;
+}
+ph_throw.prototype = new ph(WHENDEBUG("ph_throw"));
+ph_throw.prototype.nblock_val = function() {
+    return "throw "+this.exp.nb()+";";
+};
+ph_throw.prototype.val = function() {
+    // XXX having line encoded twice here kinda sucks
+    // XXX encoding of filename sucks too 
+    return "__oni_rt.Sc("+this.line+",__oni_rt.Throw,"+this.exp.v()+","+this.line+","+this.file+")";
+}
+
+#ifdef SJS_BLOCKLAMBDA
+#define GEN_RETURN(exp, pctx)             \
+    if (top_decl_scope(pctx).bl)          \
+      return new ph_bl_return(exp, pctx); \
+    else                                  \
+      return new ph_return(exp, pctx);
+
+function ph_bl_return(exp, pctx) {
+  this.line = pctx.line;
+  this.exp = exp;
+}
+ph_bl_return.prototype = new ph(WHENDEBUG("ph_bl_return"));
+ph_bl_return.prototype.val = function() {
+  var v = this.exp ? ","+this.exp.v() : "";
+  return "__oni_rt.Sc("+this.line+",__oni_rt.BlReturn"+v+")";
+};
+
+#else
+#define GEN_RETURN(exp, pctx) return new ph_return(exp, pctx);
+#endif
+
+// XXX should find a tail-safe way of encoding this
+function ph_return(exp, pctx) {
+  // TODO: not sure why returns are special, and need `newline` subtracted from their lineno
+  this.line = pctx.line - pctx.newline;
+  this.exp = exp;
+  //XXX this is a bit fragile; need a new pctx flag for 'throwing'/'nonthrowing' context
+  this.js_ctx = pctx.js_ctx;
+  this.is_nblock = pctx.allow_nblock && (exp ? exp.is_nblock : true);
+}
+ph_return.prototype = new ph(WHENDEBUG("ph_return"));
+ph_return.prototype.nblock_val = function() {
+  var rv;
+  if (this.js_ctx) {
+    // XXX this form of nblock_val only works in a non-throwing nblock context!!!!!
+    rv = "return";
+    if (this.exp) rv += " "+this.exp.nb();
+    rv += ";";
+  }
+  else {
+    // we're nblock, but not in an nblock ctx; need to create a CFE:
+    rv = "return __oni_rt.Return(";
+    if (this.exp) rv += this.exp.nb();
+    rv += ");";
+  }
+  return rv;
+};
+ph_return.prototype.val = function() {
+    var v = this.exp ? ","+this.exp.v() : "";
+    return "__oni_rt.Sc("+this.line+",__oni_rt.Return"+v+")";
+  }
+
+#define GEN_COLLAPSE(pctx) return new ph_collapse(pctx);
+
+function ph_collapse(pctx) {
+  this.line = pctx.line;
+}
+ph_collapse.prototype = new ph(WHENDEBUG("ph_collapse"));
+ph_collapse.prototype.val = function() {
+  return "__oni_rt.Collapse("+this.line+")";
+};
+
+#define GEN_BREAK(lbl, pctx)                    \
+    if (top_decl_scope(pctx).break_scope)       \
+      return new ph_cfe("b", pctx, lbl);        \
+    else if (top_decl_scope(pctx).bl)           \
+      return new ph_bl_break(pctx, lbl);        \
+    else                                        \
+      throw new Error("Unexpected 'break' statement");
+
+#define GEN_CONTINUE(lbl, pctx)                 \
+    if (top_decl_scope(pctx).continue_scope)    \
+      return new ph_cfe("c", pctx, lbl);        \
+    else if (top_decl_scope(pctx).bl)           \
+      return new ph_return(undefined, pctx);    \
+    else                                        \
+      throw new Error("Unexpected 'continue' statement");
+
+// control flow exception:
+function ph_cfe(f, pctx, lbl) {
+  this.f = f;
+  this.lbl = lbl;
+  this.is_nblock = true;
+  // XXX this is a bit fragile; need a new pctx flag for 'throwing'/'nonthrowing' context
+  this.js_ctx = pctx.js_ctx;
+}
+ph_cfe.prototype = new ph(WHENDEBUG("ph_cfe"));
+ph_cfe.prototype.nblock_val = function() {
+  var rv;
+  if (this.js_ctx) {
+    // this only gets called when nblock is forced (__js), and it only
+    // works in a non-throwing nblock context!
+    rv = (this.f=="b" ? "break" : "continue");
+    if (this.lbl) rv += " "+this.lbl;
+    rv += ";";
+  }
+  else {
+    // we're not in a __js context; need to create a CFE:
+    rv = "return __oni_rt."+(this.f=="b" ? "Break" : "Cont")+"(";
+    if (this.lbl) rv += "'"+this.lbl+"'";
+    rv += ");";
+  }
+  return rv;
+};
+
+#ifdef SJS_BLOCKLAMBDA
+function ph_bl_break(pctx, lbl) {
+  this.line = pctx.line;
+  this.lbl = lbl;
+  this.is_nblock = true;
+}
+ph_bl_break.prototype = new ph(WHENDEBUG("ph_bl_break"));
+ph_bl_break.prototype.nblock_val = function() {
+  if (this.js_ctx) throw new Error("Blocklamdas cannot contain 'break' statements in __js{...} contexts");
+  var rv = "return __oni_rt.BlBreak(this";
+  if (this.lbl) rv += ",'"+this.lbl+"'";
+  rv += ");";
+  return rv;
+};
+
+#endif
+
+#define GEN_FOR(init_exp, decls, test_exp, inc_exp, body, pctx) \
+return gen_for(init_exp, decls, test_exp, inc_exp, body, pctx);
+
+function gen_for(init_exp, decls, test_exp, inc_exp, body, pctx) {
+  var rv;
+  if (init_exp || decls) {
+    if (decls)
+      rv = gen_var_compound(decls, pctx);
+    else
+      rv = new ph_compound_stmt(pctx);
+    if (init_exp)
+      rv.stmts.push(new ph_exp_stmt(init_exp, pctx));
+    rv.stmts.push(new ph_loop(0,test_exp, body, inc_exp));
+    //XXX suboptimal
+    rv = rv.toBlock();
+  }
+  else
+    rv = new ph_loop(0,test_exp, body, inc_exp);
+  return rv;
+}
+
+#define GEN_WHILE(test, body, pctx)             \
+  return new ph_loop(0, test, body);
+
+#define GEN_DO_WHILE(body, test, pctx)          \
+  return new ph_loop(2, test, body);
+
+
+function ph_loop(init_state, test_exp, body, inc_exp) {
+  this.init_state = init_state;
+  this.test_exp = test_exp;
+  this.inc_exp = inc_exp;
+  this.body = body;
+}
+ph_loop.prototype = new ph(WHENDEBUG("ph_loop"));
+ph_loop.prototype.nblock_val = function() {
+  // this is currently only called in a forced (__js) nblock context
+  if (this.init_state == 2) {
+    // do-while loop
+    return "do{"+this.body.nb()+"}while("+this.test_exp.nb()+");";
+  }
+  else if (this.test_exp && this.inc_exp) {
+    return "for(;"+this.test_exp.nb()+";"+this.inc_exp.nb()+
+          "){"+this.body.nb()+"}";
+  }
+  else if (this.test_exp) {
+    // while loop
+    return "while("+this.test_exp.nb()+"){"+this.body.nb()+"}";
+  }
+  else throw new Error("Can't encode this loop as __js yet");
+};
+ph_loop.prototype.val = function() {
+  var test = this.test_exp ? this.test_exp.v() : "1";
+  // this.body.v(true) <-- means a list instead of Seq is acceptable
+  var body = this.body.v(true); 
+  return "__oni_rt.Loop("+this.init_state+","+test+","+
+    (this.inc_exp ? this.inc_exp.v() : "0") + "," +body +")";
+};
+
+
+#define GEN_FOR_IN(lhs_exp, decl, obj_exp, body, pctx)  \
+  return gen_for_in(lhs_exp, decl, obj_exp, body, pctx);
+
+function gen_for_in(lhs_exp, decl, obj_exp, body, pctx) {
+  var rv;
+  if (decl) {
+    rv = gen_var_compound([decl], pctx);
+    rv.stmts.push(new ph_for_in(decl[0],
+                                obj_exp, body, pctx));
+    // XXX suboptimal
+    rv = rv.toBlock();
+  }
+  else
+    rv = new ph_for_in(lhs_exp, obj_exp, body, pctx);
+  return rv;
+}
+
+function ph_for_in(lhs, obj, body, pctx) {
+  this.lhs = lhs;
+  this.obj = obj;
+  this.body = body;
+  this.pctx = pctx;
+}
+ph_for_in.prototype = new ph(WHENDEBUG("ph_for_in"));
+ph_for_in.prototype.nblock_val = function() {
+  // this is currently only called for forced (__js) nblock contexts
+  return "for("+this.lhs.nb()+" in "+this.obj.nb()+"){"+this.body.nb()+"}";
+};
+ph_for_in.prototype.val = function() {
+    var rv = "__oni_rt.ForIn("+this.obj.v();
+    rv += ",function(__oni_env, _oniY) { return __oni_rt.ex(__oni_rt.Seq("+SEQ_FLAG_NONE+",";
+    // XXX this is the wrong pctx!!
+    rv += (new ph_assign_op(this.lhs, "=",
+                            new ph_identifier("_oniY", this.pctx),
+                            this.pctx)).v();
+    if (this.body)
+      rv += ","+this.body.v();
+    return rv + "), __oni_env)})";
+};
+
+#define GEN_WITH(exp, body, pctx) return new ph_with(exp, body, pctx);
+function ph_with(exp, body, pctx) {
+  this.exp = exp;
+  this.body = body;
+  this.line = this.exp.line;
+  this.file = pctx.filename;
+  this.is_nblock = pctx.allow_nblock && exp.is_nblock && body.is_nblock;
+}
+ph_with.prototype = new ph(WHENDEBUG("ph_with"));
+ph_with.prototype.nblock_val = function() { return "with("+this.exp.nb()+")"+this.body.nb(); };
+ph_with.prototype.val = function() {
+  // XXX check 'this' argument
+  var rv = "__oni_rt.Sc("+this.line+",__oni_rt.With,"+this.exp.v()+
+    ",function(__oni_env,__oni_z){with(__oni_z) return __oni_rt.ex("+
+    this.body.v()+",__oni_env)})";
+
+  return rv;
+};
+
+
+//----------------------------------------------------------------------
+// expressions:
+
+#define GEN_LITERAL(type, value, pctx) return new ph_literal(value, pctx, type);
+function ph_literal(value, pctx, type) {
+  this.value = value;
+  this.line  = pctx.line;
+}
+ph_literal.prototype = new ph(WHENDEBUG("ph_literal"));
+ph_literal.prototype.is_nblock = true;
+//ph_literal.prototype.is_literal = true;
+ph_literal.prototype.v = function() { return this.value; };
+ph_literal.prototype.nblock_val = function() { return this.value; };
+#ifdef SJS_DESTRUCTURE
+ph_literal.prototype.destruct = function() { if (this.value != "") throw new Error("invalid pattern"); return "";};
+ph_literal.prototype.collect_var_decls = function() { };
+#endif
+
+#define GEN_INFIX_OP(left, id, right, pctx)  return new ph_infix_op(left, id, right, pctx);
+function ph_infix_op(left, id, right, pctx) {
+  // XXX can also do literal simplification here (e.g. 1+1 -> 2)
+  this.left = left;
+  this.id = id;
+  this.right = right;
+  this.line = pctx.line;
+  this.is_nblock = pctx.allow_nblock && left.is_nblock && right.is_nblock;
+}
+ph_infix_op.prototype = new ph(WHENDEBUG("ph_infix_op"));
+ph_infix_op.prototype.is_value = true;
+
+#ifdef SJS_DESTRUCTURE
+ph_infix_op.prototype.collect_pars = function(pars) {
+  if (this.id != ',') throw new Error("invalid parameter list syntax");
+  pars.push(this.left);
+  if (this.right.collect_pars)
+    this.right.collect_pars(pars);
+  else
+    pars.push(this.right);
+};
+#endif
+
+ph_infix_op.prototype.nblock_val = function() {
+    return this.left.nb()+" "+this.id+" "+this.right.nb();
+};
+ph_infix_op.prototype.val = function() {
+    // XXX could optimize with single-sided nblocks
+    if (this.is_nblock){
+      //      console.log(this.left.toString()+":"+this.nb());
+      return nblock_val_to_val(this.nb(), true, this.line);
+    }
+    else if (this.id == "||") {
+      // short-circuited or
+      return "__oni_rt.Seq("+SEQ_FLAG_SHORTCIRCUIT_OR+","+this.left.v()+","+this.right.v()+")";
+    }
+    else if (this.id == "&&") {
+      // short-circuited or
+      return "__oni_rt.Seq("+SEQ_FLAG_SHORTCIRCUIT_AND+","+this.left.v()+","+this.right.v()+")";
+    }
+    else
+      return "__oni_rt.Sc("+this.line+",__oni_rt.infix['"+this.id+"'],"+this.left.v()+","+this.right.v()+")";
+};
+
+
+#ifdef INTERPOLATING_STRINGS
+#define GEN_INTERPOLATING_STR(parts, pctx)  return new ph_interpolating_str(parts, pctx);
+function ph_interpolating_str(parts, pctx) {
+  this.is_nblock = pctx.allow_nblock;
+  this.line = pctx.line;
+  this.parts = parts;
+  for (var i=0,l=parts.length;i<l;++i) {
+    if (Array.isArray(parts[i]) && !parts[i][0].is_nblock) {
+      this.is_nblock = false;
+      break;
+    }
+  }
+}
+ph_interpolating_str.prototype = new ph(WHENDEBUG("ph_interpolating_str"));
+ph_interpolating_str.prototype.is_value = true;
+ph_interpolating_str.prototype.nblock_val = function() {
+  for (var i=0,l=this.parts.length;i<l;++i) {
+    var p = this.parts[i];
+    if (Array.isArray(p)) {
+      this.parts[i] = "("+p[0].nb()+")";
+    }
+    else {
+      this.parts[i] = '"'+p+'"';
+    }
+  }
+  return '('+this.parts.join('+')+')';
+};
+ph_interpolating_str.prototype.val = function() {
+  if (this.is_nblock) return nblock_val_to_val(this.nb(), true, this.line);
+  for (var i=0,l=this.parts.length;i<l;++i) {
+    var p = this.parts[i];
+    if (Array.isArray(p)) {
+      this.parts[i] = p[0].v();
+    }
+    else {
+      this.parts[i] = '"'+p+'"';
+    }
+  }
+  return '__oni_rt.Sc('+this.line+',__oni_rt.join_str,'+this.parts.join(',')+')';
+};
+
+#endif /* INTERPOLATING_STRINGS */
+
+#ifdef QUASIS
+#define GEN_QUASI(parts, pctx) return new ph_quasi_template(parts, pctx);
+function ph_quasi_template(parts, pctx) {
+  this.parts = parts;
+  this.line = pctx.line;
+  this.is_nblock = false; // XXX implement nblock form
+}
+ph_quasi_template.prototype = new ph(WHENDEBUG("ph_quasi_template"));
+ph_quasi_template.prototype.is_value = true;
+ph_quasi_template.prototype.val = function() {
+  var rv = "__oni_rt.Sc("+this.line+",__oni_rt.Quasi";
+  for (var i=0; i<this.parts.length; ++i) {
+    if (i%2)
+      rv += ","+this.parts[i].v();
+    else
+      rv += ',"'+this.parts[i].replace(/\"/g,'\\"')+'"';
+  }
+  return rv + ")";
+};
+#endif /* QUASIS */
+
+#define GEN_ASSIGN_OP(left, id, right, pctx) return new ph_assign_op(left, id, right, pctx);
+function ph_assign_op(left, id, right, pctx) {
+  if (!left.is_ref && !left.is_id)
+#ifdef SJS_DESTRUCTURE
+    {
+      this.is_dest = true;
+      if (id != "=") throw new Error("Invalid operator in destructuring assignment");
+    }
+#else
+    throw new Error("Invalid left side in assignment");
+#endif
+  this.left = left;
+  this.id = id;
+  this.right = right;
+  this.line = pctx.line;
+#ifdef ECMA_GETTERS_SETTERS
+  // with ECMA_GETTERS_SETTERS, assignments to references are never
+  // nblock because of the possibility of setters :-(
+  this.is_nblock = !left.is_ref &&
+                   (left.is_nblock && right.is_nblock);
+#else
+  this.is_nblock = pctx.allow_nblock && left.is_nblock && right.is_nblock
+#ifdef SJS_DESTRUCTURE
+                   && !this.is_dest; // XXX do destructuring assignment nb form
+#endif
+#endif
+}
+ph_assign_op.prototype = new ph(WHENDEBUG("ph_assign_op"));
+ph_assign_op.prototype.is_value = true;
+ph_assign_op.prototype.nblock_val = function() {
+  var right = this.right.nb();
+  WRAP_RHS_IF_ALTNS(this.left, right);
+  return this.left.nb()+this.id+right;
+};
+ph_assign_op.prototype.val = function() {
+    var rv;
+    if (this.is_nblock) {
+      rv = nblock_val_to_val(this.nb(), true, this.line);
+    }
+#ifdef SJS_DESTRUCTURE
+    else if (this.is_dest) {
+      rv = "__oni_rt.Sc("+this.line+",function(_oniX";
+      try {
+        var drefs = [], body = this.left.destruct("_oniX", drefs);
+        for (var i=1; i<=drefs.length; ++i)
+          rv += ",_oniX"+i;
+        rv += "){" + body + "return _oniX;},"+this.right.v();
+        for (var i=0; i<drefs.length; ++i)
+          rv += ","+drefs[i];
+        rv += ")";
+      }
+      catch (e) {
+        throw { mes:"Invalid left side in destructuring assignment ",
+                line:this.line }; 
+      }
+    }
+#endif
+    else if (!this.left.is_ref || this.left.is_nblock) {
+      // 'normal' assignment; left is an id or a ref that we can
+      // use as nblock_val.
+      var arg = '_oniX';
+      WRAP_RHS_IF_ALTNS(this.left, arg);
+      rv = "__oni_rt.Sc("+this.line+",function(_oniX){return "+
+        this.left.nb()+this.id+arg+";},"+this.right.v()+
+        ")";
+    }
+    else {
+      // reference assignment
+      rv = "__oni_rt.Sc("+this.line+",function(l, r){return l[0][l[1]]"+
+        this.id+"r;},"+this.left.ref()+","+this.right.v()+")";
+    }
+    return rv;
+};
+
+#define GEN_PREFIX_OP(id, right, pctx) return new ph_prefix_op(id, right, pctx);
+function ph_prefix_op(id, right, pctx) {
+  this.id = id;
+  this.right = right;
+  this.line = pctx.line;
+  this.is_nblock = (pctx.allow_nblock && right.is_nblock) && id!="spawn";
+}
+ph_prefix_op.prototype = new ph(WHENDEBUG("ph_prefix_op"));
+ph_prefix_op.prototype.is_value = true;
+ph_prefix_op.prototype.nblock_val = function() {
+  return this.id+" " +this.right.nb();
+};
+ph_prefix_op.prototype.val = function() {
+  var rv;
+  if (this.id == "spawn")
+    rv = "__oni_rt.Spawn("+this.line+","+this.right.v()+")";
+  else if (this.right.is_nblock) {
+    // this clause is essential for things like "++i".
+    // i.e. where "i" needs to be treated like a reference. they can't be encoded
+    // by the catchall clause below.
+    rv = nblock_val_to_val(this.nb(), true, this.line);
+  } else if (this.right.is_ref) {
+    rv = "__oni_rt.Sc("+this.line+",function(r){return "+this.id+" r[0][r[1]]},"+
+      this.right.ref()+")";
+  }
+  else {
+    // 'generic' non-ref case (e.g. "typeof a()" )
+    rv = "__oni_rt.Sc("+this.line+",function(r){return "+this.id+" r},"+
+      this.right.v()+")";
+  }
+  return rv;
+};
+
+#define GEN_POSTFIX_OP(left, id, pctx) return new ph_postfix_op(left, id, pctx);
+function ph_postfix_op(left, id, pctx) {
+  if (!left.is_ref && !left.is_id) throw new Error("Invalid argument for postfix op '"+id+"'");
+  this.left = left;
+  this.id = id;
+  this.line = pctx.line;
+  this.is_nblock = pctx.allow_nblock && left.is_nblock;
+}
+ph_postfix_op.prototype = new ph(WHENDEBUG("ph_postfix_op"));
+ph_postfix_op.prototype.is_value = true;
+ph_postfix_op.prototype.nblock_val = function() { return this.left.nb() + this.id + " "; };
+ph_postfix_op.prototype.val = function() {
+    var rv;
+    if (this.left.is_nblock) {
+      // 'common' non-ref case with nblock arg or id
+      rv = nblock_val_to_val(this.nb(), true, this.line);
+    }
+    else if (this.left.is_ref) {
+      rv = "__oni_rt.Sc("+this.line+",function(l){return l[0][l[1]]"+this.id+"},"+
+        this.left.ref()+")";
+    }
+    return rv;
+};
+
+#ifdef SJS_ARROWS
+
+#ifndef SJS_DESTRUCTURE
+throw new Error("Arrows require destructuring support!");
+#endif
+
+function gen_function_header(pars) {
+  // Given a list of params, generate a function header.
+  // The `header` includes both the param list *as well as* the
+  // start of the function body, since both params and body initializer
+  // may be needed to implement param destructuring.
+  // i.e minimal function header is "(){"
+  var code = "";
+  var trivial = true;
+  var vars = [];
+  if (!pars.length) return "(){";
+
+  var assignments = "";
+  
+  try {
+    for (var i=0;i<pars.length;++i) {
+      if (trivial && !(pars[i] instanceof ph_identifier))
+        trivial = false;
+
+      pars[i].collect_var_decls(vars);
+      assignments += pars[i].destruct('arguments['+i+']');
+    }
+
+    if (trivial) {
+      // no destructuring required
+      return "(" + vars.join(",") + "){";
+    }
+
+    if (vars.length) {
+      code += "var "+vars.join(',')+";"
+    }
+
+    code += assignments;
+    return '(){' + code;
+  } catch (e) {
+    throw new Error("Invalid syntax in parameter list");
+  }
+
+}
+
+
+#define GEN_THIN_ARROW(body, pctx) GEN_THIN_ARROW_WITH_PARS(undefined, body, pctx)
+#define GEN_THIN_ARROW_WITH_PARS(pars, body, pctx) return new ph_arrow(pars, body, pctx);
+#define GEN_FAT_ARROW(body, pctx) GEN_FAT_ARROW_WITH_PARS(undefined, body, pctx)
+#define GEN_FAT_ARROW_WITH_PARS(pars, body, pctx) return new ph_arrow(pars, body, pctx, true);
+
+
+function ph_arrow(pars_exp, body, pctx, bound) {
+  this.is_nblock = pctx.allow_nblock;
+  this.js_ctx = pctx.js_ctx;
+  this.line = pctx.line;
+  this.bound = bound;
+
+  this.code = 'function';
+
+  var pars = [];
+  if (pars_exp) {
+    if (pars_exp.collect_pars) 
+      pars_exp.collect_pars(pars);
+    else
+      pars.push(pars_exp);
+  }
+
+  this.code += gen_function_header(pars);
+
+  if (pctx.js_ctx) {
+    this.code += "return "+body.nb()+"}";
+  }
+  else {
+    this.code += 'return __oni_rt.exseq(arguments,this,'+
+      pctx.filename+',['+(SEQ_FLAG_FUNCTION+SEQ_FLAG_IMPLICIT_RETURN)+','+
+      body.v()+
+      '])}';
+  }
+}
+ph_arrow.prototype = new ph(WHENDEBUG("ph_arrow"));
+
+ph_arrow.prototype.v =  function() {
+  if (this.bound) // XXX must be a better way to encode this; maybe __oni_rt.Bf (bound function)
+    return nblock_val_to_val(this.nb(), true, this.line);
+  else
+    return this.code;
+};
+
+ph_arrow.prototype.nb = function() {
+  if (this.bound) 
+    return '('+this.code+').bind('+(this.js_ctx ? 'this' : 'this.tobj')+')';
+  else
+    return this.code;
+};
+
+#endif /* SJS_ARROWS */
+
+#ifdef SJS_DOUBLEDOT
+#define GEN_DOUBLEDOT_CALL(l,r,pctx) return gen_doubledot_call(l, r, pctx);
+
+function gen_doubledot_call(l, r, pctx) {
+  // XXX not very elegant show we inject ourselves into the funcall
+  // here (and it was the source of a very hard to track down bug
+  // already!)
+  if (r.is_fun_call) {
+    r.args.unshift(l);
+    // we need to make sure that the call doesn't get encoded as
+    // nblock if 'r' isn't. See sjs-testsuite2:36
+    if (!r.is_nblock) r.nblock_form = false;
+  }
+  else
+    r = new ph_fun_call(r, [l], pctx);
+
+  r.is_doubledot = true;
+  return r;
+}
+
+#endif /* SJS_DOUBLEDOT */
+
+#ifdef SJS_DOUBLECOLON
+#define GEN_DOUBLECOLON_CALL(l,r,pctx) return gen_doublecolon_call(l, r, pctx);
+
+function gen_doublecolon_call(l, r, pctx) {
+  // XXX not very elegant show we inject ourselves into the funcall
+  // here (and it was the source of a very hard to track down bug
+  // already!)
+  if (l.is_doubledot) {
+    // walk up the call tree until we find the first argument that
+    // isn't a doubledot:
+    var target = l;
+    while (target.args[0].is_doubledot) {
+      target = target.args[0];
+    }
+    if (target.args[0].is_fun_call) {
+      target.args[0].args.unshift(r);
+      if (!target.args[0].is_nblock) target.args[0].nblock_form = false;
+    }
+    else {
+      target.args[0] = new ph_fun_call(target.args[0], [r], pctx);
+      if (!target.is_nblock) target.nblock_form = false;
+    }
+    return l;
+  }
+  else if (l.is_fun_call) {
+    l.args.unshift(r);
+    // we need to make sure that the call doesn't get encoded as
+    // nblock if 'l' isn't. See sjs-testsuite2:36
+    if (!l.is_nblock) l.nblock_form = false;
+    return l;
+  }
+  else
+    return new ph_fun_call(l, [r], pctx);
+}
+
+#endif /* SJS_DOUBLECOLON */
+
+
+#ifdef SJS_ALTERNATE_NAMESPACE
+#define GEN_ALTERNATE_NAMESPACE_OBJ(pctx) return new ph_identifier("__oni_altns", pctx);
+#define GEN_ALTERNATE_NAMESPACE_IDENTIFIER(value, pctx) \
+    return new ph_dot_accessor(new ph_identifier("__oni_altns", pctx), value, pctx);
+#endif
+
+
+#define GEN_IDENTIFIER(name, pctx) return gen_identifier(name, pctx);
+function gen_identifier(name, pctx) {
+  // special case built-in stratified functions here:
+  // XXX not quite right to put them here maybe. they should be assignable, etc.
+  if (name == "hold") {
+    // stratified 'hold' operator
+    var rv = new ph_literal('__oni_rt.Hold', pctx);
+    rv.is_id = true;
+    return rv;
+  }
+  else if (name == "arguments") {
+    return new ph_envobj('arguments', 'aobj', pctx);
+  }
+
+  // default:
+  return new ph_identifier(name, pctx);
+}
+
+function ph_identifier(name, pctx) {
+  this.name = name;
+  this.line = pctx.line;
+}
+ph_identifier.prototype = new ph(WHENDEBUG("ph_identifier"));
+ph_identifier.prototype.is_nblock = true;
+ph_identifier.prototype.is_id = true;
+ph_identifier.prototype.is_value = true;
+ph_identifier.prototype.nblock_val = function() { return this.name; };
+#ifdef SJS_DESTRUCTURE
+ph_identifier.prototype.destruct = function(dpath) {
+  WRAP_RHS_IF_ALTNS(this, dpath);
+  return this.name + "=" + dpath + ";";
+};
+ph_identifier.prototype.collect_var_decls = function(vars) {
+  vars.push(this.name);
+};
+#endif
+
+function ph_envobj(name, ename, pctx) {
+  this.js_ctx = pctx.js_ctx;
+  this.line = pctx.line;
+  this.name = name;
+  this.ename = ename; // name in the env object
+}
+ph_envobj.prototype = new ph(WHENDEBUG("ph_envobj"));
+ph_envobj.prototype.is_nblock = true;
+ph_envobj.prototype.is_id = true;
+ph_envobj.prototype.is_value = true;
+ph_envobj.prototype.nblock_val = function() { 
+  if (this.js_ctx)
+    return this.name; 
+  else
+    return "this."+this.ename;
+};
+#ifdef SJS_DESTRUCTURE
+ph_envobj.prototype.destruct = 
+ph_envobj.prototype.collect_var_decls = function() {
+  throw new Error("'"+this.name+"' not allowed in destructuring pattern");
+};
+#endif
+
+
+#define GEN_THIS(pctx) return new ph_envobj('this', 'tobj', pctx);
+
+#define GEN_TRUE(pctx) return new ph_literal('true', pctx);
+
+#define GEN_FALSE(pctx) return new ph_literal('false', pctx);
+
+#define GEN_NULL(pctx) return new ph_literal('null', pctx);
+
+function is_nblock_arr(arr) {
+  for (var i=0; i<arr.length; ++i)
+    if (!arr[i].is_nblock) return false;
+  return true;
+}
+
+#define GEN_FUN_CALL(l, args, pctx) return new ph_fun_call(l, args, pctx);
+function ph_fun_call(l, args, pctx) {
+  this.l = l;
+  this.args = args;
+  this.nblock_form = l.is_nblock && is_nblock_arr(args);
+  this.line = pctx.line;
+}
+ph_fun_call.prototype = new ph(WHENDEBUG("ph_fun_call"));
+ph_fun_call.prototype.is_value = true;
+ph_fun_call.prototype.is_fun_call = true;
+ph_fun_call.prototype.nblock_val = function() {
+    // fun_call is never nblock by default, since the function call
+    // might return a suspension, but it can be forced (__js)
+    var rv = this.l.nb() + "(";
+    for (var i=0; i<this.args.length;++i) {
+      if (i) rv += ",";
+      rv += this.args[i].nb();
+    }
+    return rv +")";
+};
+ph_fun_call.prototype.val = function() {
+    var rv;
+    if (this.nblock_form) {
+      rv = this.l.nb() + "(";
+      for (var i=0; i<this.args.length;++i) {
+        if (i) rv += ",";
+        rv += this.args[i].nb();
+      }
+      return "__oni_rt.C(function(){return "+rv+")},"+this.line+")";
+    }
+    else if (this.l.is_ref) {
+      rv = "__oni_rt.Fcall(1,"+this.line+","+this.l.ref();
+    }
+    // XXX could have an Scall form here?? (iff this.l is nb)
+    else {
+      // 'normal' non-reference function call
+      rv = "__oni_rt.Fcall(0,"+this.line+","+this.l.v();
+    }
+    for (var i=0; i<this.args.length; ++i) {
+      rv += ","+this.args[i].v();
+    }
+    rv += ")";
+    return rv;
+};
+
+#define GEN_DOT_ACCESSOR(l, name, pctx) return new ph_dot_accessor(l, name, pctx);
+function ph_dot_accessor(l, name, pctx) {
+  this.l = l;
+  this.name = name;
+  this.line = pctx.line;
+#ifdef ECMA_GETTERS_SETTERS
+  this.is_nblock = false;
+#else
+  this.is_nblock = pctx.allow_nblock && l.is_nblock;
+#endif
+}
+ph_dot_accessor.prototype = new ph(WHENDEBUG("ph_dot_accessor"));
+ph_dot_accessor.prototype.is_ref = true;
+ph_dot_accessor.prototype.is_value = true;
+ph_dot_accessor.prototype.nblock_val = function() { return this.l.nb() + "." + this.name };
+ph_dot_accessor.prototype.val = function() {
+    return "__oni_rt.Sc("+this.line+",function(l){return l."+this.name+";},"+
+    this.l.v()+")";
+};
+ph_dot_accessor.prototype.ref = function() {
+    // XXX nblock special casing
+    return "__oni_rt.Sc("+this.line+",function(l){return [l,'"+this.name+"'];},"+
+    this.l.v()+")";
+};
+#ifdef SJS_DESTRUCTURE
+ph_dot_accessor.prototype.destruct = function(dpath, drefs) {
+  drefs.push(this.ref());
+  var v= "_oniX"+drefs.length;
+  return v+"[0]["+v+"[1]]="+dpath+";";
+};
+ph_dot_accessor.prototype.collect_var_decls = function(vars) {
+#ifdef SJS_ALTERNATE_NAMESPACE
+  if (this.l instanceof(ph_identifier) && this.l.name === '__oni_altns')
+    return;
+#endif // SJS_ALTERNATE_NAMESPACE
+  throw new Error("var declaration must not contain property accessor as lvalue");
+};
+#endif
+
+#define GEN_IDX_ACCESSOR(l, idxexp, pctx) return new ph_idx_accessor(l, idxexp, pctx);
+function ph_idx_accessor(l, idxexp, pctx) {
+  this.l = l;
+  this.idxexp = idxexp;
+  this.line = pctx.line;
+#ifdef ECMA_GETTERS_SETTERS
+  this.is_nblock = false;
+#else
+  // XXXX if this is nblock, assignment operations need to be nblock too!!!
+  this.is_nblock =  pctx.allow_nblock &&  l.is_nblock && idxexp.is_nblock;
+#endif
+}
+ph_idx_accessor.prototype = new ph(WHENDEBUG("ph_idx_accessor"));
+ph_idx_accessor.prototype.is_ref = true;
+ph_idx_accessor.prototype.is_value = true;
+ph_idx_accessor.prototype.nblock_val = function() {
+    return this.l.nb() + "[" + this.idxexp.nb() + "]";
+};
+ph_idx_accessor.prototype.val = function() {
+    return "__oni_rt.Sc("+this.line+",function(l, idx){return l[idx];},"+
+    this.l.v()+","+this.idxexp.v()+")";
+};
+ph_idx_accessor.prototype.ref = function() {
+    if (this.is_nblock)
+      return "__oni_rt.Nb(function(){return ["+this.l.nb()+","+
+             this.idxexp.nb()+"]},"+this.line+")";
+    else
+      return "__oni_rt.Sc("+this.line+",function(l, idx){return [l, idx];},"+
+             this.l.v()+","+this.idxexp.v()+")";
+};
+
+
+#define GEN_GROUP(e, pctx) return new ph_group(e, pctx);
+function ph_group(e, pctx) {
+  this.e = e;
+  this.is_nblock = pctx.allow_nblock && e.is_nblock;
+}
+ph_group.prototype = new ph(WHENDEBUG("ph_group"));
+ph_group.prototype.is_value = true;
+ph_group.prototype.nblock_val = function() { return "("+this.e.nb()+")"; };
+ph_group.prototype.v = function(accept_list) { return this.e.v(accept_list); };
+#ifdef SJS_DESTRUCTURE
+ph_group.prototype.destruct = function(dpath,drefs) { return this.e.destruct(dpath,drefs); };
+ph_group.prototype.collect_var_decls = function(vars) { return this.e.collect_var_decls(vars); };
+ph_group.prototype.collect_pars = function(pars) { 
+  if (this.e.collect_pars) 
+    this.e.collect_pars(pars);
+  else
+    pars.push(this.e);
+};
+#endif
+
+#define GEN_ARR_LIT(elements, pctx) return new ph_arr_lit(elements, pctx);
+function ph_arr_lit(elements, pctx) {
+  this.elements = elements;
+  this.line = pctx.line; // XXX is this the correct line?
+  this.is_nblock = pctx.allow_nblock && is_nblock_arr(elements);
+//XXX is_literal IFF all children are literals
+}
+ph_arr_lit.prototype = new ph(WHENDEBUG("ph_arr_lit"));
+ph_arr_lit.prototype.is_value = true;
+ph_arr_lit.prototype.nblock_val = function() {
+    var rv = "[";
+    for (var i=0; i<this.elements.length; ++i) {
+      if (i) rv += ",";
+      rv += this.elements[i].nb();
+    }
+    return rv + "]";
+};
+ph_arr_lit.prototype.val = function() {
+    var rv = "__oni_rt.Sc("+this.line+",__oni_rt.Arr";
+    for (var i=0; i<this.elements.length; ++i) {
+      rv += ","+this.elements[i].v();
+    }
+    return rv + ")";
+};
+#ifdef SJS_DESTRUCTURE
+ph_arr_lit.prototype.destruct = function(dpath, drefs) {
+  var rv = "";
+  for (var i=0; i<this.elements.length; ++i) {
+    rv += this.elements[i].destruct(dpath+"["+i+"]", drefs);
+  }
+  return rv;  
+};
+ph_arr_lit.prototype.collect_var_decls = function(vars) {
+  for (var i=0; i<this.elements.length; ++i)
+    this.elements[i].collect_var_decls(vars);
+};
+#endif
+
+#define GEN_ELISION(pctx) return new ph_literal("", pctx);
+
+#define GEN_OBJ_LIT(props, pctx) return new ph_obj_lit(props, pctx);
+function ph_obj_lit(props, pctx) {
+  this.props = props;
+  this.line = pctx.line; // XXX is this the correct line?
+  this.is_nblock = pctx.allow_nblock && (function() {
+    for (var i=0; i<props.length;++i) {
+      // if (props[i][0] != "prop") return false; <-- this is implicit by the next line (props[i][2] is a number for props)
+      if (!props[i][2].is_nblock) return false;
+    }
+    return true;
+  })();
+//XXX is_literal IFF all children are literals
+
+}
+ph_obj_lit.prototype = new ph(WHENDEBUG("ph_obj_lit"));
+ph_obj_lit.prototype.is_value = true;
+ph_obj_lit.prototype.nblock_val = function() {
+#ifdef ECMA_GETTERS_SETTERS
+#error "ph_obj_lit can't encode ECMA_GETTERS_SETTERS yet"
+#endif
+    var rv = "{";
+    for (var i=0; i<this.props.length; ++i) {
+      if (i!=0) rv += ",";
+      // XXX if we ever allow object patterns to be nblock,
+      // we need to have a guard here to make sure we're dealing with
+      // "prop"s
+      rv += this.props[i][1] + ":" + this.props[i][2].nb();
+    }
+    return rv + "}";
+};
+
+function quotedName(name) {
+  if (name.charAt(0) == "'" || name.charAt(0) == '"')
+    return name;
+  return '"'+name+'"';
+}
+
+ph_obj_lit.prototype.val = function() {
+    // We stow the ids as an array in the first parameter, and the
+    // vals in the remaining pars. Encoded in this flat way, the vals
+    // get executed correctly.
+    var rv = "__oni_rt.Sc("+this.line+",__oni_rt.Obj, [";
+    for (var i=0; i<this.props.length; ++i) {
+      if (i) rv += ",";
+#ifdef SJS_DESTRUCTURE
+      if (this.props[i][0] == "pat")
+        throw {mes:"Missing initializer for object property "+quotedName(this.props[i][1]),
+               line:this.props[i][2]};
+#endif
+      rv += quotedName(this.props[i][1]);
+    }
+    rv += "]";
+    for (var i=0; i<this.props.length; ++i) {
+      rv += "," + this.props[i][2].v();
+    }
+    return rv + ")";
+};
+#ifdef SJS_DESTRUCTURE
+ph_obj_lit.prototype.destruct = function(dpath, drefs) {
+  var rv = ""; 
+  for (var i=0; i<this.props.length; ++i) {
+    var p = this.props[i];
+#ifdef SJS_ALTERNATE_NAMESPACE
+    var prop = p[1];
+    var altns;
+    if(altns = p[1].charAt(0) === '@') {
+      prop = p[1].slice(1);
+    }
+#endif // SJS_ALTERNATE_NAMESPACE
+
+    if (p[0] == "pat") {
+      var dest = p[1];
+#ifdef SJS_ALTERNATE_NAMESPACE
+      if(altns) dest = '__oni_altns.'+prop;
+#endif // SJS_ALTERNATE_NAMESPACE
+      rv += dest+"="+dpath+"."+prop+";";
+    }
+    else // assuming "prop"
+      rv += p[2].destruct(dpath+"["+quotedName(prop)+"]", drefs);
+  }
+  return rv;
+};
+ph_obj_lit.prototype.collect_var_decls = function(vars) {
+  for (var i=0; i<this.props.length; ++i) {
+    var p = this.props[i];
+    if (p[0] == "pat") {
+#ifdef SJS_ALTERNATE_NAMESPACE
+      if(p[1].charAt(0) === '@') continue;
+#endif // SJS_ALTERNATE_NAMESPACE
+      vars.push(p[1]);
+    } else
+      p[2].collect_var_decls(vars);
+  }
+};
+#endif
+
+//XXX merge with GEN_IF?
+#define GEN_CONDITIONAL(test, consequent, alternative, pctx)  \
+  return new ph_conditional(test, consequent, alternative, pctx);
+function ph_conditional(t, c, a, pctx) {
+  this.t = t;
+  this.c = c;
+  this.a = a;
+  this.line = t.line;
+  this.is_nblock = pctx.allow_nblock && t.is_nblock && c.is_nblock && (a===undefined || a.is_nblock);
+}
+ph_conditional.prototype = new ph(WHENDEBUG("ph_conditional"));
+ph_conditional.prototype.is_value = true;
+ph_conditional.prototype.nblock_val = function() {
+    return this.t.nb()+"?"+this.c.nb()+":"+(this.a ? this.a.nb() : "undefined");
+};
+ph_conditional.prototype.val = function() {
+    return "__oni_rt.If("+this.t.v()+","+this.c.v()+","+(this.a ? this.a.v() : "undefined")+")";
+};
+
+#define GEN_NEW(exp, args, pctx) return new ph_new(exp, args);
+function ph_new(exp, args) {
+  this.exp = exp;
+  this.args = args;
+  this.line = exp.line;
+}
+ph_new.prototype = new ph(WHENDEBUG("ph_new"));
+ph_new.prototype.is_value = true;
+ph_new.prototype.nblock_val = function() {
+  // by default ph_new is never nblock; but can be forced with __js
+  var rv = "new "+this.exp.nb()+"(";
+  for (var i=0; i<this.args.length; ++i) {
+    if (i) rv += ",";
+    rv += this.args[i].nb();
+  }
+  return rv+")";
+};
+
+ph_new.prototype.val = function() {
+    var rv = "__oni_rt.Fcall(2,"+this.line+","+this.exp.v();
+    for (var i=0; i<this.args.length; ++i) {
+      rv += ","+this.args[i].v();
+    }
+    rv += ")";
+    return rv;
+};
+
+
+//----------------------------------------------------------------------
+// Stratified constructs:
+
+// function decls in suspend block need to be fscoped, since we're
+// wrapping the code in a function.
+#define BEGIN_SUSPEND_BLOCK(pctx) ++top_decl_scope(pctx).fscoped_ctx;
+#define END_SUSPEND_BLOCK(pctx) --top_decl_scope(pctx).fscoped_ctx;
+
+#define GEN_WAITFOR_ANDOR(op, blocks, crf, pctx) \
+  return gen_waitfor_andor(op, blocks, crf, pctx);
+
+function gen_waitfor_andor(op, blocks, crf, pctx) {
+  if (crf[0] || crf[1] || crf[2])
+    return new ph_try(new ph_par_alt(op, blocks), crf, pctx);
+  else
+    return new ph_par_alt(op, blocks);  
+}
+
+function ph_par_alt(op, blocks) {
+  this.op = op;
+  this.blocks = blocks;
+}
+ph_par_alt.prototype = new ph(WHENDEBUG("ph_par_alt"));
+ph_par_alt.prototype.is_nblock = false;
+ph_par_alt.prototype.val = function() {
+  var rv = "__oni_rt.";
+  if (this.op == "and")
+    rv += "Par(";
+  else // ASSERT(this.op == "or")
+    rv += "Alt(";
+  for (var i=0; i<this.blocks.length; ++i) {
+    var b = this.blocks[i].v();
+    if (i) rv+=",";
+    rv += b;
+  }
+  return rv + ")";
+};
+
+#define GEN_SUSPEND(has_var, decls, block, crf, pctx)  \
+  return gen_suspend(has_var, decls, block, crf, pctx);
+function gen_suspend(has_var, decls, block, crf, pctx) {
+  var rv;
+  if (has_var) {
+    rv = gen_var_compound(decls, pctx);
+    rv.stmts.push(gen_suspend_inner(decls, block, crf, pctx));
+    // suboptimal
+    rv = rv.toBlock();
+  }
+  else
+    rv = gen_suspend_inner(decls, block, crf, pctx);
+  return rv;
+}
+
+function gen_suspend_inner(decls, block, crf, pctx) {
+  // if we've got a catch, retract or finally, we need to wrap the
+  // suspend, to extend the scope of 'resume' to the other clauses
+  var wrapped = (crf[0] || crf[1] || crf[2]);
+  var rv = new ph_suspend(decls, block, wrapped, pctx);
+  if (wrapped)
+    rv = new ph_suspend_wrapper((new ph_try(rv, crf, pctx)).v(), pctx);
+  return rv;
+}
+
+function ph_suspend(decls, block, wrapped, pctx) {
+  this.decls = decls;
+  this.block = block;
+  this.wrapped = wrapped;
+  this.file = pctx.filename;
+}
+ph_suspend.prototype = new ph(WHENDEBUG("ph_suspend"));
+ph_suspend.prototype.val = function() {
+  var rv = "__oni_rt.Suspend(function(__oni_env,";
+  if (this.wrapped) // 'resume' is declared in outer wrapper
+    rv += "_oniX){resume=_oniX;";
+  else
+    rv +="resume){";
+  var b = this.block.v();
+  if (b.length)
+    rv += "return __oni_rt.ex("+b+",__oni_env)";
+  rv += "}, function() {";
+  for (var i=0; i<this.decls.length;++i) {
+    var name = this.decls[i][0].name;
+    if (name == "arguments") throw new Error("Cannot use 'arguments' as variable name in waitfor()");
+    rv += name+"=arguments["+i+"];";
+  }
+  rv += "})";
+  return rv;
+};
+
+// a wrapper for suspend, to extend the scope of the 'resume' function
+function ph_suspend_wrapper(code, pctx) {
+  this.code = code;
+  this.line = pctx.line; // XXX is this the correct line?
+  this.file = pctx.filename;
+}
+ph_suspend_wrapper.prototype = new ph(WHENDEBUG("ph_suspend_wrapper"));
+ph_suspend_wrapper.prototype.val = function() {
+  return "__oni_rt.Nb(function(){var resume;"+
+    "return __oni_rt.ex("+this.code+",this)},"+this.line+")";
+};
+
+
+#ifdef SJS_USING
+#define GEN_USING(has_var, lhs, exp, body, pctx)  \
+  return gen_using(has_var, lhs, exp, body, pctx);
+
+function gen_using(has_var, lhs, exp, body, pctx) {
+  var rv;
+  if (has_var) {
+    //XXX this is suboptimal
+    if (!lhs.is_id) throw new Error("Variable name expected in 'using' expression");
+    rv = gen_var_compound([[lhs]], pctx);
+    rv.stmts.push(new ph_using(lhs, exp, body, pctx));
+    rv = rv.toBlock();
+  }
+  else
+    rv = new ph_using(lhs, exp, body, pctx);
+  return rv;
+}
+
+function ph_using(lhs, exp, body, pctx) {
+  this.line = pctx.line;
+  this.body = body;
+  this.assign1 = new ph_assign_op(new ph_identifier("_oniW",pctx),
+                                  "=", exp, pctx);
+  if (lhs)
+    this.assign2 = new ph_assign_op(lhs, "=",
+                                    new ph_identifier("_oniW",pctx), pctx);
+}
+/*
+  using(lhs=A) { body } -> f(args){var _oniW; ex(Seq(a1,a2,Try(body,f(){_oniW.final})))}
+
+*/
+ph_using.prototype = new ph(WHENDEBUG("ph_using"));
+ph_using.prototype.val = function() {
+  var rv = "__oni_rt.Nb(function(){var _oniW;"+
+    "return __oni_rt.ex(__oni_rt.Seq("+SEQ_FLAG_NONE+","+
+    this.assign1.v()+",";
+  if (this.assign2)
+    rv += this.assign2.v()+",";
+  rv += "__oni_rt.Try("+TRY_FLAG_NONE+","+this.body.v()+",0,"+
+    "__oni_rt.Nb(function(){if(_oniW&&_oniW.__finally__)return _oniW.__finally__()},"+this.line+"),0)),this)},"+this.line+")";
+  return rv;
+};
+#endif /* SJS_USING */
+
+#ifdef SJS___JS
+#define BEGIN___JS_BLOCK(pctx) if (pctx.allow_nblock) ++pctx.js_ctx;
+#define END___JS_BLOCK(pctx) if (pctx.allow_nblock) --pctx.js_ctx;
+#define GEN___JS(body, pctx) body.is_nblock=pctx.allow_nblock; return body;
+#endif /* SJS___JS */
+
+
+#ifdef SJS_BLOCKLAMBDA
+#define BEGIN_BLAMBDABODY(pctx)                       \
+  push_decl_scope(pctx, true);                        \
+  push_stmt_scope(pctx);
+
+#define ADD_BLAMBDABODY_STMT(stmt, pctx) add_stmt(stmt, pctx);
+
+#define END_BLAMBDABODY(pctx)                                             \
+  var decls = pctx.decl_scopes.pop();                                     \
+  var flags = SEQ_FLAG_FUNCTION + SEQ_FLAG_BLOCKLAMBDA;                   \
+  if (decls.notail) flags += SEQ_FLAG_NOTAILCALL;                         \
+  return collect_decls(decls) +                                           \
+    pop_stmt_scope(pctx, "return __oni_rt.exbl(this,["+flags,             \
+    "])");
+
+#define GEN_BLOCKLAMBDA(pars, body, pctx) return new ph_blocklambda(pars, body, pctx);
+
+function ph_blocklambda(pars, body, pctx) {
+  this.code = "__oni_rt.Bl(function"+gen_function_header(pars)+body+"})";
+}
+ph_blocklambda.prototype = new ph(WHENDEBUG("ph_blocklambda"));
+ph_blocklambda.prototype.val = function() { return this.code; };
+
+#endif /* SJS_BLOCKLAMBDA */
+
+#define GEN_LBL_STMT(lbl, stmt, pctx) return new ph_lbl_stmt(lbl, stmt);
+
+function ph_lbl_stmt(lbl, stmt) {
+  this.lbl = lbl;
+  this.stmt = stmt;
+}
+ph_lbl_stmt.prototype = new ph(WHENDEBUG("ph_lbl_stmt"));
+ph_lbl_stmt.prototype.nblock_val = function() {
+  // this only gets called when nblock is forced (__js)
+  return this.lbl+": "+this.stmt.nb();
+};
+ph_lbl_stmt.prototype.val = function() {
+  // TODO
+  throw new Error("labeled statements not implemented yet");
+};
+
+
+
