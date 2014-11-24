@@ -10,73 +10,19 @@
     <link rel="stylesheet" type="text/css" href="assets/bootstrap/css/bootstrap.min.css" />
     <link rel="stylesheet" type="text/css" href="assets/alertifyjs/css/alertify.min.css" />
     <link rel="stylesheet" type="text/css" href="assets/alertifyjs/css/themes/bootstrap.min.css" />
-    <style type="text/css">
-        #blocklyDiv{
-            height:450px;
-        }
-        #toolbox, #startBlocks, #lessonContainer, #aboutContainer{
-            display:none;
-        }
-        #footer{
-            text-align:right;
-            font-size:small;
-        }
-        .btnDiv{
-            text-align:right;
-            margin-bottom:20px;
-        }
-        #output{
-            font-family:'courier';
-            height:200px;
-            background-image:url('assets/image/panda-goblock-small.png');
-            background-repeat:no-repeat;
-            background-position:bottom right;
-            overflow:auto;
-        }
-        #aboutRightDiv{
-            background-repeat:no-repeat;
-            background-image:url('assets/image/panda-goblock.png');
-            background-position:bottom right;
-        }
-        #aboutRightDivFiller{
-            height:200px;
-        }
-        #xml{
-            font-family:'courier';
-            font-size:small;
-            width:100%;
-            height:450px;
-            resize:none;
-        }
-        #xmlContainer{
-            display:none;
-        }
-        .textAlignRight{
-            text-align:right;
-        }
-        #contentContainer{
-            margin-bottom:20px;
-        }
-        #footer{
-            margin-top:20px;
-        }
-        #header{
-            margin-top:10px;
-            margin-bottom:20px;
-        }
-    </style>
+    <link rel="stylesheet" type="text/css" href="assets/goblock.css" />
 </head>
 <body>
 
     <div class="row container col-md-12">
 
         <!-- Header -->
-        <div id="header" class="col-md-12">
+        <div id="__header" class="col-md-12">
             <nav>
-                <ul id="menuContainer" class="nav nav-pills pull-right">
-                    <li class="active" role="presentation"><a id="homeMenu" class="menu" href="#">Home</a></li>
-                    <li role="presentation"><a id="lessonMenu" class="menu" href="#">Lessons</a></li>
-                    <li role="presentation"><a id="aboutMenu" class="menu" href="#">About</a></li>
+                <ul id="__menuContainer" class="nav nav-pills pull-right">
+                    <li class="active" role="presentation"><a id="__homeMenu" class="__menu" href="#"><i class="glyphicon glyphicon-home"></i> Home</a></li>
+                    <li role="presentation"><a id="__lessonMenu" class="__menu" href="#"><i class="glyphicon glyphicon-book"></i> Lessons</a></li>
+                    <li role="presentation"><a id="__aboutMenu" class="__menu" href="#"><i class="glyphicon glyphicon-user"></i> About</a></li>
                 </ul>
             </nav>
             <h3 class="text-muted">Goblock | Visual Programming For Newbie</h3>
@@ -84,132 +30,78 @@
         <!-- End of Header -->
 
         <!-- Main Container -->
-        <div id="mainContainer" class="col-md-12">
+        <div id="__mainContainer" class="col-md-12">
             <div class="col-md-7">
-                <div id="blockContainer">
+                <div id="__blockContainer">
                     <legend>Block</legend>
-                    <div class="btnDiv">
+                    <div class="__btnDiv">
                         <button id="__runCode" class="btn btn-primary">
                             <i class="glyphicon glyphicon-play"></i> Run
                         </button>
-                        <button id="switchToXml" class="btn btn-default">
+                        <button id="__switchToXml" class="btn btn-default">
                             <i class="glyphicon glyphicon-align-justify"></i> XML
                         </button>
                         <button class="__clearCode btn btn-danger">
                             <i class="glyphicon glyphicon-trash"></i> Clear
                         </button>
                     </div>
-                    <div id="blocklyDiv"></div>
+                    <div id="__blocklyDiv"></div>
                 </div>
 
-                <div id="xmlContainer">
+                <div id="__xmlContainer">
                     <legend>Xml</legend>
-                    <div class="btnDiv">
-                        <button id="synchronize" class="btn btn-primary">
+                    <div class="__btnDiv">
+                        <button id="__synchronize" class="btn btn-primary">
                             <i class="glyphicon glyphicon-retweet"></i> Synchronize
                         </button>
-                        <button id="switchToBlock" class="btn btn-default">
+                        <button id="__switchToBlock" class="btn btn-default">
                             <i class="glyphicon glyphicon-tasks"></i> Block
                         </button>
                         <button class="__clearCode btn btn-danger">
                             <i class="glyphicon glyphicon-trash"></i> Clear
                         </button>
                     </div>
-                    <textarea id="xml"></textarea> 
+                    <textarea id="__xml"></textarea> 
                 </div>
 
                 
 
             </div>
-            <div id="rightPane" class="col-md-5">  
+            <div id="__rightPane" class="col-md-5">  
                 <legend>Program Output</legend>
-                <div id="output" class="well col-md-"></div>
+                <div id="__output" class="well col-md-"></div>
 
                 <legend>Python Code</legend>
-                <pre id="pythonCode"></pre>
+                <pre id="__pythonCode"></pre>
 
                 <legend>Javascript Code</legend>
-                <pre id="jsCode"></pre>
+                <pre id="__jsCode"></pre>
             </div>
 
         </div>
         <!-- End of Main Container -->
 
         <!-- Lesson Container -->
-        <div id="lessonContainer" class="col-md-12">
+        <div id="__lessonContainer" class="col-md-12">
             <div class="alert alert-warning"><b>Under Construction</b> Will be here soon</div>
         </div>
         <!-- End of Lesson Container -->
 
         <!-- About Container -->
-        <div id="aboutContainer" class="col-md-12">
-
-            <div class="col-md-6">
-                <h3>What is goblock?</h3>
-                <p>
-                    Goblock is a visual programming for newbie. Goblock allows you to make a program without dealing with syntax error.
-                    The basic foundation of goblock is google-blockly. However I've made several adjustment for education purpose.
-                </p>
-
-                <h3>How is it different from google blockly?</h3>
-                <p>
-                    Goblock is not different from google blockly, it is built on top of google blockly. Goblock has several advantages:                
-                </p>
-                <ul>
-                    <li>
-                        <b>No ugly alert and prompt</b><br />
-                        Goblock use stratified.js and alertify to completely replace alert and prompt. Thus, you will not have a problem by accidentally check <i>Prevent this page from creating another dialog</i>.
-                    </li>
-                    <li>
-                        <b>Console-like output</b><br />
-                        Rather than using javascript alert, goblock prints the output into console-like interface, thus you can retrieve the output history easier.
-                        I also have modify it can print array beautifuly.
-                    </li>
-                    <li>
-                        <b>Better toolbox arrangement</b><br />
-                        The toolbox is arranged in a more practical order, so that you won't have any difficulty to find where-is-what.
-                    </li>
-                    <li>
-                        <b>Python and Javascript</b><br />
-                        You can immediately look for corresponding python &amp; javascript code in the same screen.
-                    </li>
-                </ul>
-
-            </div>
-
-
-            <div id="aboutRightDiv" class="col-md-6">
-                <h3>Is it free?</h3>
-                <p>Yes, you can download it <a href="https://github.com/goFrendiAsgard/goblock/archive/master.zip" target="blank">here</a></p>
-
-                <h3>What is Guo, and why panda?</h3>
-                <p>
-                    Guo is a Programming Panda, a mascot of Goblock. I use panda because it is black, white, and asian at the same time. 
-                    Stop being racist, and start to code.
-                </p>
-                <p>
-                    But honestly, why panda? Okay. One of my friend like panda so much. <span style="color:white;">徐维美, it's for you :)</span>
-                </p>
-
-                <h3>Who are you?</h3>
-                <p>I am Go Frendi Gunawan, a Lecturer at STIKI Malang. Now I am single, but not available for any relationship.</p>
-                <div id="aboutRightDivFiller"></div>
-            </div>
-            
-        </div>
+        <div id="__aboutContainer" class="col-md-12"></div>
         <!-- End of About Container -->
 
     </div>
 
     <footer class="row container col-md-12">
-        <p id="footer" class="pull-right">
+        <p id="__footer" class="pull-right">
             Go Frendi Gunawan (gofrendiasgard@gmail.com) &copy; 2014
         </p>
     </footer>
     
-    <!-- Toolbox xml -->
-    <xml id="toolbox" style="display: none">
-        <category name="Value">
+    <!-- Toolbox __xml -->
+    <xml id="__toolbox" style="display: none">
+        <category name="Values">
             <block type="text"></block>
             <block type="logic_boolean"></block>
             <block type="math_number"></block>
@@ -335,7 +227,7 @@
     </xml>
 
     <!-- initialScript XML -->
-    <xml id="startBlocks" xmlns="http://www.w3.org/1999/xhtml">
+    <xml id="__startBlocks" __xmlns="http://www.w3.org/1999/xhtml">
         <block type="text_print" id="1" inline="false" x="10" y="10">
             <value name="TEXT">
                 <block type="text" id="2">
@@ -366,94 +258,7 @@
     <script type="text/javascript" src="assets/blockly/msg/js/en.js"></script>
     <script type="text/javascript" src="assets/alertifyjs/alertify.min.js"></script>
     <script type="text/javascript" src="assets/stratifiedjs/stratified.js"></script>
-
-    <script type="text/javascript">
-        function __arrayToString(val, space_count){
-            var printed_val = '';
-            var spaces = '';
-            for(i=0; i<space_count; i++){
-                spaces += '&nbsp;';
-            }
-            var subArray = false;
-            for(i=0; i<val.length; i++){
-                if($.isArray(val[i])){
-                    subArray = true;
-                    break;
-                }
-            }
-            printed_val += spaces + '[ ';
-            printed_val += subArray? '<br />' : '';
-            var i=0;
-            for(i=0; i<val.length; i++){
-                if($.isArray(val[i])){
-                    printed_val += __arrayToString(val[i],space_count+1);
-                }else{
-                    printed_val += subArray? spaces+'&nbsp;' : '';
-                    printed_val += val[i];
-                }
-                if(i<(val.length-1)){
-                    printed_val += ', ';
-                    printed_val += subArray? '<br />' : '';
-                }
-            }
-            printed_val += subArray? '<br />' : '';
-            printed_val += ' ]';
-            return printed_val;
-        }
-
-        function __stripHtml(val){
-            if($.isArray(val)){
-                val = __arrayToString(val,0);
-            }else if($.type(val) === 'string'){
-                val = val.split("&").join("&amp;");
-                val = val.split("<").join("&lt;");
-                val = val.split(">").join("&gt;");
-                val = val.split(" ").join("&nbsp;");
-            }
-            return val;
-        }
-
-        function __showMainContainer(){
-            $('#menuContainer li').removeClass('active');
-            $('#homeMenu').parent('li').addClass('active');
-            $('#lessonContainer').hide();
-            $('#aboutContainer').hide();
-            $('#mainContainer').show();
-        }
-
-        function __showLessonContainer(){
-            $('#menuContainer li').removeClass('active');
-            $('#lessonMenu').parent('li').addClass('active');
-            $('#lessonMenu').parent('li').addClass('active');
-            $('#mainContainer').hide();
-            $('#aboutContainer').hide();
-            $('#lessonContainer').show();
-        }
-
-        function __showAboutContainer(){
-            $('#menuContainer li').removeClass('active');
-            $('#aboutMenu').parent('li').addClass('active');
-            $('#aboutMenu').parent('li').addClass('active');
-            $('#mainContainer').hide();
-            $('#lessonContainer').hide();
-            $('#aboutContainer').show();
-        }        
-
-        function __showBlockContainer(){
-            $('#xmlContainer').hide();
-            $('#blockContainer').show();
-        }
-
-        function __showXmlContainer(){
-            $('#blockContainer').hide();
-            $('#xmlContainer').show();
-        }
-
-        function __clearCode() {
-            var workspace = Blockly.getMainWorkspace();
-            workspace.clear();
-        }
-    </script>
+    <script type="text/javascript" src="assets/goblock.js"></script>
 
     <script id="__asyncFunc" type="text/sjs">
         // STATE VARIABLE
@@ -462,15 +267,15 @@
         function __outputAlert(message) {
             __waitPrompt();
             message = __stripHtml(message);
-            $('#output').append('<b>' + message + '</b><br />');
+            $('#__output').append('<b>' + message + '</b><br />');
         }
-
         
         function __waitPrompt(){
             while(!__promptClicked){
                 hold(500);
             }
         }
+
         function __outputPrompt(message){
             __waitPrompt();
             __promptClicked = false
@@ -486,82 +291,63 @@
             __waitPrompt();
 
             message = __stripHtml(message);
-            $('#output').append((message == '' ? '' : '<b>' + message + '</b><br />') + 
+            $('#__output').append((message == '' ? '' : '<b>' + message + '</b><br />') + 
                 __stripHtml(input) + '<br />');
             return input;
         }
     </script>
 
     <script type="text/sjs">    
-        
+            
         var __sys = require("assets/stratifiedjs/modules/sys.sjs");    
 
         // initialize blockly
-        Blockly.inject(document.getElementById('blocklyDiv'),
+        Blockly.inject(document.getElementById('__blocklyDiv'),
         {
-            toolbox: document.getElementById('toolbox'),
+            toolbox: document.getElementById('__toolbox'),
             media: './assets/blockly/media/',
         });
 
         // load initial blocks
-        xml = document.getElementById('startBlocks');
-        __loadXml(xml);
+        __xml = document.getElementById('__startBlocks');
+        __loadXml(__xml);
 
         // on change
         Blockly.addChangeListener(function() {
             // Generate JavaScript code and display it.
             Blockly.Python.INFINITE_LOOP_TRAP = null;
             var code = Blockly.Python.workspaceToCode();
-            $('#pythonCode').html(__stripHtml(code));
+            $('#__pythonCode').html(__stripHtml(code));
             Blockly.JavaScript.INFINITE_LOOP_TRAP = null;
             var code = Blockly.JavaScript.workspaceToCode();
-            $('#jsCode').html(__stripHtml(code));
+            $('#__jsCode').html(__stripHtml(code));
 
-            var xml = Blockly.Xml.workspaceToDom(Blockly.mainWorkspace);
-            $('#xml').html(Blockly.Xml.domToPrettyText(xml));
+            var __xml = Blockly.Xml.workspaceToDom(Blockly.mainWorkspace);
+            $('#__xml').html(Blockly.Xml.domToPrettyText(__xml));
         });
 
         // EVENTS
 
         $('#__runCode').click(__runCode);
-
-        $('.__clearCode').click(function(){
-            alertify.confirm(
-                'Clear Workspace', 
-                'Are you sure want to clear the workspace?', 
-                function(){ __clearCode();},
-                function(){}
-            ).set('closable',false); 
-        });
-
-        $('#switchToBlock').click(__showBlockContainer);
-
-        $('#switchToXml').click(__showXmlContainer);
         
-        $('#synchronize').click(function(){
+        $('#__synchronize').click(function(){
             __showBlockContainer();
-            var xml = Blockly.Xml.textToDom($('#xml').val());
-            __loadXml(xml);
+            var __xml = Blockly.Xml.textToDom($('#__xml').val());
+            __loadXml(__xml);
         });
 
-        $('.menu').click(function(event){
-            event.preventDefault();
-        });
+        
 
-        $('#homeMenu').click(__showMainContainer);
-        $('#lessonMenu').click(__showLessonContainer);
-        $('#aboutMenu').click(__showAboutContainer);
+        // FUNCTIONS
 
-        // several functions
-
-        function __loadXml(xml){
+        function __loadXml(__xml){
             __clearCode();
-            Blockly.Xml.domToWorkspace(Blockly.mainWorkspace,xml);
+            Blockly.Xml.domToWorkspace(Blockly.mainWorkspace,__xml);
             __runCode();
         }
 
         function __runCode() {
-            $('#output').html('');
+            $('#__output').html('');
             // Generate JavaScript code and run it.
             window.LoopTrap = 1000;
             Blockly.JavaScript.INFINITE_LOOP_TRAP =
