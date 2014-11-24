@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-	<!-- TODO: http://jsfiddle.net/heera/tBmcE/2/ -->
+    <!-- TODO: http://jsfiddle.net/heera/tBmcE/2/ -->
     <meta charset="utf-8">
     <title>Goblock</title>
     <meta charset="utf-8">
@@ -367,16 +367,106 @@
     <script type="text/javascript" src="assets/alertifyjs/alertify.min.js"></script>
     <script type="text/javascript" src="assets/stratifiedjs/stratified.js"></script>
 
+    <script type="text/javascript">
+        function __arrayToString(val, space_count){
+            var printed_val = '';
+            var spaces = '';
+            for(i=0; i<space_count; i++){
+                spaces += '&nbsp;';
+            }
+            var subArray = false;
+            for(i=0; i<val.length; i++){
+                if($.isArray(val[i])){
+                    subArray = true;
+                    break;
+                }
+            }
+            printed_val += spaces + '[ ';
+            printed_val += subArray? '<br />' : '';
+            var i=0;
+            for(i=0; i<val.length; i++){
+                if($.isArray(val[i])){
+                    printed_val += __arrayToString(val[i],space_count+1);
+                }else{
+                    printed_val += subArray? spaces+'&nbsp;' : '';
+                    printed_val += val[i];
+                }
+                if(i<(val.length-1)){
+                    printed_val += ', ';
+                    printed_val += subArray? '<br />' : '';
+                }
+            }
+            printed_val += subArray? '<br />' : '';
+            printed_val += ' ]';
+            return printed_val;
+        }
+
+        function __stripHtml(val){
+            if($.isArray(val)){
+                val = __arrayToString(val,0);
+            }else if($.type(val) === 'string'){
+                val = val.split("&").join("&amp;");
+                val = val.split("<").join("&lt;");
+                val = val.split(">").join("&gt;");
+                val = val.split(" ").join("&nbsp;");
+            }
+            return val;
+        }
+
+        function __showMainContainer(){
+            $('#menuContainer li').removeClass('active');
+            $('#homeMenu').parent('li').addClass('active');
+            $('#lessonContainer').hide();
+            $('#aboutContainer').hide();
+            $('#mainContainer').show();
+        }
+
+        function __showLessonContainer(){
+            $('#menuContainer li').removeClass('active');
+            $('#lessonMenu').parent('li').addClass('active');
+            $('#lessonMenu').parent('li').addClass('active');
+            $('#mainContainer').hide();
+            $('#aboutContainer').hide();
+            $('#lessonContainer').show();
+        }
+
+        function __showAboutContainer(){
+            $('#menuContainer li').removeClass('active');
+            $('#aboutMenu').parent('li').addClass('active');
+            $('#aboutMenu').parent('li').addClass('active');
+            $('#mainContainer').hide();
+            $('#lessonContainer').hide();
+            $('#aboutContainer').show();
+        }        
+
+        function __showBlockContainer(){
+            $('#xmlContainer').hide();
+            $('#blockContainer').show();
+        }
+
+        function __showXmlContainer(){
+            $('#blockContainer').hide();
+            $('#xmlContainer').show();
+        }
+
+        function __clearCode() {
+            var workspace = Blockly.getMainWorkspace();
+            workspace.clear();
+        }
+    </script>
+
     <script type="text/sjs">    
-        // STATE VARIABLE
-        var __promptClicked = true;  
         
+        var __sys = require("assets/stratifiedjs/modules/sys.sjs");      
+
+        // STATE VARIABLE
+        var __promptClicked = true;
 
         // initialize blockly
         Blockly.inject(document.getElementById('blocklyDiv'),
         {
             toolbox: document.getElementById('toolbox'),
-			media: './assets/blockly/media/',
+            media: './assets/blockly/media/',
         });
 
         // load initial blocks
@@ -430,52 +520,8 @@
 
         // several functions
 
-        function __arrayToString(val, space_count){
-            var printed_val = '';
-            var spaces = '';
-            for(i=0; i<space_count; i++){
-                spaces += '&nbsp;';
-            }
-            var subArray = false;
-            for(i=0; i<val.length; i++){
-                if($.isArray(val[i])){
-                    subArray = true;
-                    break;
-                }
-            }
-            printed_val += spaces + '[ ';
-            printed_val += subArray? '<br />' : '';
-            var i=0;
-            for(i=0; i<val.length; i++){
-                if($.isArray(val[i])){
-                    printed_val += __arrayToString(val[i],space_count+1);
-                }else{
-                    printed_val += subArray? spaces+'&nbsp;' : '';
-                    printed_val += val[i];
-                }
-                if(i<(val.length-1)){
-                    printed_val += ', ';
-                    printed_val += subArray? '<br />' : '';
-                }
-            }
-            printed_val += subArray? '<br />' : '';
-            printed_val += ' ]';
-            return printed_val;
-        }
-
-        function __stripHtml(val){
-            if($.isArray(val)){
-                val = __arrayToString(val,0);
-            }else if($.type(val) === 'string'){
-                val = val.split("&").join("&amp;");
-                val = val.split("<").join("&lt;");
-                val = val.split(">").join("&gt;");
-                val = val.split(" ").join("&nbsp;");
-            }
-            return val;
-        } 
-
         function __outputAlert(message) {
+            __waitPrompt();
             message = __stripHtml(message);
             $('#output').append('<b>' + message + '</b><br />');
         }
@@ -506,41 +552,7 @@
             return input;
         }
 
-        function __showMainContainer(){
-            $('#menuContainer li').removeClass('active');
-            $('#homeMenu').parent('li').addClass('active');
-            $('#lessonContainer').hide();
-            $('#aboutContainer').hide();
-            $('#mainContainer').show();
-        }
-
-        function __showLessonContainer(){
-            $('#menuContainer li').removeClass('active');
-            $('#lessonMenu').parent('li').addClass('active');
-            $('#lessonMenu').parent('li').addClass('active');
-            $('#mainContainer').hide();
-            $('#aboutContainer').hide();
-            $('#lessonContainer').show();
-        }
-
-        function __showAboutContainer(){
-            $('#menuContainer li').removeClass('active');
-            $('#aboutMenu').parent('li').addClass('active');
-            $('#aboutMenu').parent('li').addClass('active');
-            $('#mainContainer').hide();
-            $('#lessonContainer').hide();
-            $('#aboutContainer').show();
-        }        
-
-        function __showBlockContainer(){
-            $('#xmlContainer').hide();
-            $('#blockContainer').show();
-        }
-
-        function __showXmlContainer(){
-            $('#blockContainer').hide();
-            $('#xmlContainer').show();
-        }
+        
 
         function __loadXml(xml){
             __clearCode();
@@ -554,22 +566,51 @@
             window.LoopTrap = 1000;
             Blockly.JavaScript.INFINITE_LOOP_TRAP =
                     'if (--window.LoopTrap == 0) throw "Infinite loop.";\n';
+            // prefix code
+            var prefix = 'var __promptClicked = true;\n';
+            prefix += 'function __outputAlert(message) {\n';
+            prefix += '    __waitPrompt();\n';
+            prefix += '    message = __stripHtml(message);\n';
+            prefix += '    $(\'#output\').append(\'<b>\' + message + \'</b><br />\');\n';
+            prefix += '}\n';
+            prefix += 'function __waitPrompt(){\n';
+            prefix += '    while(!__promptClicked){\n';
+            prefix += '        hold(500);\n';
+            prefix += '    }\n';
+            prefix += '}\n';
+            prefix += 'function __outputPrompt(message){\n';
+            prefix += '    __waitPrompt();\n';
+            prefix += '    __promptClicked = false\n';
+            prefix += '    var input = \'\';\n';
+            prefix += '    alertify.prompt(\n';
+            prefix += '        \'Input\',\n';
+            prefix += '        message,\n';
+            prefix += '        \'\',\n';
+            prefix += '        function(evt,val){input = val; __promptClicked = true},\n';
+            prefix += '        function(evt,val){input = val; __promptClicked = true}\n';
+            prefix += '    ).set(\'closable\',false);\n';
+            prefix += '    __waitPrompt();'; 
+            prefix += '    message = __stripHtml(message);\n';
+            prefix += '    $(\'#output\').append((message == \'\' ? \'\' : \'<b>\' + message + \'</b><br />\') + \n';
+            prefix += '        __stripHtml(input) + \'<br />\');\n';
+            prefix += '    return input;\n';
+            prefix += '}';
+
+            // code
             var code = Blockly.JavaScript.workspaceToCode();
             Blockly.JavaScript.INFINITE_LOOP_TRAP = null;
             try {
                 // do replacement
                 code = code.split("window.alert(").join("__outputAlert(");
                 code = code.split("window.prompt(").join("__outputPrompt(");
-                eval(code);
+                code = code.split(";").join(";__waitPrompt();");
+                console.log(prefix+code);
+                __sys.eval(prefix + code);
             } catch (e) {
                 __outputAlert(e);
             }
         }
 
-        function __clearCode() {
-			var workspace = Blockly.getMainWorkspace();
-			workspace.clear();
-        }
     </script>
 
 </body>
