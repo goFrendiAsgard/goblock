@@ -1,0 +1,9 @@
+<xml xmlns="http://www.w3.org/1999/xhtml">
+    <block type="text_print" id="18" inline="false" x="5" y="5">
+        <value name="TEXT">
+            <block type="text" id="13">
+                <field name="TEXT">...</field>
+            </block>
+        </value>
+    </block>
+</xml>

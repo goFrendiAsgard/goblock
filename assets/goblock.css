@@ -1,7 +1,7 @@
 #__blocklyDiv{
     height:450px;
 }
-#__toolbox, #__startBlocks, #__lessonContainer, #__aboutContainer{
+#__toolbox, #__startBlocks, #__lessonContainer, #__aboutContainer, #__checkCode{
     display:none;
 }
 #__footer{
@@ -14,11 +14,14 @@
 }
 #__output{
     font-family:'courier';
-    height:200px;
+    height:150px;
     background-image:url('image/panda-goblock-small.png');
     background-repeat:no-repeat;
     background-position:bottom right;
     overflow:auto;
+}
+#__runtimeReport{
+    font-size: small;
 }
 #__aboutRightDiv{
     background-repeat:no-repeat;
@@ -47,4 +50,7 @@
 #__header{
     margin-top:10px;
     margin-bottom:20px;
+}
+#__pythonCode, #__jsCode{
+    font-weight: bold;
 }

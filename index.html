@@ -31,6 +31,13 @@
 
         <!-- Main Container -->
         <div id="__mainContainer" class="col-md-12">
+            <div id="__lesson" class="col-md-12"></div>
+            <div class="__btnDiv">
+                <button id="__checkCode" class="btn btn-warning">
+                    <i class="glyphicon glyphicon-check"></i> Test Block
+                </button>
+            </div>
+            <div id="__lessonResult" class="col-md-12"></div>
             <div class="col-md-7">
                 <div id="__blockContainer">
                     <legend>Block</legend>
@@ -69,6 +76,7 @@
             </div>
             <div id="__rightPane" class="col-md-5">  
                 <legend>Program Output</legend>
+                <div id="__runtimeReport" class="alert"></div>
                 <div id="__output" class="well col-md-"></div>
 
                 <legend>Python Code</legend>
@@ -82,9 +90,7 @@
         <!-- End of Main Container -->
 
         <!-- Lesson Container -->
-        <div id="__lessonContainer" class="col-md-12">
-            <div class="alert alert-warning"><b>Under Construction</b> Will be here soon</div>
-        </div>
+        <div id="__lessonContainer" class="col-md-12"></div>
         <!-- End of Lesson Container -->
 
         <!-- About Container -->
@@ -98,155 +104,6 @@
             Go Frendi Gunawan (gofrendiasgard@gmail.com) &copy; 2014
         </p>
     </footer>
-    
-    <!-- Toolbox __xml -->
-    <xml id="__toolbox" style="display: none">
-        <category name="Values">
-            <block type="text"></block>
-            <block type="logic_boolean"></block>
-            <block type="math_number"></block>
-            <block type="math_constant"></block>
-            <block type="lists_create_empty"></block>
-            <block type="lists_create_with"></block>
-            <block type="lists_repeat">
-                <value name="NUM">
-                    <block type="math_number">
-                        <field name="NUM">5</field>
-                    </block>
-                </value>
-            </block>
-        </category>
-        <category name="Variables" custom="VARIABLE"></category>
-        <category name="Input/Output">            
-            <block type="text_print"></block>
-            <block type="text_prompt"></block>
-        </category>
-        <category name="Operations">
-            <category name="Text">
-                <block type="text_length"></block>
-                <block type="text_join"></block>
-            </category>
-            <category name="Math">
-                <block type="math_arithmetic"></block>
-                <block type="math_single"></block>
-                <block type="math_trig"></block>
-                <block type="math_number_property"></block>
-                <block type="math_change">
-                    <value name="DELTA">
-                        <block type="math_number">
-                            <field name="NUM">1</field>
-                        </block>
-                    </value>
-                </block>
-                <block type="math_round"></block>
-                <block type="math_on_list"></block>
-                <block type="math_modulo"></block>
-                <block type="math_constrain">
-                    <value name="LOW">
-                        <block type="math_number">
-                            <field name="NUM">1</field>
-                        </block>
-                    </value>
-                    <value name="HIGH">
-                        <block type="math_number">
-                            <field name="NUM">100</field>
-                        </block>
-                    </value>
-                </block>
-                <block type="math_random_int">
-                    <value name="FROM">
-                        <block type="math_number">
-                            <field name="NUM">1</field>
-                        </block>
-                    </value>
-                    <value name="TO">
-                        <block type="math_number">
-                            <field name="NUM">100</field>
-                        </block>
-                    </value>
-                </block>
-                <block type="math_random_float"></block>
-            </category>
-            <category name="Boolean">
-                <block type="logic_compare"></block>
-                <block type="logic_operation"></block>
-                <block type="logic_negate"></block>
-                <block type="logic_null"></block>
-                <block type="logic_ternary"></block>
-            </category>
-            <category name="Lists (Array)">
-                <block type="lists_length"></block>
-                <block type="lists_isEmpty"></block>
-                <block type="lists_indexOf"></block>
-                <block type="lists_getIndex"></block>
-                <block type="lists_setIndex"></block>
-            </category>
-        </category>
-        <category name="Controls">
-            <category name="If (Branch)">
-                <block type="controls_if"></block>
-                <block type="controls_if">
-                    <mutation else="1"></mutation>
-                </block>
-                <block type="controls_if">
-                    <mutation elseif="1" else="1"></mutation>
-                </block>
-            </category>
-            <category name="Loops (Iteration)">
-                <block type="controls_repeat_ext">
-                    <value name="TIMES">
-                        <block type="math_number">
-                            <field name="NUM">10</field>
-                        </block>
-                    </value>
-                </block>
-                <block type="controls_whileUntil"></block>
-                <block type="controls_for">
-                    <field name="VAR">i</field>
-                    <value name="FROM">
-                        <block type="math_number">
-                            <field name="NUM">1</field>
-                        </block>
-                    </value>
-                    <value name="TO">
-                        <block type="math_number">
-                            <field name="NUM">10</field>
-                        </block>
-                    </value>
-                    <value name="BY">
-                        <block type="math_number">
-                            <field name="NUM">1</field>
-                        </block>
-                    </value>
-                </block>
-                <block type="controls_forEach"></block>
-                <block type="controls_flow_statements"></block>
-            </category>
-        </category>
-        <category name="Functions" custom="PROCEDURE"></category>
-    </xml>
-
-    <!-- initialScript XML -->
-    <xml id="__startBlocks" __xmlns="http://www.w3.org/1999/xhtml">
-        <block type="text_print" id="1" inline="false" x="10" y="10">
-            <value name="TEXT">
-                <block type="text" id="2">
-                    <field name="TEXT">Hi, my name is Guo, a programming panda</field>
-                </block>
-            </value>
-            <next>
-                <block type="text_print" id="21" inline="false">
-                    <value name="TEXT">
-                        <block type="text" id="26">
-                            <field name="TEXT">Nice to meet you :)</field>
-                        </block>
-                    </value>
-                </block>
-            </next>
-        </block>
-    </xml>
-
-
 
     <script type="text/javascript" src="assets/jquery/jquery-1.11.1.min.js"></script>
     <script type="text/javascript" src="assets/jquery/jquery-migrate-1.2.1.min.js"></script>
@@ -259,10 +116,12 @@
     <script type="text/javascript" src="assets/alertifyjs/alertify.min.js"></script>
     <script type="text/javascript" src="assets/stratifiedjs/stratified.js"></script>
     <script type="text/javascript" src="assets/goblock.js"></script>
+    <script type="text/javascript" src="lessons.js"></script>
 
     <script id="__asyncFunc" type="text/sjs">
         // STATE VARIABLE
         var __promptClicked = true;
+        var __interactionTime = 0;        
 
         function __outputAlert(message) {
             __waitPrompt();
@@ -273,6 +132,7 @@
         function __waitPrompt(){
             while(!__promptClicked){
                 hold(500);
+                __interactionTime += 500;
             }
         }
 
@@ -285,46 +145,54 @@
                 message,
                 '',
                 function(evt,val){input = val; __promptClicked = true},
-                function(evt,val){input = val; __promptClicked = true}
+                function(){input = ''; __promptClicked = true}
             ).set('closable',false);
 
             __waitPrompt();
 
             message = __stripHtml(message);
-            $('#__output').append((message == '' ? '' : '<b>' + message + '</b><br />') + 
+            $('#__output').append((message == '' ? '' : '<b>' + message + '</b> ') + 
                 __stripHtml(input) + '<br />');
             return input;
         }
     </script>
 
-    <script type="text/sjs">    
-            
-        var __sys = require("assets/stratifiedjs/modules/sys.sjs");    
+    <script type="text/sjs">
+        var __sys = require("assets/stratifiedjs/modules/sys.sjs"); 
+        var __lessonIndex = -1;
 
-        // initialize blockly
-        Blockly.inject(document.getElementById('__blocklyDiv'),
-        {
-            toolbox: document.getElementById('__toolbox'),
-            media: './assets/blockly/media/',
-        });
+        $.ajax({url:'partials/toolbox.xml', success: function(toolbox){
+            // initialize blockly
+            toolbox = Blockly.Xml.domToText(toolbox);
+            Blockly.inject(document.getElementById('__blocklyDiv'),
+            {
+                toolbox: toolbox,
+                media: './assets/blockly/media/',
+            });
 
-        // load initial blocks
-        __xml = document.getElementById('__startBlocks');
-        __loadXml(__xml);
+            // on change
+            Blockly.addChangeListener(function() {
+                // Generate JavaScript code and display it.
+                Blockly.Python.INFINITE_LOOP_TRAP = null;
+                var code = Blockly.Python.workspaceToCode();
+                $('#__pythonCode').html(__stripHtml(code));
+                Blockly.JavaScript.INFINITE_LOOP_TRAP = null;
+                var code = Blockly.JavaScript.workspaceToCode();
+                $('#__jsCode').html(__stripHtml(code));
 
-        // on change
-        Blockly.addChangeListener(function() {
-            // Generate JavaScript code and display it.
-            Blockly.Python.INFINITE_LOOP_TRAP = null;
-            var code = Blockly.Python.workspaceToCode();
-            $('#__pythonCode').html(__stripHtml(code));
-            Blockly.JavaScript.INFINITE_LOOP_TRAP = null;
-            var code = Blockly.JavaScript.workspaceToCode();
-            $('#__jsCode').html(__stripHtml(code));
+                var __xml = Blockly.Xml.workspaceToDom(Blockly.mainWorkspace);
+                $('#__xml').html(Blockly.Xml.domToPrettyText(__xml));
+                $('#__output').css('color','gray');
+            });
 
-            var __xml = Blockly.Xml.workspaceToDom(Blockly.mainWorkspace);
-            $('#__xml').html(Blockly.Xml.domToPrettyText(__xml));
-        });
+            $.ajax({url:'partials/startblock.xml', success: function(startblock){
+                startblock = Blockly.Xml.domToText(startblock);
+                __loadXml(startblock);
+            }}); // end of ajax startblock            
+
+        }}); // end of ajax toolbox
+
+        
 
         // EVENTS
 
@@ -332,18 +200,129 @@
         
         $('#__synchronize').click(function(){
             __showBlockContainer();
-            var __xml = Blockly.Xml.textToDom($('#__xml').val());
-            __loadXml(__xml);
+            __loadXml($('#__xml').val());
         });
 
+        $('.__lessonLink').live('click', function(event){
+            event.preventDefault();
+            __lessonIndex = $(this).attr('index');
+            lesson = __LESSONS[__lessonIndex];
+            __showMainContainer();
+            // load lesson
+            $('#__lesson').load(lesson.lesson);
+            $('#__checkCode').show();
+            // load startblock
+            $.ajax({url:lesson.startblock, success: function(startblock){
+                startblock = Blockly.Xml.domToText(startblock);
+                __loadXml(startblock);
+            }});
+        });
+
+        $('#__checkCode').click(function(){
+            var test_list = __LESSONS[__lessonIndex].test;
+            var multi_target = __LESSONS[__lessonIndex].multitarget;
+            var html = '<table class="table">';
+            html += '<thead>';
+            html += '<tr><th>Input</th><th>Target</th><th>Output</th><th>Match</th></tr>'
+            html += '</thead><tbody>';  
+            var all_match = true;          
+            for(i=0; i<test_list.length; i++){
+                // get input and target
+                test   = test_list[0];
+                input  = test[0];
+                target = test[1];
+                // check code
+                result = __checkCode(input, target, multi_target);
+                match  = result[0];
+                output = result[1];
+                error  = result[2];
+                all_match = all_match && match;
+                // put html
+                html += '<tr>';
+                html += '<td>' + input.join('<br />') + '</td>';
+                html += '<td>' + target.join('<br />') + '</td>';
+                html += '<td>' + output.join('<br />') + (error == ''? '' : '<br />' + error) + '</td>';
+                html += '<td>' + (all_match? 'Match' : 'Unmatch') + '</td>';
+                html += '</tr>';
+            }
+            html += '</tbody></table>';
+            if(all_match){
+                html = '<div class="alert alert-success"><b>Test Success, Congratulation !!!</b><br />' + html + '</div>';
+                storage = __getStorage();
+                passed = storage.passed;
+                passed.push(__lessonIndex);
+                storage.passed = passed;
+                __setStorage(storage);
+                __loadLesson();
+            }else{
+                html = '<div class="alert alert-danger"><b>Test Failed, Try Again !!!</b><br />' + html + '</div>';                
+            }
+            $('#__lessonResult').html(html);
+            if(all_match){
+                hold(2000);                
+                __showLessonContainer();
+            }
+        });
         
 
         // FUNCTIONS
 
-        function __loadXml(__xml){
+        function __loadXml(xml){
             __clearCode();
-            Blockly.Xml.domToWorkspace(Blockly.mainWorkspace,__xml);
+            xml = Blockly.Xml.textToDom(xml);
+            Blockly.Xml.domToWorkspace(Blockly.mainWorkspace, xml);
             __runCode();
+        }
+
+        function __getTimeStamp(){
+            var d = new Date();
+            return d.getTime(); 
+        }
+
+        function __checkCode(input, target_list, multi_target){
+            __multi_target = multi_target == undefined? false: multi_target;
+            // Generate JavaScript code and run it.
+            window.LoopTrap = 1000;
+            Blockly.JavaScript.INFINITE_LOOP_TRAP =
+                    'if (--window.LoopTrap == 0) throw "Infinite loop.";\n';
+
+            var __arrOutput        = new Array();
+            var __arrInput         = input;
+            var __target_list      = target_list;
+            var __arrInputIndex    = 0;
+
+            // code
+            var code = Blockly.JavaScript.workspaceToCode();
+            // add prefix to code
+            prefix  = 'function __in(message){result = __arrInput[__arrInputIndex]; __arrInputIndex++; return result;}'
+            prefix += 'function __out(data){__arrOutput.push(data);}';
+            code    = prefix + code; 
+            
+            try {
+                // do replacement
+                code = code.split("window.alert(").join("__out(");
+                code = code.split("window.prompt(").join("__in(");
+                // run the code
+                eval(prefix + code);
+                if(!__multi_target){
+                    if(__arrOutput.equals(__target_list)){
+                        return [true, __arrOutput, ''];
+                    }else{
+                        return [false, __arrOutput, ''];
+                    }
+                }else{
+                    for(i=0; i<__target_list.length; i++){
+                        target = __target_list[i];
+                        if(target.equals(__arrOutput)){
+                            return [true, __arrOutput, ''];
+                        }
+                    }
+                    return [false, __arrOutput, ''];
+                }
+            } catch (e) {
+                console.log(e);
+                return [false, __arrOutput, e];
+            }
         }
 
         function __runCode() {
@@ -358,17 +337,28 @@
 
             // code
             var code = Blockly.JavaScript.workspaceToCode();
-            Blockly.JavaScript.INFINITE_LOOP_TRAP = null;
             try {
                 // do replacement
                 code = code.split("window.alert(").join("__outputAlert(");
                 code = code.split("window.prompt(").join("__outputPrompt(");
                 code = code.split(";").join(";__waitPrompt();");
-                console.log(prefix+code);
+                // run the code
+                __start   = __getTimeStamp();
                 __sys.eval(prefix + code);
+                __end     = __getTimeStamp();
+                __elapsedTime = __end - __start;
+                __processTime = __elapsedTime - __interactionTime;
+                // print time report
+                timeReport = '<b>Process Time:</b> '+__processTime+' ms, <b>Interaction Time:</b> '+__interactionTime+' ms';
+                $('#__runtimeReport').html('<b>PROGRAM EXECUTED</b><br />' + timeReport);
+                $('#__runtimeReport').removeClass('alert-danger');
+                $('#__runtimeReport').addClass('alert-success');
             } catch (e) {
-                __outputAlert(e);
+                $('#__runtimeReport').html('<b>PROGRAM ERROR</b><br />' + e);
+                $('#__runtimeReport').removeClass('alert-success');
+                $('#__runtimeReport').addClass('alert-danger');
             }
+            $('#__output').css('color','black');
         }
 
     </script>

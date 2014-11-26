@@ -14,4 +14,4 @@ A visual programming for newbies. Goblock is built on top of google blockly. Com
 * Python and Javascript
   You can immediately look for corresponding python & javascript code in the same screen.
 
-CLick [https://gofrendiasgard.github.io/goblock](here) for demo.
+Click [here](https://gofrendiasgard.github.io/goblock) for demo.

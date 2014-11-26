@@ -1,3 +1,26 @@
+Array.prototype.equals = function (array) {
+    // if the other array is a falsy value, return
+    if (!array)
+        return false;
+
+    // compare lengths - can save a lot of time 
+    if (this.length != array.length)
+        return false;
+
+    for (var i = 0, l=this.length; i < l; i++) {
+        // Check if we have nested arrays
+        if (this[i] instanceof Array && array[i] instanceof Array) {
+            // recurse into the nested arrays
+            if (!this[i].equals(array[i]))
+                return false;       
+        }           
+        else if (this[i] != array[i]) { 
+            // Warning - two different object instances will never be equal: {x:20} != {x:20}
+            return false;   
+        }           
+    }       
+    return true;
+}
 function __arrayToString(val, space_count){
     var printed_val = '';
     var spaces = '';
@@ -58,6 +81,7 @@ function __showLessonContainer(){
     $('#__mainContainer').hide();
     $('#__aboutContainer').hide();
     $('#__lessonContainer').show();
+
 }
 
 function __showAboutContainer(){
@@ -84,6 +108,45 @@ function __clearCode() {
     workspace.clear();
 }
 
+function __setStorage(obj){
+    localStorage.setItem('__GOBLOCK', JSON.stringify(obj));
+}
+
+function __getStorage(){
+    result = localStorage.getItem('__GOBLOCK');
+    if(result == undefined || result == null){
+        __setStorage({passed:[]});
+        result = localStorage.getItem('__GOBLOCK');
+    }
+    result = JSON.parse(result);
+    return result;
+}
+
+function __loadLesson(){
+    // storage
+    var storage = __getStorage();
+    var passed = storage.passed;
+    $('#__lessonContainer').html('');
+    // build the content of lesson
+    for(i=0; i<__LESSONS.length; i++){
+        lesson = __LESSONS[i];
+        title = lesson.title;
+        description = lesson.description;
+        var badge = '<div>&nbsp;</div>';
+        if($.inArray(i+"",passed) != -1){
+            badge = '<div><span class="label label-success">Passed !!!</span></div>';
+        }
+        // build html
+        var html = '<div class="col-xs-6 col-md-3">';
+        html    += '    <div class="thumbnail">';
+        html    += '        <a href="#" class="__lessonLink" index="'+i+'"><h4>'+title+'</h4></a>' + badge;
+        html    += '        <p>'+description+'</p>';
+        html    += '    </div>';
+        html    += '</div>';
+        $('#__lessonContainer').append(html);
+    }
+}
+
 // EVENTS
 
 $('.__clearCode').click(function(){
@@ -108,10 +171,13 @@ $('#__lessonMenu').click(__showLessonContainer);
 $('#__aboutMenu').click(__showAboutContainer);
 
 $(document).ready(function(){
+    // get the content of about
     $.ajax({
-        'url'     : 'partial/about.html',
+        'url'     : 'partials/about.html',
         'success' : function(response){
             $('#__aboutContainer').html(response);
         }
     });
+    
+    __loadLesson();
 });
