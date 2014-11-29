@@ -133,7 +133,7 @@ function __loadLesson(){
         title = lesson.title;
         description = lesson.description;
         var badge = '<div>&nbsp;</div>';
-        if($.inArray(i+"",passed) != -1){
+        if($.inArray(title+"",passed) != -1){
             badge = '<div><span class="label label-success">Passed !!!</span></div>';
         }
         // build html
@@ -147,37 +147,52 @@ function __loadLesson(){
     }
 }
 
-// EVENTS
 
-$('.__clearCode').click(function(){
-    alertify.confirm(
-        'Clear Workspace', 
-        'Are you sure want to clear the workspace?', 
-        function(){ __clearCode();},
-        function(){}
-    ).set('closable',false); 
-});
-
-$('#__switchToBlock').click(__showBlockContainer);
-
-$('#__switchToXml').click(__showXmlContainer);
-
-$('.__menu').click(function(event){
-    event.preventDefault();
-});
-
-$('#__homeMenu').click(__showMainContainer);
-$('#__lessonMenu').click(__showLessonContainer);
-$('#__aboutMenu').click(__showAboutContainer);
 
 $(document).ready(function(){
     // get the content of about
     $.ajax({
         'url'     : 'partials/about.html',
+        'cache'   : false,
         'success' : function(response){
             $('#__aboutContainer').html(response);
         }
     });
     
     __loadLesson();
+
+    // EVENTS
+    $('.__clearCode').click(function(){
+        alertify.confirm(
+            'Clear Workspace', 
+            'Are you sure want to clear the workspace?', 
+            function(){ __clearCode();},
+            function(){}
+        ).set('closable',false); 
+    });
+
+    $('#__switchToBlock').click(__showBlockContainer);
+
+    $('#__switchToXml').click(__showXmlContainer);
+
+    $('.__menu').click(function(event){
+        event.preventDefault();
+    });
+
+    $('#__homeMenu').click(__showMainContainer);
+    $('#__lessonMenu').click(__showLessonContainer);
+    $('#__aboutMenu').click(__showAboutContainer);
+    $('#__fullscreen').click(function(event){
+        $(document).toggleFullScreen();
+    });
+    $(document).bind("fullscreenchange", function() {
+        if($(document).fullScreen()){
+            $('#__header').fadeOut('slow');
+            $('body').css('padding-top','40px');
+        }else{
+            $('#__header').fadeIn('slow');
+            $('body').css('padding-top','10px');
+        }
+    });
+    
 });

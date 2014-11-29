@@ -1,0 +1,19 @@
+<xml xmlns="http://www.w3.org/1999/xhtml">
+  <block type="variables_set" id="5" inline="true" x="20" y="20">
+    <field name="VAR">question</field>
+    <value name="VALUE">
+      <block type="text" id="6">
+        <field name="TEXT">What is love?</field>
+      </block>
+    </value>
+    <next>
+      <block type="text_print" id="7" inline="false">
+        <value name="TEXT">
+          <block type="variables_get" id="8">
+            <field name="VAR">question</field>
+          </block>
+        </value>
+      </block>
+    </next>
+  </block>
+</xml>

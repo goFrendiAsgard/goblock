@@ -1,7 +1,6 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <!-- TODO: http://jsfiddle.net/heera/tBmcE/2/ -->
     <meta charset="utf-8">
     <title>Goblock</title>
     <meta charset="utf-8">
@@ -25,25 +24,25 @@
                     <li role="presentation"><a id="__aboutMenu" class="__menu" href="#"><i class="glyphicon glyphicon-user"></i> About</a></li>
                 </ul>
             </nav>
-            <h3 class="text-muted">Goblock | Visual Programming For Newbie</h3>
+            <h4 class="text-muted">
+                Goblock | Visual Programming For Newbie 
+                <button id="__fullscreen" class="btn btn-xs btn-link"><i class="glyphicon glyphicon-fullscreen"></i></button>
+            </h4>
         </div>
         <!-- End of Header -->
 
         <!-- Main Container -->
         <div id="__mainContainer" class="col-md-12">
-            <div id="__lesson" class="col-md-12"></div>
-            <div class="__btnDiv">
-                <button id="__checkCode" class="btn btn-warning">
-                    <i class="glyphicon glyphicon-check"></i> Test Block
-                </button>
-            </div>
-            <div id="__lessonResult" class="col-md-12"></div>
+
             <div class="col-md-7">
                 <div id="__blockContainer">
-                    <legend>Block</legend>
+                    <legend>Block Workspace</legend>                    
                     <div class="__btnDiv">
                         <button id="__runCode" class="btn btn-primary">
                             <i class="glyphicon glyphicon-play"></i> Run
+                        </button>
+                        <button id="__checkCode" class="btn btn-primary">
+                            <i class="glyphicon glyphicon-check"></i> Submit Block
                         </button>
                         <button id="__switchToXml" class="btn btn-default">
                             <i class="glyphicon glyphicon-align-justify"></i> XML
@@ -51,7 +50,7 @@
                         <button class="__clearCode btn btn-danger">
                             <i class="glyphicon glyphicon-trash"></i> Clear
                         </button>
-                    </div>
+                    </div>                    
                     <div id="__blocklyDiv"></div>
                 </div>
 
@@ -71,19 +70,34 @@
                     <textarea id="__xml"></textarea> 
                 </div>
 
-                
-
             </div>
-            <div id="__rightPane" class="col-md-5">  
-                <legend>Program Output</legend>
-                <div id="__runtimeReport" class="alert"></div>
-                <div id="__output" class="well col-md-"></div>
+            <div id="__rightPane" class="col-md-5">
 
-                <legend>Python Code</legend>
-                <pre id="__pythonCode"></pre>
+                <div id="__lesson"></div>            
+                <div id="__lessonResult"></div>
 
-                <legend>Javascript Code</legend>
-                <pre id="__jsCode"></pre>
+                <legend>Output</legend>
+                <div id="__output" class="col-md-"></div>
+
+                <legend>Code</legend>
+                <div role="tabpanel">
+                    <!-- Nav tabs -->
+                    <ul class="nav nav-tabs" role="tablist">
+                        <li role="presentation" class="active"><a href="#__pythonContainer"role="tab" data-toggle="tab">Python</a></li>
+                        <li role="presentation"><a href="#__jsContainer" aria-controls="profile" role="tab" data-toggle="tab">Javascript</a></li>
+                    </ul>
+
+                    <!-- Tab panes -->
+                    <div class="tab-content">
+                        <div role="tabpanel" class="tab-pane active" id="__pythonContainer">
+                            <pre id="__pythonCode"></pre>
+                        </div>
+                        <div role="tabpanel" class="tab-pane" id="__jsContainer">
+                            <pre id="__jsCode"></pre>
+                        </div>
+                    </div>
+                </div>
+
             </div>
 
         </div>
@@ -107,6 +121,7 @@
 
     <script type="text/javascript" src="assets/jquery/jquery-1.11.1.min.js"></script>
     <script type="text/javascript" src="assets/jquery/jquery-migrate-1.2.1.min.js"></script>
+    <script type="text/javascript" src="assets/jquery-fullscreen-plugin/jquery.fullscreen-min.js"></script>
     <script type="text/javascript" src="assets/bootstrap/js/bootstrap.min.js"></script>
     <script type="text/javascript" src="assets/blockly/blockly_compressed.js"></script>
     <script type="text/javascript" src="assets/blockly/blocks_compressed.js"></script>
@@ -120,13 +135,23 @@
 
     <script id="__asyncFunc" type="text/sjs">
         // STATE VARIABLE
-        var __promptClicked = true;
-        var __interactionTime = 0;        
+        var __promptClicked     = true;
+        var __interactionTime   = 0;
+        var __lastIsOutput      = false;   
+
+        function __inDialogBubble(message){            
+            return '<div class="__inDialogBubble">'+__stripHtml(message)+'</div>';
+        }
+        function __outDialogBubble(message){
+            return '<div id="__lastOutputDialog" class="__outDialogBubble">'+__stripHtml(message)+'</div>';
+        }     
 
         function __outputAlert(message) {
-            __waitPrompt();
-            message = __stripHtml(message);
-            $('#__output').append('<b>' + message + '</b><br />');
+            $('#__lastOutputDialog').append('<br />'+__stripHtml(message));
+            if(!__lastIsOutput){
+                $('#__output').append(__outDialogBubble(message));
+                __lastIsOutput = true;
+            }
         }
         
         function __waitPrompt(){
@@ -150,9 +175,14 @@
 
             __waitPrompt();
 
-            message = __stripHtml(message);
-            $('#__output').append((message == '' ? '' : '<b>' + message + '</b> ') + 
-                __stripHtml(input) + '<br />');
+            if(message != ''){
+                __outputAlert(message);
+            }            
+            // user dialog
+            $('#__output').append(__inDialogBubble(input));
+            // last dialog is not output dialog anymore
+            __lastIsOutput = false;
+            $('#__lastOutputDialog').removeAttr('id');
             return input;
         }
     </script>
@@ -182,7 +212,7 @@
 
                 var __xml = Blockly.Xml.workspaceToDom(Blockly.mainWorkspace);
                 $('#__xml').html(Blockly.Xml.domToPrettyText(__xml));
-                $('#__output').css('color','gray');
+                $('#__output').fadeTo('slow',0.5);
             });
 
             $.ajax({url:'partials/startblock.xml', success: function(startblock){
@@ -191,8 +221,6 @@
             }}); // end of ajax startblock            
 
         }}); // end of ajax toolbox
-
-        
 
         // EVENTS
 
@@ -206,13 +234,22 @@
         $('.__lessonLink').live('click', function(event){
             event.preventDefault();
             __lessonIndex = $(this).attr('index');
-            lesson = __LESSONS[__lessonIndex];
-            __showMainContainer();
+            var lesson = __LESSONS[__lessonIndex];
+            var title = lesson.title;
             // load lesson
-            $('#__lesson').load(lesson.lesson);
-            $('#__checkCode').show();
+            $.ajax({
+                url    : lesson.lesson,
+                cache  : false,
+                success: function(response){
+                    $('#__lesson').html('<legend>Lesson '+(parseInt(__lessonIndex)+1)+' : '+title+'</legend>'+response);
+                    $('#__checkCode').show();
+                    $('#__lessonResult').html('');
+                }
+            });
+            // show container
+            __showMainContainer();
             // load startblock
-            $.ajax({url:lesson.startblock, success: function(startblock){
+            $.ajax({url:lesson.startblock, cache: false, success: function(startblock){
                 startblock = Blockly.Xml.domToText(startblock);
                 __loadXml(startblock);
             }});
@@ -221,42 +258,62 @@
         $('#__checkCode').click(function(){
             var test_list = __LESSONS[__lessonIndex].test;
             var multi_target = __LESSONS[__lessonIndex].multitarget;
-            var html = '<table class="table">';
+            var title = __LESSONS[__lessonIndex].title;
+            var html = '<table class="table table-striped">';
             html += '<thead>';
             html += '<tr><th>Input</th><th>Target</th><th>Output</th><th>Match</th></tr>'
             html += '</thead><tbody>';  
-            var all_match = true;          
+            var all_match = true; 
             for(i=0; i<test_list.length; i++){
+
                 // get input and target
-                test   = test_list[0];
-                input  = test[0];
-                target = test[1];
+                var test   = test_list[i];
+                var input  = test[0];
+                var target = test[1];
+
                 // check code
-                result = __checkCode(input, target, multi_target);
-                match  = result[0];
-                output = result[1];
-                error  = result[2];
+                var result = __checkCode(input, target, multi_target);
+                var match  = result[0];
+                var output = result[1];
+                var error  = result[2];
                 all_match = all_match && match;
+
                 // put html
-                html += '<tr>';
-                html += '<td>' + input.join('<br />') + '</td>';
-                html += '<td>' + target.join('<br />') + '</td>';
-                html += '<td>' + output.join('<br />') + (error == ''? '' : '<br />' + error) + '</td>';
-                html += '<td>' + (all_match? 'Match' : 'Unmatch') + '</td>';
-                html += '</tr>';
+                if(multi_target){
+                    var rowspan = target.length;
+                    html += '<tr>';
+                    html += '<td rowspan="'+rowspan+'">' + input.join('<br />') + '</td>';
+                    html += '<td>' + target[0].join('<br />') + '</td>';
+                    html += '<td rowspan="'+rowspan+'">' + output.join('<br />') + (error == ''? '' : '<br />' + error) + '</td>';
+                    html += '<td rowspan="'+rowspan+'">' + (all_match? 'Match' : 'Unmatch') + '</td>';
+                    html += '</tr>';
+                    for(j=1; j<target.length; j++){
+                        html += '<tr>';
+                        html += '<td>' + target[j].join('<br />') + '</td>';
+                        html += '</tr>';
+                    }
+                }else{
+                    html += '<tr>';
+                    html += '<td>' + input.join('<br />') + '</td>';
+                    html += '<td>' + target.join('<br />') + '</td>';
+                    html += '<td>' + output.join('<br />') + (error == ''? '' : '<br />' + error) + '</td>';
+                    html += '<td>' + (all_match? 'Match' : 'Unmatch') + '</td>';
+                    html += '</tr>';
+                }
             }
             html += '</tbody></table>';
             if(all_match){
-                html = '<div class="alert alert-success"><b>Test Success, Congratulation !!!</b><br />' + html + '</div>';
+                html = '<div class="alert alert-success"><b>Correct</b> You have pass this lesson</div>' + html;
                 storage = __getStorage();
                 passed = storage.passed;
-                passed.push(__lessonIndex);
+                passed.push(title);
                 storage.passed = passed;
                 __setStorage(storage);
                 __loadLesson();
             }else{
-                html = '<div class="alert alert-danger"><b>Test Failed, Try Again !!!</b><br />' + html + '</div>';                
+                html = '<div class="alert alert-danger"><b>Wrong</b> Try again</div>' + html;                
             }
+            html = '<legend>Test Result</legend>' + html;
             $('#__lessonResult').html(html);
             if(all_match){
                 hold(2000);                
@@ -311,6 +368,7 @@
                         return [false, __arrOutput, ''];
                     }
                 }else{
+                    var i=0;
                     for(i=0; i<__target_list.length; i++){
                         target = __target_list[i];
                         if(target.equals(__arrOutput)){
@@ -349,16 +407,14 @@
                 __elapsedTime = __end - __start;
                 __processTime = __elapsedTime - __interactionTime;
                 // print time report
+                $('#__output').append('<div id="__runtimeReport"></div>');
                 timeReport = '<b>Process Time:</b> '+__processTime+' ms, <b>Interaction Time:</b> '+__interactionTime+' ms';
-                $('#__runtimeReport').html('<b>PROGRAM EXECUTED</b><br />' + timeReport);
-                $('#__runtimeReport').removeClass('alert-danger');
-                $('#__runtimeReport').addClass('alert-success');
+                $('#__runtimeReport').html('<b>SUCCESS</b><br />' + timeReport);
             } catch (e) {
-                $('#__runtimeReport').html('<b>PROGRAM ERROR</b><br />' + e);
-                $('#__runtimeReport').removeClass('alert-success');
-                $('#__runtimeReport').addClass('alert-danger');
+                $('#__output').append('<div id="__runtimeReport"></div>');
+                $('#__runtimeReport').html('<b>ERROR</b><br />' + e);
             }
-            $('#__output').css('color','black');
+            $('#__output').fadeTo('slow',1);
         }
 
     </script>
