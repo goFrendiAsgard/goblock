@@ -315,10 +315,10 @@
             }
             html = '<legend>Test Result</legend>' + html;
             $('#__lessonResult').html(html);
-            if(all_match){
-                hold(2000);                
-                __showLessonContainer();
-            }
+            // scroll to lessonResult
+            $('body').animate({
+                scrollTop: $("#__lessonResult").offset().top - 120,
+            }, 'slow');
         });
         
 
@@ -415,6 +415,10 @@
                 $('#__runtimeReport').html('<b>ERROR</b><br />' + e);
             }
             $('#__output').fadeTo('slow',1);
+            // scroll to output
+            $('body').animate({
+                scrollTop: $("#__output").offset().top - 120,
+            }, 'slow');
         }
 
     </script>

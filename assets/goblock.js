@@ -67,6 +67,7 @@ function __stripHtml(val){
 }
 
 function __showMainContainer(){
+    $('.blocklyHtmlInput').remove();
     $('#__menuContainer li').removeClass('active');
     $('#__homeMenu').parent('li').addClass('active');
     $('#__lessonContainer').hide();
@@ -75,16 +76,17 @@ function __showMainContainer(){
 }
 
 function __showLessonContainer(){
+    $('.blocklyHtmlInput').remove();
     $('#__menuContainer li').removeClass('active');
     $('#__lessonMenu').parent('li').addClass('active');
     $('#__lessonMenu').parent('li').addClass('active');
     $('#__mainContainer').hide();
     $('#__aboutContainer').hide();
     $('#__lessonContainer').show();
-
 }
 
 function __showAboutContainer(){
+    $('.blocklyHtmlInput').remove();
     $('#__menuContainer li').removeClass('active');
     $('#__aboutMenu').parent('li').addClass('active');
     $('#__aboutMenu').parent('li').addClass('active');

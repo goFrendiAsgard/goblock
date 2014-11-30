@@ -30,11 +30,11 @@ body{
 }
 #__aboutRightDiv{
     background-repeat:no-repeat;
-    background-image:url('image/panda-goblock.png');
+    background-image:url('image/panda-goblock-small.png');
     background-position:bottom right;
 }
 #__aboutRightDivFiller{
-    height:200px;
+    height:150px;
 }
 #__xml{
     font-family:'courier';

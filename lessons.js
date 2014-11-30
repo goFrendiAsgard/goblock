@@ -23,4 +23,19 @@ var __LESSONS = [
         'lesson'        :   'lessons/love.html',
         'startblock'    :   'lessons/love.xml',
     },
+    // third lesson, pokemon
+    {
+        'title'         :   'Pokemon',
+        'description'   :   'Choose your pokemon !!!',
+        'multitarget'   :   false,
+        'test'          :   [
+                                [ ['Red'], ['Charmender'] ],
+                                [ ['Blue'], ['Squirtle'] ],
+                                [ ['Green'], ['Bulbasur'] ],
+                                [ ['Yellow'], ['Pikachu'] ],
+                                [ ['Other'], ['Snorlax'] ]
+                            ],
+        'lesson'        :   'lessons/pokemon.html',
+        'startblock'    :   'lessons/pokemon.xml',
+    }
 ]
