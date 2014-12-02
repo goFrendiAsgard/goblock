@@ -37,5 +37,18 @@ var __LESSONS = [
                             ],
         'lesson'        :   'lessons/pokemon.html',
         'startblock'    :   'lessons/pokemon.xml',
-    }
+    },
+    // fourth lesson, rocket launcher
+    {
+        'title'         :   'Rocket Launcher',
+        'description'   :   '3, 2, 1',
+        'multitarget'   :   false,
+        'test'          :   [
+                                [ [5], [[5,4,3,2,1,'launch']] ],
+                                [ [10], [[10,9,8,7,6,5,4,3,2,1,'launch']] ],
+                                [ [3], [[3,2,1,'launch']] ],
+                            ],
+        'lesson'        :   'lessons/rocket_launcher.html',
+        'startblock'    :   'lessons/rocket_launcher.xml'
+    },
 ]

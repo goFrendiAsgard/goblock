@@ -1,0 +1,131 @@
+<xml xmlns="http://www.w3.org/1999/xhtml">
+  <block type="text_print" id="7" inline="false" x="18" y="12">
+    <value name="TEXT">
+      <block type="math_number" id="16">
+        <field name="NUM">3</field>
+      </block>
+    </value>
+    <next>
+      <block type="text_print" id="17" inline="false">
+        <value name="TEXT">
+          <block type="math_number" id="18">
+            <field name="NUM">2</field>
+          </block>
+        </value>
+        <next>
+          <block type="text_print" id="19" inline="false">
+            <value name="TEXT">
+              <block type="math_number" id="20">
+                <field name="NUM">1</field>
+              </block>
+            </value>
+            <next>
+              <block type="text_print" id="21" inline="false">
+                <value name="TEXT">
+                  <block type="text" id="31">
+                    <field name="TEXT">Launch</field>
+                  </block>
+                </value>
+              </block>
+            </next>
+          </block>
+        </next>
+      </block>
+    </next>
+  </block>
+  <block type="variables_set" id="34" inline="true" x="20" y="142">
+    <field name="VAR">counter</field>
+    <value name="VALUE">
+      <block type="math_number" id="43">
+        <field name="NUM">3</field>
+      </block>
+    </value>
+    <next>
+      <block type="text_print" id="46" inline="false">
+        <value name="TEXT">
+          <block type="variables_get" id="51">
+            <field name="VAR">counter</field>
+          </block>
+        </value>
+        <next>
+          <block type="variables_set" id="64" inline="true">
+            <field name="VAR">counter</field>
+            <value name="VALUE">
+              <block type="math_arithmetic" id="81" inline="true">
+                <field name="OP">MINUS</field>
+                <value name="A">
+                  <block type="variables_get" id="86">
+                    <field name="VAR">counter</field>
+                  </block>
+                </value>
+                <value name="B">
+                  <block type="math_number" id="99">
+                    <field name="NUM">1</field>
+                  </block>
+                </value>
+              </block>
+            </value>
+            <next>
+              <block type="text_print" id="100" inline="false">
+                <value name="TEXT">
+                  <block type="variables_get" id="101">
+                    <field name="VAR">counter</field>
+                  </block>
+                </value>
+                <next>
+                  <block type="variables_set" id="104" inline="true">
+                    <field name="VAR">counter</field>
+                    <value name="VALUE">
+                      <block type="math_arithmetic" id="105" inline="true">
+                        <field name="OP">MINUS</field>
+                        <value name="A">
+                          <block type="variables_get" id="106">
+                            <field name="VAR">counter</field>
+                          </block>
+                        </value>
+                        <value name="B">
+                          <block type="math_number" id="107">
+                            <field name="NUM">1</field>
+                          </block>
+                        </value>
+                      </block>
+                    </value>
+                    <next>
+                      <block type="text_print" id="102" inline="false">
+                        <value name="TEXT">
+                          <block type="variables_get" id="103">
+                            <field name="VAR">counter</field>
+                          </block>
+                        </value>
+                        <next>
+                          <block type="variables_set" id="108" inline="true">
+                            <field name="VAR">counter</field>
+                            <value name="VALUE">
+                              <block type="math_arithmetic" id="109" inline="true">
+                                <field name="OP">MINUS</field>
+                                <value name="A">
+                                  <block type="variables_get" id="110">
+                                    <field name="VAR">counter</field>
+                                  </block>
+                                </value>
+                                <value name="B">
+                                  <block type="math_number" id="111">
+                                    <field name="NUM">1</field>
+                                  </block>
+                                </value>
+                              </block>
+                            </value>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </next>
+          </block>
+        </next>
+      </block>
+    </next>
+  </block>
+</xml>
