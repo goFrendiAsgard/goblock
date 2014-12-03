@@ -34,7 +34,11 @@
         <!-- Main Container -->
         <div id="__mainContainer" class="col-md-12">
 
+            <div id="__lesson" class="col-md-7"></div>            
+            <div id="__lessonResult" class="col-md-5"></div>
+
             <div class="col-md-7">
+
                 <div id="__blockContainer">
                     <legend>Block Workspace</legend>                    
                     <div class="__btnDiv">
@@ -42,7 +46,7 @@
                             <i class="glyphicon glyphicon-play"></i> Run
                         </button>
                         <button id="__checkCode" class="btn btn-primary">
-                            <i class="glyphicon glyphicon-check"></i> Submit Block
+                            <i class="glyphicon glyphicon-check"></i> Complete Exercise
                         </button>
                         <button id="__switchToXml" class="btn btn-default">
                             <i class="glyphicon glyphicon-align-justify"></i> XML
@@ -73,8 +77,7 @@
             </div>
             <div id="__rightPane" class="col-md-5">
 
-                <div id="__lesson"></div>            
-                <div id="__lessonResult"></div>
+                
 
                 <legend>Output</legend>
                 <div id="__output" class="col-md-"></div>
@@ -259,71 +262,7 @@
             }});            
         });
 
-        $('#__checkCode').click(function(){
-            var test_list = __LESSONS[__lessonIndex].test;
-            var multi_target = __LESSONS[__lessonIndex].multitarget;
-            var title = __LESSONS[__lessonIndex].title;
-            var html = '<table class="table table-striped">';
-            html += '<thead>';
-            html += '<tr><th>Input</th><th>Target</th><th>Output</th><th>Match</th></tr>'
-            html += '</thead><tbody>';  
-            var all_match = true; 
-            for(i=0; i<test_list.length; i++){
-
-                // get input and target
-                var test   = test_list[i];
-                var input  = test[0];
-                var target = test[1];
-
-                // check code
-                var result = __checkCode(input, target, multi_target);
-                var match  = result[0];
-                var output = result[1];
-                var error  = result[2];
-                all_match = all_match && match;
-
-                // put html
-                if(multi_target){
-                    var rowspan = target.length;
-                    html += '<tr>';
-                    html += '<td rowspan="'+rowspan+'">' + input.join('<br />') + '</td>';
-                    html += '<td>' + target[0].join('<br />') + '</td>';
-                    html += '<td rowspan="'+rowspan+'">' + output.join('<br />') + (error == ''? '' : '<br />' + error) + '</td>';
-                    html += '<td rowspan="'+rowspan+'">' + (all_match? 'Match' : 'Unmatch') + '</td>';
-                    html += '</tr>';
-                    for(j=1; j<target.length; j++){
-                        html += '<tr>';
-                        html += '<td>' + target[j].join('<br />') + '</td>';
-                        html += '</tr>';
-                    }
-                }else{
-                    html += '<tr>';
-                    html += '<td>' + input.join('<br />') + '</td>';
-                    html += '<td>' + target.join('<br />') + '</td>';
-                    html += '<td>' + output.join('<br />') + (error == ''? '' : '<br />' + error) + '</td>';
-                    html += '<td>' + (all_match? 'Match' : 'Unmatch') + '</td>';
-                    html += '</tr>';
-                }
-            }
-            html += '</tbody></table>';
-            if(all_match){
-                html = '<div class="alert alert-success"><b>Correct</b> You have pass this lesson</div>' + html;
-                storage = __getStorage();
-                passed = storage.passed;
-                passed.push(title);
-                storage.passed = passed;
-                __setStorage(storage);
-                __loadLesson();
-            }else{
-                html = '<div class="alert alert-danger"><b>Wrong</b> Try again</div>' + html;                
-            }
-            html = '<legend>Test Result</legend>' + html;
-            $('#__lessonResult').html(html);
-            // scroll to lessonResult
-            $('body').animate({
-                scrollTop: $("#__lessonResult").offset().top - 120,
-            }, 'slow');
-        });
+        $('#__checkCode').click(__checkCode);
         
 
         // FUNCTIONS
@@ -332,6 +271,9 @@
             __clearCode();
             xml = Blockly.Xml.textToDom(xml);
             Blockly.Xml.domToWorkspace(Blockly.mainWorkspace, xml);
+            if(__lessonIndex>-1){
+                __checkCode(true);
+            }
             __runCode();
         }
 
@@ -340,7 +282,7 @@
             return d.getTime(); 
         }
 
-        function __checkCode(input, target_list, multi_target){
+        function __checkCase(input, target_list, multi_target){
             __multi_target = multi_target == undefined? false: multi_target;
             // Generate JavaScript code and run it.
             window.LoopTrap = 1000;
@@ -385,6 +327,88 @@
                 console.log(e);
                 return [false, __arrOutput, e];
             }
+        }
+
+        function __checkCode(firsttime){
+            
+            var test_list    = __LESSONS[__lessonIndex].test;
+            var multi_target = __LESSONS[__lessonIndex].multitarget;
+            var title        = __LESSONS[__lessonIndex].title;
+           
+            var html = '<table class="table table-striped">';
+            html += '<thead>';
+            if(firsttime===true){
+                html += '<tr><th>Input</th><th>Target</th></tr>'
+            }else{
+                html += '<tr><th>Input</th><th>Target</th><th>Your Output</th><th>Match</th></tr>';
+            }
+            html += '</thead><tbody>';  
+            var all_match = true; 
+            for(i=0; i<test_list.length; i++){
+
+                // get input and target
+                var test   = test_list[i];
+                var input  = test[0];
+                var target = test[1];
+
+                // check code
+                var result = __checkCase(input, target, multi_target);
+                var match  = result[0];
+                var output = result[1];
+                var error  = result[2];
+                all_match = all_match && match;
+
+                // put html
+                if(multi_target){
+                    var rowspan = target.length;
+                    html += '<tr>';
+                    html += '<td rowspan="'+rowspan+'">' + input.join('<br />') + '</td>';
+                    html += '<td>' + target[0].join('<br />') + '</td>';
+                    if(firsttime!==true){
+                        html += '<td rowspan="'+rowspan+'">' + output.join('<br />') + (error == ''? '' : '<br />' + error) + '</td>';
+                        html += '<td rowspan="'+rowspan+'">' + (match? 
+                            '<span class="label label-success">Match</span>' : 
+                            '<span class="label label-danger">Unmatch</span>') + '</td>';
+                    }
+                    html += '</tr>';
+                    for(j=1; j<target.length; j++){
+                        html += '<tr>';
+                        html += '<td>' + target[j].join('<br />') + '</td>';
+                        html += '</tr>';
+                    }
+                }else{
+                    html += '<tr>';
+                    html += '<td>' + input.join('<br />') + '</td>';
+                    html += '<td>' + target.join('<br />') + '</td>';
+                    if(firsttime!==true){
+                        html += '<td>' + output.join('<br />') + (error == ''? '' : '<br />' + error) + '</td>';
+                        html += '<td>' + (match? 
+                            '<span class="label label-success">Match</span>' : 
+                            '<span class="label label-danger">Unmatch</span>') + '</td>';
+                    }
+                    html += '</tr>';
+                }
+            }
+            html += '</tbody></table>';
+            if(firsttime!==true){
+                if(all_match){
+                    html = '<div class="alert alert-success"><b>Correct</b> You have pass this lesson</div>' + html;
+                    storage = __getStorage();
+                    passed = storage.passed;
+                    passed.push(title);
+                    storage.passed = passed;
+                    __setStorage(storage);
+                    __loadLesson();
+                }else{
+                    html = '<div class="alert alert-danger"><b>Wrong</b> Try again</div>' + html;
+                }
+            }
+            html = '<legend>Exercise</legend>' + html;
+            $('#__lessonResult').html(html);
+            // scroll to lessonResult
+            $('body').animate({
+                scrollTop: $("#__lessonResult").offset().top - 120,
+            }, 'slow');
         }
 
         function __runCode() {

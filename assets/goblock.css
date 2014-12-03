@@ -11,9 +11,6 @@ body{
     text-align:right;
     font-size:small;
 }
-#__lesson{
-    font-size:small;
-}
 .__btnDiv{
     text-align:right;
     margin-bottom:20px;
@@ -57,6 +54,7 @@ body{
 }
 #__pythonCode, #__jsCode{
     font-weight: bold;
+    overflow:auto;
 }
 
 .__outDialogBubble {

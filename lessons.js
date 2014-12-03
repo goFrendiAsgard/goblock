@@ -32,7 +32,6 @@ var __LESSONS = [
                                 [ ['Red'], ['Charmender'] ],
                                 [ ['Blue'], ['Squirtle'] ],
                                 [ ['Green'], ['Bulbasur'] ],
-                                [ ['Yellow'], ['Pikachu'] ],
                                 [ ['Other'], ['Snorlax'] ]
                             ],
         'lesson'        :   'lessons/pokemon.html',
@@ -44,9 +43,8 @@ var __LESSONS = [
         'description'   :   '3, 2, 1',
         'multitarget'   :   false,
         'test'          :   [
-                                [ [5], [[5,4,3,2,1,'launch']] ],
-                                [ [10], [[10,9,8,7,6,5,4,3,2,1,'launch']] ],
-                                [ [3], [[3,2,1,'launch']] ],
+                                [ [5], [5,4,3,2,1,'launch'] ],
+                                [ [3], [3,2,1,'launch'] ],
                             ],
         'lesson'        :   'lessons/rocket_launcher.html',
         'startblock'    :   'lessons/rocket_launcher.xml'
