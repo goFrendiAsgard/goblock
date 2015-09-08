@@ -433,7 +433,7 @@
                 // do replacement
                 code = code.split("window.alert(").join("__outputAlert(");
                 code = code.split("window.prompt(").join("__outputPrompt(");
-                code = code.split(";").join(";__waitPrompt();");
+                code = code.split(";\n").join(";\n__waitPrompt();");
                 // run the code
                 __start   = __getTimeStamp();
                 __sys.eval(prefix + code);
