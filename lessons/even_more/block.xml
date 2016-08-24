@@ -1,0 +1,34 @@
+<xml xmlns="http://www.w3.org/1999/xhtml">
+  <block type="variables_set" id="1FuUb#=dN-)olS=8t3m%" x="11" y="17">
+    <field name="VAR">name</field>
+    <value name="VALUE">
+      <block type="text_prompt" id="MEGF-#%31|u)L.?l=Sg3">
+        <mutation type="TEXT"></mutation>
+        <field name="TYPE">TEXT</field>
+        <field name="TEXT">What's your name?</field>
+      </block>
+    </value>
+    <next>
+      <block type="text_print" id="ytW,1W:+L|/I|!9VRfL1">
+        <value name="TEXT">
+          <shadow type="text" id="pd4[#(z-F+ak=?,tCTYT">
+            <field name="TEXT">abc</field>
+          </shadow>
+          <block type="text_join" id="*g@Y;f{@9KHQ|4CifT!n">
+            <mutation items="2"></mutation>
+            <value name="ADD0">
+              <block type="text" id="+y|6gPHyMPb9F0;h%@ix">
+                <field name="TEXT">Hi, </field>
+              </block>
+            </value>
+            <value name="ADD1">
+              <block type="variables_get" id="!zkqQ0q[E[ZY^}/m5.{C">
+                <field name="VAR">name</field>
+              </block>
+            </value>
+          </block>
+        </value>
+      </block>
+    </next>
+  </block>
+</xml>

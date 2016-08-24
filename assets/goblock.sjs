@@ -2,8 +2,11 @@ var SYS = require("stratifiedjs/modules/sys.sjs");
 // state variables
 var WAIT = false; // If WAIT is true, then the program shall halt until alert or prompt box is closed
 var EXEC_MODE = false; // If EXEC_MODE is true, then alert and prompt should write output to #div-output
+var SILENT_MODE = false; // Execute things, silently
 var INPUT_LIST = [];
 var OUTPUT_LIST = [];
+var TEST_CASE_INDEX = 0; // If SILENT_MODE is activated, then INPUT is taken from LESSONS, thus we need to be informed about current INPUT_INDEX
+var INPUT_TEST_INDEX = 0;
 var INTERPRETER = null;
 var HIGHLIGHT_PAUSE = false;
 var LESSON_ID = 0
@@ -35,7 +38,9 @@ function clear_output(){
 
 // alert
 window.alert = function(message){
-    if(EXEC_MODE){
+    if(SILENT_MODE){
+        OUTPUT_LIST.push(message);
+    }else if(EXEC_MODE){
         OUTPUT_LIST.push(message);
         $('div#div-output').append('<b>' + message + '</b><br />');
     }else{
@@ -54,6 +59,21 @@ $('.close-alert').click(close_alert);
 
 // prompt
 window.prompt = function(message, default_value, callback){
+    if(SILENT_MODE){
+        test_case = LESSONS[LESSON_ID].test_case;
+        if(TEST_CASE_INDEX < test_case.length){
+            input_test = test_case[TEST_CASE_INDEX];
+            if(INPUT_TEST_INDEX < input_test.length){
+                result = input_test[INPUT_TEST_INDEX];
+                INPUT_TEST_INDEX ++;
+                return result;
+            }else{
+                return '';
+            }
+        }else{
+            return ''; // out of bound
+        }
+    }
     // Acorn interpreter cannot handle custom window prompt
     if(EXEC_MODE && INTERPRETER){
         return WINDOW_PROMPT(message, default_value);
@@ -95,7 +115,6 @@ window.confirm = function(message, default_value, callback){
     set_wait();
     hold_while_wait();
     var result = $('input#input-confirm').val();
-    console.log(result);
     if(callback){ // window.confirm is also called from outside sjs (e.g: when rename or make variables
         callback(result);
     }
@@ -153,15 +172,39 @@ function run_code(event, is_evaluation) {
     EXEC_MODE = false;
     // is_evaluation
     if(is_evaluation){
+        // get test_case and evaluator function
+        test_case = LESSONS[LESSON_ID].test_case;
         evaluator = LESSONS[LESSON_ID].validator;
-        evaluation_result = evaluator(INPUT_LIST, OUTPUT_LIST);
-        console.log(evaluation_result);
+        evaluation_result = evaluator(INPUT_LIST, OUTPUT_LIST); // get evaluation result for user's own test case
         success = evaluation_result.success;
         message = evaluation_result.message;
+        if(success){
+            SILENT_MODE = true;
+            for(var i=0; i<test_case.length; i++){ // user my cleverly adjust the input and the output. In this case, we need lesson's test_case to validate
+                TEST_CASE_INDEX = i;
+                INPUT_TEST_INDEX = 0;
+                var current_test_case = test_case[i];
+                var error_message = 'Your program has been failed in our test case.<br /><b>Input:</b> <div style="padding-left:10px">' + current_test_case.join('<br />') + '</div>';
+                try{
+                    INPUT_LIST = []; // clear input and output list
+                    OUTPUT_LIST = [];
+                    SYS.eval(__code);
+                    evaluation_result = evaluator(current_test_case, OUTPUT_LIST);
+                    success = success && evaluation_result.success;
+                    if(!success){
+                        message = error_message + '<b>Output:</b> <div style="padding-left:10px">' + OUTPUT_LIST.join('<br />') + '</div><b>Message:</b> ' + evaluation_result.message;
+                        break;
+                    }
+                }catch(e){
+                    success = false;
+                    message = error_message + '<b>Runtime error:</b> ' + e;
+                    break;
+                }
+            }
+            SILENT_MODE = false;
+        }
         if(success){ // evaluation succeed
             next = window.confirm(message + '<br />Do you want to continue?');
-            console.log('confirmed');
-            console.log(next);
             if(next){ // user want to continue
                 if(LESSON_ID < LESSONS.length - 1){ // move to next lesson
                     LESSON_ID ++;
@@ -173,7 +216,7 @@ function run_code(event, is_evaluation) {
                 }
             }
         }else{ // evaluation failed
-            window.alert(message);
+            window.alert('<div class="alert alert-danger"><b>Failed</b><br />' + message + '</div>');
         }
     }
 }
