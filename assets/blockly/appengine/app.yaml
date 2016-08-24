@@ -49,12 +49,14 @@ handlers:
   static_files: favicon.ico
   upload: favicon\.ico
   secure: always
+  expiration: "30d"
 
 # Apple icon.
 - url: /apple-touch-icon\.png
   static_files: apple-touch-icon.png
   upload: apple-touch-icon\.png
   secure: always
+  expiration: "30d"
 
 # robot.txt
 - url: /robots\.txt
@@ -72,8 +74,9 @@ skip_files:
 - ^(.*/)?\..*$
 # Custom skip patterns.
 - ^static/appengine/.*$
-- ^static/apps/json/.*$
-- ^static/apps/_soy/.+\.jar$
+- ^static/demos/plane/soy/.+\.jar$
+- ^static/demos/plane/template.soy$
+- ^static/demos/plane/xlf/.*$
 - ^static/i18n/.*$
 - ^static/msg/json/.*$
 - ^.+\.soy$

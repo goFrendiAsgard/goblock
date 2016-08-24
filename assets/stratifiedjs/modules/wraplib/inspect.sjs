@@ -26,7 +26,7 @@
 
 /** @nodoc */
 
-var inspect = exports.inspect = function(obj) {
+var inspect = exports.inspect = function(obj, opts) {
 	/**
 	 * Prints an inspection to the terminal.
 	 * Returns the number of errors encountered.
@@ -57,9 +57,10 @@ var inspect = exports.inspect = function(obj) {
 
 	function crawl(subject, maxdepth, emitter) {
 		maxdepth = maxdepth || 50;
-		seen_objects = {};
+		var seen_objects = [];
 		function _crawl(prefix, subject, depth)
 		{
+			if(!subject) return;
 			depth += 1;
 			if(depth > maxdepth) {
 				prefix.push("... (max)");
@@ -74,12 +75,17 @@ var inspect = exports.inspect = function(obj) {
 				}
 				//console.log("subject " + prefix + " has keys: " + keys);
 				for(var k in subject) {
+					if(k.indexOf('__sjs_') === 0) {
+						continue;
+					}
 					var branch_prefix = prefix.slice();
 					branch_prefix.push(k);
 
 					var val = null;
 					var emit = function() {
-						emitter(branch_prefix, val, depth);
+						if(val) {
+							emitter(branch_prefix, val, depth);
+						}
 					}
 					try {
 						val = subject[k];
@@ -88,11 +94,15 @@ var inspect = exports.inspect = function(obj) {
 						emit();
 						continue;
 					}
-					if(val in seen_objects)
+					if(!val || val.hasOwnProperty('__sjs_wraplib_ignore')) {
+						continue;
+					}
+					if(seen_objects.indexOf(val) !== -1)
 					{
 						branch_prefix.push("... (dup)");
 						emit();
 					} else {
+						seen_objects.push(val);
 						emit();
 						if(val != null && is_a.call(val, String)) {
 							// strings have the inconvenient builtin loop that
@@ -115,7 +125,7 @@ var inspect = exports.inspect = function(obj) {
 	}
 
 	var visit = function(path, val) {
-		if(path[path.length - 1].match(/^__sjs_/)) {
+		if(!val) {
 			return;
 		}
 		//yellow(this.key).nl();
@@ -137,19 +147,32 @@ var inspect = exports.inspect = function(obj) {
 		desc = get_desc(val);
 		var key = path[path.length-1];
 		path = path.join(".");
+
+		var has_length = val.hasOwnProperty('__sjs_length');
+		var length_mismatch = false, length_desc;
+		if(has_length) {
+			length_desc = "["+val.__sjs_length+"]";
+			length_mismatch = val.__sjs_length + val.__sjs_callbacks != val.__sjs_orig.length;
+		}
+
 		if(typeof(val) == 'function' && key != 'toString') {
 			if(val.hasOwnProperty('__sjs_orig')) desc = get_desc(val.__sjs_orig);
 			if(val.hasOwnProperty('__sjs_wrapped') || val.hasOwnProperty('__sjs_ok')) {
-				green(path);
+				if(length_mismatch) {
+					yellow(path);
+				} else {
+					if(opts.quiet) return;
+					green(path);
+				}
 			} else {
 				red(path);
 			}
 		} else {
+			if(opts.quiet) return;
 			cyan(path);
 		}
-		if(val.hasOwnProperty('__sjs_length')) {
-			length_desc = "["+val.__sjs_length+"]";
-			if(val.__sjs_length + val.__sjs_callbacks != val.__sjs_orig.length) {
+		if(has_length) {
+			if(length_mismatch) {
 				red(length_desc);
 			} else {
 				yellow(length_desc);
@@ -166,7 +189,27 @@ var inspect = exports.inspect = function(obj) {
 exports.main = function(argv) {
 	argv = argv || require('sjs:sys').argv();
 	var argv = require('sjs:sys').argv();
-	if(argv.length != 1) throw "Please supply exactly one argument!";
+	var p = require('sjs:dashdash').createParser({options: [
+		{
+			name: 'help',
+			type: 'bool',
+		},
+		{
+			names: ['quiet', 'q'],
+			type: 'bool',
+			help: 'report only suspicious properties',
+		},
+	]});
+	var opts = p.parse(argv);
+	if(opts.help) {
+		var help = p.help({includeEnv: true}).trimRight();
+		console.log('usage: wraplib [OPTIONS] MODULE\n'
+								+ 'Options:\n'
+								+ help);
+		process.exit(0);
+	}
+	argv = opts._args;
+	if(argv.length != 1) throw "Please supply exactly one module!";
 	var url = require('sjs:url');
 	var module_name = argv[0] .. url.coerceToURL();
 	if(module_name.indexOf(":") == -1) {
@@ -174,9 +217,5 @@ exports.main = function(argv) {
 		var fs = require("nodejs:fs");
 		module_name = fs.realpathSync(module_name);
 	}
-	return exports.inspect(require(module_name));
-}
-
-if (require.main === module) {
-	process.exit(exports.main());
+	return exports.inspect(require(module_name), opts);
 }

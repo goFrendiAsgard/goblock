@@ -96,8 +96,9 @@ function Emitter() {
       waitfor(var val) {
         listeners.push(resume);
       }
-      // could clean up listener under retraction, but benign to just
-      // leave it; it's an uncommon case
+      retract {
+        __js listeners.splice(listeners.indexOf(resume), 1);
+      }
       receiver(val);
     }
   });
@@ -163,6 +164,7 @@ exports.Emitter = Emitter;
       for calling things like `e.preventDefault`, as it runs *before* any event filter.
 */
 function events(emitters, events, opts) {
+  if (arguments.length < 2) throw new Error("Too few arguments supplied to event::events; expected at least an emitter (e.g. a DOM element) and a string naming the event");
   return seq.Stream(function(receiver) {
     var host_emitter = HostEmitter(emitters, events, opts);
     try {
@@ -171,7 +173,7 @@ function events(emitters, events, opts) {
       }
     }
     finally {
-      host_emitter.__finally__();
+      host_emitter.stop();
     }
   });
 }
@@ -255,13 +257,6 @@ var wait = exports.wait = function(stream /*,...*/) {
     Note that since creating a `HostEmitter` adds a listener to the
     underlying emitter, you *must* call `emitter.stop()` to prevent resource leaks.
 
-    Instead of calling `stop()` explicitly, you can pass this object to a
-    `using` block, e.g.:
-
-        using (var click = HostEmitter(elem, 'click')) {
-          click.wait();
-          console.log("Thanks for clicking!");
-        }
 */
 function HostEmitter(emitter, event) {
   var rv = Object.create(HostEmitterProto);
@@ -307,9 +302,7 @@ HostEmitterProto._start = function() {
   @summary Stop listening for events
   @desc
     You must call this method when you are finished with this
-    object. [::HostEmitter::__finally__] is an alias for this method,
-    so you can pass this object into a `using` block to avoid
-    having to explicitly call `stop()`.
+    object.
 */
 HostEmitterProto.stop = function() {
   if (this._stopped) return;
@@ -319,16 +312,6 @@ HostEmitterProto.stop = function() {
     }
   }
 };
-
-/* -- not part of documentation --
-  @function HostEmitter.__finally__
-  @summary Alias for [::HostEmitter::stop]
-  @desc
-    This alias allows you to pass a [::HostEmitter] instance to
-    a `using` block rather than explicitly calling `stop` when
-    you are finished with it.
-*/
-HostEmitterProto.__finally__ = HostEmitterProto.stop;
 
 if (sys.hostenv == 'nodejs') {
   HostEmitterProto._listen = function(emitter, event) {

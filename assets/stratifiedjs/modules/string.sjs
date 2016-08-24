@@ -44,34 +44,42 @@ var global = sys.getGlobal();
    @param   {anything} [testObj] Object to test.
    @return  {Boolean}
 */
-function isString(obj) {
+__js function isString(obj) {
   return typeof obj == 'string' || obj instanceof String;
 }
 exports.isString = isString;
 
-function isRegExp(re) {
+__js function isRegExp(re) {
   // copied from ./regexp to reduce imports
   return Object.prototype.toString.call(re) === '[object RegExp]';
 }
 
 /**
   @function sanitize
-  @summary  Make a string safe for insertion into html.
+  @summary  Make a string safe for insertion into most html locations.
   @param    {String} [str] String to sanitize.
   @return   {String} Sanitized string.
   @desc
-    Returns sanitized string with **<**,**>**, and **&** replaced by their corresponding html entities.
-**/
+    Returns sanitized string with **<**,**>**, **"**, **'** and **&** replaced by their corresponding html entities.
 
-var replacements = {
+    **Note:** HTML has a number of special-cased locations where this encoding is not correct, and may
+    still lead to code injection. For example, `<script>` and `<style>` tags both have unique encoding rules. If you
+    try to use [::sanitize] for data in these special tags, it will *not* always be correct and *will* be possible
+    to inject code into your page. Where possible, you should use a template mechanism which can perform the
+    appropriate escaping for you (such as the `surface` module in Conductance).
+*/
+
+__js var replacements = {
   '&':'&amp;',
   '>':'&gt;',
-  '<':'&lt;'
+  '<':'&lt;',
+  '\'':'&#39;',
+  '"':'&quot;',
 };
 
-exports.sanitize = function(str) {
+__js exports.sanitize = function(str) {
   str = str === undefined ? "" : str.toString();
-  return str.replace(/[<>&]/g, function(c) {
+  return str.replace(/['"<>&]/g, function(c) {
     return replacements[c];
   })
 };
@@ -81,6 +89,7 @@ exports.sanitize = function(str) {
   @summary  Performs variable substitution on a string.
   @param    {String} [template] A string holding variable names enclosed in **{ }** braces.
   @param    {Object} [replacements] Hash of key/value pairs that will be replaced in *template*.
+  @param    {optional Function} [filter] Function to apply to values before substitution
   @return   {String} String with placeholders replaced by variables.
   @desc
     ###Notes:
@@ -100,13 +109,14 @@ exports.sanitize = function(str) {
         var rv = "Hello #{obj.who}";
 */
 //XXX how should you escape {foo}? {{foo}}? \{foo\}?
-exports.supplant = function(str, o) {
+exports.supplant = function(str, o, filter) {
   return str.replace(/\\[{\\]|{([^{} ]*)}/g,
     function(text, key) {
       if(text.charAt(0) == '\\') return text.charAt(1);
       var replacement = o[key];
       if(replacement === undefined) throw new Error("No substitution found for \"" + key + "\"");
       if(replacement instanceof Function) { replacement = replacement.call(o); };
+      if (filter) replacement = filter(replacement);
       return replacement;
     }
   );
@@ -121,7 +131,7 @@ exports.supplant = function(str, o) {
   @desc
     `" " ..@repeat(5)` returns `"     "`.
  */
-exports.repeat = function(str, times) {
+__js exports.repeat = function(str, times) {
   // TODO check that `times` is greater than or equal to 0
   return new Array(times + 1).join(str);
 };
@@ -141,7 +151,7 @@ exports.repeat = function(str, times) {
             startsWith("abcd", "bc")
             // false
 */
-exports.startsWith = function(str, prefix) {
+__js exports.startsWith = function(str, prefix) {
   return str.lastIndexOf(prefix, 0) === 0;
 }
 
@@ -160,7 +170,7 @@ exports.startsWith = function(str, prefix) {
         endsWith("abcd", "bc")
         // false
 */
-exports.endsWith = function(str, suffix) {
+__js exports.endsWith = function(str, suffix) {
   var endPos = str.length - suffix.length;
   if (endPos < 0) return false;
   return str.indexOf(suffix, endPos) == endPos;
@@ -181,7 +191,7 @@ exports.endsWith = function(str, suffix) {
         contains("abcd", "abd")
         // false
 */
-exports.contains = function(str, substr) {
+__js exports.contains = function(str, substr) {
   if (!isString(str)) throw new Error('contains() expects a string');
   return str.indexOf(substr) != -1;
 }
@@ -206,7 +216,7 @@ exports.contains = function(str, substr) {
         strip("||a|b||c|", "|")
         // "a|b||c"
 */
-exports.strip = function(s, ch){
+__js exports.strip = function(s, ch){
   if (ch == undefined) return s.trim();
   return s .. exports.lstrip(ch) .. exports.rstrip(ch);
 };
@@ -230,7 +240,7 @@ exports.strip = function(s, ch){
         strip("||a|b||c|", "|")
         // "a|b||c|"
 */
-exports.lstrip = function(s, ch){
+__js exports.lstrip = function(s, ch){
   if (ch == undefined) return s.replace(/^\s+/,'');
   while(s.charAt(0) == ch) {
     s = s.slice(1);
@@ -257,7 +267,7 @@ exports.lstrip = function(s, ch){
         strip("|a|b||c||", "|")
         // "|a|b||c"
 */
-exports.rstrip = function(s, ch){
+__js exports.rstrip = function(s, ch){
   if (ch == undefined) return s.replace(/\s+$/,'');
   while(s.charAt( s.length-1 ) == ch) {
     s = s.slice(0, -1)
@@ -395,7 +405,7 @@ exports.rstrip = function(s, ch){
         padRight("str", 5, '-');
         // 'str--'
 */
-exports.padRight = function(s, len, ch) {
+__js exports.padRight = function(s, len, ch) {
   if (!ch) ch = ' ';
   s = String(s);
   while(s.length < len) s += ch;
@@ -423,7 +433,7 @@ exports.padRight = function(s, len, ch) {
         padLeft("x", 5, '-');
         // '--str'
 */
-exports.padLeft = function(s, len, ch) {
+__js exports.padLeft = function(s, len, ch) {
   if (!ch) ch = ' ';
   s = String(s);
   while(s.length < len) s = ch + s;
@@ -452,7 +462,7 @@ exports.padLeft = function(s, len, ch) {
         // '----uneven string---'
 
 */
-exports.padBoth = function(s, len, ch) {
+__js exports.padBoth = function(s, len, ch) {
   if (!ch) ch = ' ';
   s = String(s);
   var t = len - s.length;
@@ -474,7 +484,7 @@ exports.padBoth = function(s, len, ch) {
      Note: If a line in `s` does not contain `c` leading whitespace characters,
            this particular line will be left untouched by `unindent`.
 */
-exports.unindent = function(s, c) {
+__js exports.unindent = function(s, c) {
   if (!c) {
     var matches = /^([ \t]+)/.exec(s);
     if (!matches) return s;
@@ -484,78 +494,104 @@ exports.unindent = function(s, c) {
 };
 
 /**
+   @function prefixLines
+   @summary Add a prefix to all lines in a string
+   @param   {String} [s]
+   @param   {String} [prefix]
+   @return  {String} String with every line prefixed with `prefix`
+*/
+__js exports.prefixLines = function(s, prefix) {
+  var lines = s.split('\n');
+  for(var i=0; i<lines.length; ++i)
+    lines[i] = prefix + lines[i];
+  return lines.join('\n');
+};
+
+/**
    @function capitalize
    @summary  Capitalize first character of the string
    @param    {String} [s]
    @return   {String} Capitalized string
 */
-exports.capitalize = function(s) {
+__js exports.capitalize = function(s) {
   if (s.length == 0) return s;
   return s.charAt(0).toUpperCase() + s.slice(1);
 };
 
 /**
-   @function utf16ToUtf8
-   @summary  Convert a UTF-16 string to a UTF-8 string.
-   @param    {String} [s] UTF-16 encoded string
-   @return   {String}
+  @class Octets
+  @summary Byte sequence implemented as a String
+  @desc
+    Octets are opaque sequences of bytes. While they happen to be implemented
+    as strings, you should generally only use the functions in the [sjs:string::] module to
+    convert them to other useful types.
+
+    **Notes:**
+
+      * Octets strings are implemented as JS strings where the upper half of
+        each 16-bit 'character' is set to 0.
+*/
+
+/**
+   @function stringToUtf8
+   @summary  Encode a String into UTF-8 [::Octets].
+   @param    {String} [s]
+   @return   {::Octets} UTF-8 encoded octets.
    @desc
+     See also [::utf8ToString].
+
      **Notes:**
 
        * This function is only tested for characters in the [BMP](http://en.wikipedia.org/w/index.php?title=Basic_Multilingual_Plane).
        * JS strings are natively encoded as a sequence of 16-bit words. (Inside the
          BMP this is equivalent to UTF-16 encoding.)
-       * UTF-8 is mapped into JS strings as a sequence of octets, with the upper half
-         of each 16-bit 'character' set to 0.
        * See http://mathiasbynens.be/notes/javascript-encoding for a
          good discussion on JS string encoding.
 */
-exports.utf16ToUtf8 = function(s) {
+__js exports.stringToUtf8 = exports.utf16ToUtf8 = function(s) {
   return unescape(encodeURIComponent(s));
 };
 
 /**
-   @function utf8ToUtf16
-   @summary  Convert a UTF-8 string to a UTF-16 string.
-   @param    {String} [s] UTF-8 encoded string
+   @function utf8ToString
+   @summary  Decode UTF-8 octets into a String.
+   @param    {::Octets} [octets] UTF-8 octets
    @return   {String}
    @desc
+     See also [::stringToUtf8].
+
      **Notes:**
 
        * This function is only tested for characters in the [BMP](http://en.wikipedia.org/w/index.php?title=Basic_Multilingual_Plane).
        * JS strings are natively encoded as a sequence of 16-bit words. (Inside the
          BMP this is equivalent to UTF-16 encoding.)
-       * UTF-8 is mapped into JS strings as a sequence of octets, with the upper half
-         of each 16-bit 'character' set to 0.
        * See http://mathiasbynens.be/notes/javascript-encoding for a
          good discussion on JS string encoding.
 */
-exports.utf8ToUtf16 = function(s) {
+__js exports.utf8ToString = exports.utf8ToUtf16 = function(s) {
   return decodeURIComponent(escape(s));
 };
 
 /**
    @function octetsToBase64
-   @summary  Convert a sequence of octets into a Base64 encoded string
-   @param    {String} [s] Octet string
+   @summary  Convert [::Octets] into a Base64 encoded string
+   @param    {::Octets} [octets]
    @return   {String}
    @desc
       **Notes:**
 
         * On modern browsers, this function is equivalent to `window.atob`.
-        * Octet strings are equivalent to JS strings where the upper half of
-          each 16-bit 'character' is set to 0.
         * This function will produce incorrect output or throw an error if any
           character code of the input
           falls outside the range 0-255.
-        * You probably want to encode native JS strings representing
-          textual data (== UTF-16 or UCS-2 string) as UTF-8 strings
-          before converting to Base64 (see [::utf16ToUtf8]).
+        * You should encode native JS strings representing
+          textual data (== UTF-16 or UCS-2 string) as UTF-8 octets
+          before converting to Base64 (see [::stringToUtf8]).
         * This function appends padding characters ('=') if the input string
           length is not a multiple of 3.
         * No line breaks will be inserted into the output string.
 */
-var keyStr = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=";
+__js var keyStr = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=";
 
 __js {
 
@@ -599,15 +635,13 @@ else {
 
 /**
    @function base64ToOctets
-   @summary  Convert a Base64 encoded string into a sequence of octets
+   @summary  Convert a Base64 encoded string into an octet string
    @param    {String} [s] Base64 encoded string
-   @return   {String}
+   @return   {::Octets}
    @desc
       **Notes:**
 
         * On modern browsers, this function is equivalent to `window.atob`.
-        * Octet strings are equivalent to JS strings where the upper half of
-          each 16-bit 'character' is set to 0.
         * This function will silently ignore characters in the input that
           outside of the Base64 range (A-Z, a-z, 0-9, +, /, =)
         * The input function needs to contain padding characters ('=') if the
@@ -649,21 +683,15 @@ else {
   @summary  **Deprecated** Convert a Base64 encoded string to an ArrayBuffer
   @param    {String} [s] Base64 encoded string
   @return   {ArrayBuffer}
+  @desc
+    Use [::base64ToOctets] and [::octetsToArrayBuffer].
 */
-__js exports.base64ToArrayBuffer = function(s) {
-  var octets = exports.base64ToOctets(s);
-  var rv = new ArrayBuffer(octets.length);
-  var view = new Uint8Array(rv);
-  for (var i=0; i<view.length; ++i)
-    view[i] = octets.charCodeAt(i);
-
-  return rv;
-};
+__js exports.base64ToArrayBuffer = (s) -> s .. exports.base64ToOctets .. exports.octetsToArrayBuffer;
 
 /**
    @function octetsToArrayBuffer
-   @summary Write a string of octets to an ArrayBuffer
-   @param {String} [s] Octet string (upper half of each 'character' will be ignored)
+   @summary Write [::Octets] to an ArrayBuffer
+   @param {::Octets} [octets]
    @param {optional ArrayBuffer} [buffer] ArrayBuffer to write to; if not provided, a new one will be created
    @param {optional Integer} [offset] Offset at where to start writing into `buffer`
    @return {ArrayBuffer}
@@ -683,40 +711,77 @@ __js exports.octetsToArrayBuffer = function(s, buffer, offset) {
    @param {ArrayBuffer} [src]
    @param {optional Integer} [offset] Byte offset into `src`
    @param {optional Integer} [length] Byte length
-   @return {String} Octet string (upper half of each 'character' set to 0)
+   @return {::Octets}
 */
-__js (function() {
-  var workaround = false;
-  var fn = function(src, offset, length) {
-    var view;
-    if (length)
-      view = new Uint8Array(src, offset, length);
-    else
-      view = new Uint8Array(src, offset);
 
-    // workaround for 'apply' call stack size limits. see
-    // e.g. https://code.google.com/p/chromium/issues/detail?id=56588
-    var rv = '', length = view.byteLength;
-    for (var i=0; i<length; /**/) {
-      var j = Math.min(i+100000, length);
-      if (workaround) {
-        // workaround for https://github.com/ariya/phantomjs/issues/11172
-        // XXX should get rid of this when phantomjs sort out the problem
-        for (var k = i; k<j; ++k)
-          rv += String.fromCharCode.call(null, view[k]);
-      }
-      else {
-        rv += String.fromCharCode.apply(null, view.subarray(i,j));
-      }
-      i = j;
-    }
-    return rv;
-  };
+__js exports.arrayBufferToOctets = function(src, offset, length) {
+  var view;
+  if (length)
+    view = new Uint8Array(src, offset, length);
+  else
+    view = new Uint8Array(src, offset);
 
-  try {
-    String.fromCharCode.apply(null, new Uint8Array(1));
-  } catch(e) {
-    workaround = true;
+  // workaround for 'apply' call stack size limits. see
+  // e.g. https://code.google.com/p/chromium/issues/detail?id=56588
+  var rv = '', length = view.byteLength;
+  for (var i=0; i<length; /**/) {
+    // Phantomjs requires a limit of 50000 here; other browsers work fine with 
+    // higher limits, although 100000 caused occasional errors in the conductance bridge code.
+    var j = Math.min(i+50000, length);
+    rv += String.fromCharCode.apply(null, view.subarray(i,j));
+    i = j;
   }
-  exports.arrayBufferToOctets = fn;
-})();
+  return rv;
+};
+
+__js {
+  if (sys.hostenv === 'nodejs') {
+    /**
+      @function encode
+      @hostenv nodejs
+      @param {optional String} [data]
+      @param {String} [encoding]
+      @summary Encode string -> bytes
+      @desc
+        If both arguments are provided, returns the
+        encoded string.
+
+        If only one argument is provided, returns a partially-applied
+        function which accepts a string and encodes it.
+
+      @function decode
+      @hostenv nodejs
+      @param {optional Buffer} [data]
+      @param {String} [encoding]
+      @summary Decode bytes -> string
+      @desc
+        If both arguments are provided, returns the
+        decoded buffer.
+
+        If only one argument is provided, returns a partially-applied
+        function which accepts a buffer and decodes it.
+    */
+
+    var decode = function(buf, enc) {
+      if(!Buffer.isBuffer(buf)) throw new Error("Not a buffer");
+      return buf.toString(enc);
+    };
+
+    var encode = function(str, enc) {
+      if(!exports.isString(str)) throw new Error("Not a string");
+      return new Buffer(str, enc);
+    };
+
+    exports.decode = function(arg) {
+      if (arguments.length < 2)
+        return data -> decode(data, arg);
+      return decode(arg, arguments[1]);
+    }
+
+    exports.encode = function(arg) {
+      if (arguments.length < 2)
+        return data -> encode(data, arg);
+      return encode(arg, arguments[1]);
+    }
+  }
+}

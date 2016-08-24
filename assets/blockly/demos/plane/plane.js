@@ -65,7 +65,7 @@ Plane.LANGUAGE_NAME = {
   'tr': 'Türkçe',
   'uk': 'Українська',
   'vi': 'Tiếng Việt',
-  'zh-hans': '簡體中文',
+  'zh-hans': '简体中文',
   'zh-hant': '正體中文'
 };
 
@@ -73,6 +73,12 @@ Plane.LANGUAGE_NAME = {
  * List of RTL languages.
  */
 Plane.LANGUAGE_RTL = ['ar', 'fa', 'he'];
+
+/**
+ * Main Blockly workspace.
+ * @type {Blockly.WorkspaceSvg}
+ */
+Plane.workspace = null;
 
 /**
  * Extracts a parameter from the URL.
@@ -137,12 +143,13 @@ Plane.loadBlocks = function(defaultXml) {
     // Language switching stores the blocks during the reload.
     delete window.sessionStorage.loadOnceBlocks;
     var xml = Blockly.Xml.textToDom(loadOnce);
-    Blockly.Xml.domToWorkspace(Blockly.mainWorkspace, xml);
+    Blockly.Xml.domToWorkspace(xml, Plane.workspace);
   } else if (defaultXml) {
     // Load the editor with default starting blocks.
     var xml = Blockly.Xml.textToDom(defaultXml);
-    Blockly.Xml.domToWorkspace(Blockly.mainWorkspace, xml);
+    Blockly.Xml.domToWorkspace(xml, Plane.workspace);
   }
+  Plane.workspace.clearUndo();
 };
 
 /**
@@ -154,7 +161,7 @@ Plane.changeLanguage = function() {
   // not load Blockly.
   // MSIE 11 does not support sessionStorage on file:// URLs.
   if (typeof Blockly != 'undefined' && window.sessionStorage) {
-    var xml = Blockly.Xml.workspaceToDom(Blockly.mainWorkspace);
+    var xml = Blockly.Xml.workspaceToDom(Plane.workspace);
     var text = Blockly.Xml.domToText(xml);
     window.sessionStorage.loadOnceBlocks = text;
   }
@@ -195,7 +202,7 @@ Plane.getMsg = function(key) {
 
 /**
  * User's language (e.g. "en").
- * @type string
+ * @type {string}
  */
 Plane.LANG = Plane.getLang();
 
@@ -256,7 +263,7 @@ Plane.init = function() {
         'width=725, initial-scale=.35, user-scalable=no');
   }
 
-  Blockly.inject(document.getElementById('blockly'),
+  Plane.workspace = Blockly.inject('blockly',
       {media: '../../media/',
        rtl: Plane.isRtl(),
        toolbox: document.getElementById('toolbox')});
@@ -268,7 +275,8 @@ Plane.init = function() {
       '</xml>';
   Plane.loadBlocks(defaultXml);
 
-  Blockly.addChangeListener(Plane.recalculate);
+  Plane.workspace.addChangeListener(Plane.recalculate);
+  Plane.workspace.addChangeListener(Blockly.Events.disableOrphans);
 
   // Initialize the slider.
   var svg = document.getElementById('plane');
@@ -327,14 +335,14 @@ Plane.initLanguage = function() {
 Plane.recalculate = function() {
   // Find the 'set' block and use it as the formula root.
   var rootBlock = null;
-  var blocks = Blockly.mainWorkspace.getTopBlocks(false);
+  var blocks = Plane.workspace.getTopBlocks(false);
   for (var i = 0, block; block = blocks[i]; i++) {
     if (block.type == 'plane_set_seats') {
       rootBlock = block;
     }
   }
   var seats = NaN;
-  Blockly.JavaScript.init();
+  Blockly.JavaScript.init(Plane.workspace);
   var code = Blockly.JavaScript.blockToCode(rootBlock);
   try {
     seats = eval(code);
@@ -352,8 +360,8 @@ Plane.recalculate = function() {
       block.customUpdate && block.customUpdate();
     }
   }
-  updateBlocks(Blockly.mainWorkspace.getAllBlocks());
-  updateBlocks(Blockly.mainWorkspace.flyout_.workspace_.getAllBlocks());
+  updateBlocks(Plane.workspace.getAllBlocks());
+  updateBlocks(Plane.workspace.flyout_.workspace_.getAllBlocks());
 };
 
 /**
@@ -387,8 +395,7 @@ Plane.redraw = function(newRows) {
     }
     while (newRows > rows1st) {
       rows1st++;
-      var row = document.createElementNS('http://www.w3.org/2000/svg',
-                                                  'use');
+      var row = document.createElementNS('http://www.w3.org/2000/svg', 'use');
       row.setAttribute('id', 'row1st' + rows1st);
       // Row of 4 seats.
       row.setAttribute('x', (rows1st - 1) * 20);
@@ -435,5 +442,4 @@ Plane.redraw = function(newRows) {
 window.addEventListener('load', Plane.init);
 
 // Load the user's language pack.
-document.write('<script type="text/javascript" src="generated/' +
-               Plane.LANG + '.js"></script>\n');
+document.write('<script src="generated/' + Plane.LANG + '.js"></script>\n');

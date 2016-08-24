@@ -101,11 +101,11 @@ var __oni_rt={};(function(exports){var UNDEF;
 
 
 
-function CFException_toString(){var rv=this.name+": "+this.message;
+function stack_to_string(stack){var rv='';
 
-if(this.__oni_stack){
-for(var i=0;i<this.__oni_stack.length;++i){
-var line=this.__oni_stack[i];
+if(stack){
+for(var i=0;i<stack.length;++i){
+var line=stack[i];
 if(line.length==1)line=line[0];else line='    at '+line.slice(0,2).join(':');
 
 
@@ -114,6 +114,10 @@ rv+='\n'+line;
 }
 }
 return rv;
+}
+
+function CFException_toString(){return this.name+": "+this.message+stack_to_string(this.__oni_stack);
+
 }
 
 function adopt_native_stack(e,caller_module){if(!e.stack)return;
@@ -242,6 +246,15 @@ if(console.error)console.error(msg);else console.log(msg);
 
 
 
+exports.current_dyn_vars=null;
+
+
+
+
+
+
+
+
 
 
 
@@ -279,7 +292,7 @@ function is_ef(obj){return obj&&obj.__oni_ef;
 }
 exports.is_ef=is_ef;
 
-function setEFProto(t){for(var p in EF_Proto)t[p]=EF_Proto[p]}
+function setEFProto(t){for(var p=null in EF_Proto)t[p]=EF_Proto[p]}
 
 
 
@@ -568,6 +581,7 @@ exports.Bl=function(f){return {exec:I_blocklambda,ndata:f,__oni_dis:token_dis};
 
 
 };
+
 
 
 
@@ -1280,6 +1294,7 @@ exports.Switch=function(exp,clauses){return {exec:I_switch,ndata:[exp,clauses],_
 
 
 
+
 function EF_Try(ndata,env){this.ndata=ndata;
 
 this.env=env;
@@ -1304,15 +1319,14 @@ return this;
 case 1:
 
 this.state=2;
-if(!this.aborted&&this.ndata[2]&&(((val&&val.__oni_cfx)&&val.type=="t")||this.ndata[0]&1)){
-
+if(this.ndata[2]&&(((val&&val.__oni_cfx)&&val.type=="t")||this.ndata[0]&1)){
 
 
 var v;
 if(this.ndata[0]&1){
 
 
-v=(val&&val.__oni_cfx)?[val.val,true]:[val,false];
+v=(val&&val.__oni_cfx)?[val.type==='t'?val.val:val,true]:[val,false];
 }else v=val.val;
 
 
@@ -1390,9 +1404,9 @@ EF_Try.prototype.quench=function(){if(this.state!==4)this.child_frame.quench();
 
 };
 
-EF_Try.prototype.abort=function(){this.aborted=true;
+EF_Try.prototype.abort=function(){;
 
-
+this.aborted=true;
 
 if(this.state!==4){
 var val=this.child_frame.abort();
@@ -1408,9 +1422,15 @@ this.setChildFrame(val);
 
 this.parent=UNDEF;
 
-if(cont(this,0)!==this){
-return;
-}
+
+
+this.async=false;
+var rv=cont(this,0);
+if(rv!==this){
+return rv;
+}else this.async=true;
+
+
 
 }
 }
@@ -1613,7 +1633,7 @@ if(idx==1){
 
 if((val&&val.__oni_cfx))return this.returnToParent(val);
 
-for(var x in val){
+for(var x=null in val){
 if(typeof this.remainingX==='undefined'){
 val=this.ndata[1](this.env,x);
 if((val&&val.__oni_cfx)){
@@ -1698,6 +1718,24 @@ exports.ForIn=function(obj,loop){return {exec:I_forin,ndata:[obj,loop],__oni_dis
 
 
 
+
+
+function mergeExceptions(new_exception,original_exception){if(!(new_exception&&new_exception.__oni_cfx)||new_exception.type!=='t'){
+
+return original_exception;
+}
+if(!(original_exception&&original_exception.__oni_cfx)||original_exception.type!=='t')return new_exception;
+
+if(console){
+
+var msg="Multiple exceptions from sub-strata. Swallowing "+original_exception.val;
+if(console.error)console.error(msg);else console.log(msg);
+
+}
+return new_exception;
+}
+
+
 function EF_Par(ndata,env){this.ndata=ndata;
 
 this.env=env;
@@ -1712,9 +1750,11 @@ this.setChildFrame(val,idx);
 }else{
 
 if(idx==-1){
+var parent_dyn_vars=exports.current_dyn_vars;
 
 for(var i=0;i<this.ndata.length;++i){
 val=execIN(this.ndata[i],this.env);
+exports.current_dyn_vars=parent_dyn_vars;
 if(this.aborted){
 
 
@@ -1724,6 +1764,7 @@ this.setChildFrame(val,i);
 this.quench();
 return this.abortInner();
 }
+this.pendingCFE=mergeExceptions(val,this.pendingCFE);
 return this.pendingCFE;
 }else if(is_ef(val)){
 
@@ -1767,6 +1808,10 @@ return this.returnToParent(new CFException("i","invalid state in Par"));
 
 
 
+
+
+this.pendingCFE=mergeExceptions(val,this.pendingCFE);
+
 if(this.pending==0)return this.returnToParent(this.pendingCFE);
 
 }
@@ -1808,6 +1853,7 @@ var val=this.children[i].abort();
 if(is_ef(val))this.setChildFrame(val,i);else{
 
 
+this.pendingCFE=mergeExceptions(val,this.pendingCFE);
 --this.pending;
 this.children[i]=UNDEF;
 }
@@ -1868,6 +1914,7 @@ this.setChildFrame(val,idx);
 }else{
 
 if(idx==-1){
+var parent_dyn_vars=exports.current_dyn_vars;
 
 for(var i=0;i<this.ndata.length;++i){
 
@@ -1876,6 +1923,7 @@ var env=copyEnv(this.env);
 env.fold=this;
 env.branch=i;
 val=execIN(this.ndata[i],env);
+exports.current_dyn_vars=parent_dyn_vars;
 
 if(this.aborted){
 
@@ -1886,6 +1934,7 @@ this.setChildFrame(val,i);
 this.quench();
 return this.abortInner();
 }
+this.pendingRV=mergeExceptions(val,this.pendingRV);
 return this.pendingRV;
 }else if(is_ef(val)){
 
@@ -1904,6 +1953,8 @@ return this.abortInner();
 
 --this.pending;
 this.children[idx]=UNDEF;
+this.pendingRV=mergeExceptions(val,this.pendingRV);
+
 if(this.collapsing){
 
 
@@ -1918,8 +1969,10 @@ return;
 
 
 
+
 if(!this.aborted){
-this.pendingRV=val;
+if(!this.pendingRV)this.pendingRV=val;
+
 this.quench();
 return this.returnToParent(this.abortInner());
 }
@@ -1979,6 +2032,7 @@ var val=this.children[i].abort();
 if(is_ef(val))this.setChildFrame(val,i);else{
 
 
+this.pendingRV=mergeExceptions(val,this.pendingRV);
 --this.pending;
 this.children[i]=UNDEF;
 }
@@ -2073,17 +2127,27 @@ switch(idx){case 0:
 
 try{
 var ef=this;
+this.dyn_vars=exports.current_dyn_vars;
 
 var resumefunc=function(){try{
 
+var caller_dyn_vars=exports.current_dyn_vars;
+exports.current_dyn_vars=ef.dyn_vars;
 cont(ef,2,arguments);
 }catch(e){
 
 var s=function(){throw e};
 setTimeout(s,0);
+}finally{
+
+delete ef.dyn_vars;
+exports.current_dyn_vars=caller_dyn_vars;
 }
 };
 
+
+
+resumefunc.ef=ef;
 
 val=this.ndata[0](this.env,resumefunc);
 }catch(e){
@@ -2188,9 +2252,10 @@ if(!this.suspendCompleted)this.child_frame.quench();
 
 };
 
-EF_Suspend.prototype.abort=function(){this.returning=true;
+EF_Suspend.prototype.abort=function(){exports.current_dyn_vars=this.dyn_vars;
 
 
+this.returning=true;
 if(!this.suspendCompleted)return this.child_frame.abort();
 
 };
@@ -2217,17 +2282,155 @@ exports.Suspend=function(s,r){return {exec:I_sus,ndata:[s,r],__oni_dis:token_dis
 
 
 
-function EF_Spawn(ndata,env,notifyAsync,notifyVal){this.ndata=ndata;
+
+
+function EF_Spawn(ndata,env,notifyAsync,notifyVal,notifyAborted){this.ndata=ndata;
 
 this.env=env;
 this.notifyAsync=notifyAsync;
 this.notifyVal=notifyVal;
+this.notifyAborted=notifyAborted;
 }
 setEFProto(EF_Spawn.prototype={});
 
-EF_Spawn.prototype.cont=function(idx,val){if(idx==0)val=execIN(this.ndata[1],this.env);
+EF_Spawn.prototype.cont=function(idx,val){if(idx==0){
 
 
+this.parent_dyn_vars=exports.current_dyn_vars;
+val=execIN(this.ndata[1],this.env);
+exports.current_dyn_vars=this.parent_dyn_vars;
+
+
+
+
+if((val&&val.__oni_cfx)&&val.type==='blb'){
+return val;
+}
+}else if(idx===2){
+
+
+if(is_ef(val)){
+this.setChildFrame(val,2);
+return this.returnToParent(this);
+}else{
+
+this.in_abortion=false;
+this.done=true;
+
+this.notifyVal(this.return_val,true);
+this.notifyAborted(val);
+
+return this.returnToParent(this.return_val);
+}
+}
+
+if((val&&val.__oni_cfx)){
+if(val.type==='r'&&val.ef){
+
+
+
+
+
+if(val.ef.unreturnable){
+this.notifyVal(new CFException("t",new Error("Blocklambda return from spawned stratum to inactive scope"),this.ndata[0],this.env.file));
+
+
+
+return;
+}
+
+
+this.in_abortion=true;
+
+
+this.parent=val.ef.parent;
+this.parent_idx=val.ef.parent_idx;
+
+if(!this.parent){
+
+this.done=true;
+return val;
+}
+
+
+cont(this.parent,this.parent_idx,this);
+
+
+val.ef.parent=UNDEF;
+
+
+val.ef.quench();
+var aborted_target=val.ef.abort();
+if(is_ef(aborted_target)){
+this.return_val=val.val;
+this.setChildFrame(aborted_target,2);
+
+return this.returnToParent(this);
+}
+
+this.in_abortion=false;
+this.done=true;
+
+this.notifyVal(val.val,true);
+
+if(!this.async){
+
+cont(this.parent,this.parent_idx,val.val);
+return;
+}
+return this.returnToParent(val.val);
+}else if(val.type==='blb'){
+
+
+
+
+
+
+var frame_to_abort=this.env.blrref;
+while(frame_to_abort.parent&&!(frame_to_abort.parent.env&&frame_to_abort.parent.env.blscope===val.ef))frame_to_abort=frame_to_abort.parent;
+
+
+if(!frame_to_abort.parent||frame_to_abort.unreturnable){
+this.notifyVal(new CFException("t",new Error("Blocklambda break from spawned stratum to invalid or inactive scope"),this.ndata[0],this.env.file));
+
+
+
+return;
+}
+
+
+this.in_abortion=true;
+
+
+this.parent=frame_to_abort.parent;
+this.parent_idx=frame_to_abort.parent_idx;
+
+cont(this.parent,this.parent_idx,this);
+
+
+frame_to_abort.parent=UNDEF;
+
+
+frame_to_abort.quench();
+var aborted_target=frame_to_abort.abort();
+if(is_ef(aborted_target)){
+this.return_val=UNDEF;
+this.setChildFrame(aborted_target,2);
+
+return this.returnToParent(this);
+}
+
+this.in_abortion=false;
+this.done=true;
+
+
+
+this.notifyVal(UNDEF,true);
+this.notifyAborted(UNDEF);
+
+return this.returnToParent(UNDEF);
+}
+}
 
 if(is_ef(val)){
 this.setChildFrame(val,1);
@@ -2235,23 +2438,41 @@ if(idx==0)this.notifyAsync();
 
 }else{
 
+delete this.parent_dyn_vars;
+this.in_abortion=false;
+this.done=true;
 this.notifyVal(val);
 }
 };
 
-EF_Spawn.prototype.abort=function(){this.aborted=true;
+EF_Spawn.prototype.abort=function(){if(this.in_abortion)return this;
 
+
+
+
+
+if(this.done)return UNDEF;
+
+this.in_abortion=true;
 if(this.child_frame){
+this.child_frame.quench();
 var val=this.child_frame.abort();
 if(is_ef(val)){
-this.notifyAsync();
-this.setChildFrame(val,1);
+
+this.setChildFrame(val,2);
+return this;
+}else{
+
+this.in_abortion=false;
+this.done=true;
+return UNDEF;
 }
 }
 };
 
-function EF_SpawnWaitFrame(waitarr){this.waitarr=waitarr;
+function EF_SpawnWaitFrame(waitarr){this.dyn_vars=exports.current_dyn_vars;
 
+this.waitarr=waitarr;
 waitarr.push(this);
 }
 setEFProto(EF_SpawnWaitFrame.prototype={});
@@ -2260,35 +2481,109 @@ EF_SpawnWaitFrame.prototype.abort=function(){var idx=this.waitarr.indexOf(this);
 
 this.waitarr.splice(idx,1);
 };
-EF_SpawnWaitFrame.prototype.cont=function(val){if(this.parent)cont(this.parent,this.parent_idx,val);
+EF_SpawnWaitFrame.prototype.cont=function(val){if(this.parent){
+
+var current_dyn_vars=exports.current_dyn_vars;
+exports.current_dyn_vars=this.dyn_vars;
+delete this.dyn_vars;
+cont(this.parent,this.parent_idx,val);
+exports.current_dyn_vars=current_dyn_vars;
+}
+};
+
+function EF_SpawnAbortFrame(waitarr,spawn_frame){this.dyn_vars=exports.current_dyn_vars;
+
+this.waitarr=waitarr;
+waitarr.push(this);
+var me=this;
+hold0(function(){me.resolveAbortCycle(spawn_frame)});
+
+}
+setEFProto(EF_SpawnAbortFrame.prototype={});
+EF_SpawnAbortFrame.prototype.quench=function(){};
+EF_SpawnAbortFrame.prototype.abort=function(){return this;
 
 
 };
+EF_SpawnAbortFrame.prototype.cont=function(val){if(this.done)return;
+
+if(this.parent){
+var current_dyn_vars=exports.current_dyn_vars;
+exports.current_dyn_vars=this.dyn_vars;
+delete this.dyn_vars;
+this.done=true;
+cont(this.parent,this.parent_idx,val);
+exports.current_dyn_vars=current_dyn_vars;
+}else if((val&&val.__oni_cfx)&&(val.type==='t'||val.val instanceof Error)){
+
+
+hold0(function(){val.mapToJS(true)});
+}
+};
+EF_SpawnAbortFrame.prototype.resolveAbortCycle=function(spawn_frame){if(this.done)return;
+
+var parent=this.parent;
+while(parent){
+if(spawn_frame===parent){
+var msg="Warning: Cyclic stratum.abort() call from within stratum."+stack_to_string(this.callstack);
+if(console){
+if(console.error)console.error(msg);else console.log(msg);
+
+}
+this.cont(UNDEF);
+break;
+}
+parent=parent.parent;
+}
+};
+
 
 function I_spawn(ndata,env){var val,async,have_val,picked_up=false;
 
-var waitarr=[];
+var value_waitarr=[];
+var abort_waitarr=[];
 var stratum={abort:function(){
-if(!async)return;
+var dyn_vars=exports.current_dyn_vars;
 
-ef.quench();
-ef.abort();
+
+
+
+
+if(ef.in_abortion)return new EF_SpawnAbortFrame(abort_waitarr,ef);
+
+if(ef.done)return UNDEF;
+
+
+var rv=ef.abort();
+
+exports.current_dyn_vars=dyn_vars;
+
 async=false;
 val=new CFException("t",new StratumAborted(),ndata[0],env.file);
 
 
 
-while(waitarr.length)cont(waitarr.shift(),val);
+while(value_waitarr.length)cont(value_waitarr.shift(),val);
 
+
+if(is_ef(rv)){
+return new EF_SpawnAbortFrame(abort_waitarr,ef);
+}
+
+if(!(rv&&rv.__oni_cfx)||rv.type!=='t')rv=UNDEF;
+
+notifyAborted(rv);
+
+return rv;
 },value:function(){
 if(!async){
 picked_up=true;return val}
-return new EF_SpawnWaitFrame(waitarr);
+return new EF_SpawnWaitFrame(value_waitarr);
 },waitforValue:function(){
 
 return this.value()},running:function(){
 return async},waiting:function(){
-return waitarr.length;
+return value_waitarr.length;
 
 },toString:function(){
 return "[object Stratum]"}};
@@ -2297,13 +2592,13 @@ return "[object Stratum]"}};
 function notifyAsync(){async=true;
 
 }
-function notifyVal(_val){if(val!==undefined)return;
+function notifyVal(_val,have_caller){if(val!==undefined)return;
 
 
 
 val=_val;
 async=false;
-if(!waitarr.length){
+if(!have_caller&&!value_waitarr.length){
 
 
 
@@ -2327,15 +2622,23 @@ setTimeout(function(){if(!picked_up)val.mapToJS(true);
 
 },0);
 }
-}else while(waitarr.length)cont(waitarr.shift(),val);
+}else while(value_waitarr.length)cont(value_waitarr.shift(),val);
 
 
 
 
 }
-var ef=new EF_Spawn(ndata,env,notifyAsync,notifyVal);
-cont(ef,0);
-return stratum;
+function notifyAborted(_val){if(!(_val&&_val.__oni_cfx)||_val.type!=='t')_val=UNDEF;
+
+
+while(abort_waitarr.length)cont(abort_waitarr.shift(),_val);
+
+}
+
+var ef=new EF_Spawn(ndata,env,notifyAsync,notifyVal,notifyAborted);
+
+
+return cont(ef,0)||stratum;
 }
 
 
@@ -2476,28 +2779,53 @@ hold0=function(co){return setTimeout(co,0)};
 clear0=clearTimeout;
 }
 
-exports.Hold=function(duration_ms){if(duration_ms===UNDEF)return {__oni_ef:true,wait:function(){
+exports.Hold=function(duration_ms){var dyn_vars=exports.current_dyn_vars;
 
-return this},quench:dummy,abort:dummy};
+
+function abort(){exports.current_dyn_vars=dyn_vars;
+
+
+}
+
+if(duration_ms===UNDEF)return {__oni_ef:true,wait:function(){
+
+
+return this},quench:dummy,abort:abort};
+
+
+
+
 if(duration_ms===0){
 var sus={__oni_ef:true,wait:function(){
-return this},abort:dummy,quench:function(){
+
+return this},abort:abort,quench:function(){
 
 sus=null;clear0(this.co)},co:hold0(function(){
-if(sus&&sus.parent)cont(sus.parent,sus.parent_idx,UNDEF);
+if(sus&&sus.parent){
 
-
+exports.current_dyn_vars=dyn_vars;
+cont(sus.parent,sus.parent_idx,UNDEF);
+exports.current_dyn_vars=null;
+}
 })};
 
 return sus;
 }else{
 
 var sus={__oni_ef:true,wait:function(){
-return this},abort:dummy,quench:function(){
+
+return this},abort:abort,quench:function(){
 
 sus=null;clearTimeout(this.co)}};
 
-sus.co=setTimeout(function(){if(sus&&sus.parent)cont(sus.parent,sus.parent_idx,UNDEF)},duration_ms);
+sus.co=setTimeout(function(){
+if(sus&&sus.parent){
+
+exports.current_dyn_vars=dyn_vars;
+cont(sus.parent,sus.parent_idx,UNDEF);
+exports.current_dyn_vars=null;
+}
+},duration_ms);
 
 return sus;
 }
@@ -2614,18 +2942,6 @@ exports.UA=UA;
 
 
 exports.modules={};exports.modsrc={};})(__oni_rt);(function(exports){function push_decl_scope(pctx,bl){
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
@@ -3218,14 +3534,7 @@ return "__oni_rt.Switch("+this.exp.v()+","+clauses+")";
 
 
 
-function ph_fun_exp(fname,pars,body,pctx,implicit_return){this.is_nblock=pctx.allow_nblock;
-
-
-
-
-
-
-if(implicit_return&&pctx.js_ctx)body="return "+body;
+function ph_fun_exp(fname,pars,body,pctx){this.is_nblock=pctx.allow_nblock;
 
 
 
@@ -3349,7 +3658,7 @@ function ph_var_decl(d,pctx){this.d=d;
 
 if(!this.d[0].is_id)this.is_dest=true;
 
-this.is_empty=this.d.length<2;
+this.is_empty=this.d[1]==null;
 this.pctx=pctx;
 this.line=pctx.line;
 if(!this.is_empty)this.is_nblock=pctx.allow_nblock&&d[1].is_nblock&&!this.is_dest;
@@ -3576,6 +3885,7 @@ function ph_bl_break(pctx,lbl){this.line=pctx.line;
 
 this.lbl=lbl;
 this.is_nblock=true;
+this.js_ctx=pctx.js_ctx;
 }
 ph_bl_break.prototype=new ph();
 ph_bl_break.prototype.nblock_val=function(){if(this.js_ctx)throw new Error("Blocklamdas cannot contain 'break' statements in __js{...} contexts");
@@ -3629,7 +3939,7 @@ return "for(;"+this.test_exp.nb()+";"+this.inc_exp.nb()+"){"+this.body.nb()+"}";
 
 
 return "while("+this.test_exp.nb()+"){"+this.body.nb()+"}";
-}else throw new Error("Can't encode this loop as __js yet");
+}else return "while(1){"+this.body.nb()+"}";
 
 };
 ph_loop.prototype.val=function(){var test=this.test_exp?this.test_exp.v():"1";
@@ -3812,6 +4122,17 @@ if(i%2)rv+=","+this.parts[i].v();else rv+=',"'+this.parts[i].replace(/\"/g,'\\"'
 }
 return rv+")";
 };
+ph_quasi_template.prototype.nblock_val=function(){var rv="__oni_rt.Quasi(";
+
+for(var i=0;i<this.parts.length;++i){
+if(i>0)rv+=",";
+if(i%2)rv+=this.parts[i].nb();else rv+='"'+this.parts[i].replace(/\"/g,'\\"')+'"';
+
+
+
+}
+return rv+")";
+};
 
 function ph_assign_op(left,id,right,pctx){if(!left.is_ref&&!left.is_id){
 
@@ -3875,7 +4196,15 @@ function ph_prefix_op(id,right,pctx){this.id=id;
 
 this.right=right;
 this.line=pctx.line;
-this.is_nblock=(pctx.allow_nblock&&right.is_nblock)&&id!="spawn";
+if(id==='spawn'){
+
+
+pctx.decl_scopes[pctx.decl_scopes.length-1].notail=true;
+this.is_nblock=false;
+}else{
+
+this.is_nblock=(pctx.allow_nblock&&right.is_nblock);
+}
 }
 ph_prefix_op.prototype=new ph();
 ph_prefix_op.prototype.is_value=true;
@@ -4514,57 +4843,19 @@ ph_suspend_wrapper.prototype.val=function(){return "__oni_rt.Nb(function(){var r
 
 
 
-function gen_using(has_var,lhs,exp,body,pctx){var rv;
-
-if(has_var){
-
-if(!lhs.is_id)throw new Error("Variable name expected in 'using' expression");
-rv=gen_var_compound([[lhs]],pctx);
-rv.stmts.push(new ph_using(lhs,exp,body,pctx));
-rv=rv.toBlock();
-}else rv=new ph_using(lhs,exp,body,pctx);
-
-
-return rv;
-}
-
-function ph_using(lhs,exp,body,pctx){this.line=pctx.line;
-
-this.body=body;
-this.assign1=new ph_assign_op(new ph_identifier("_oniW",pctx),"=",exp,pctx);
-
-if(lhs)this.assign2=new ph_assign_op(lhs,"=",new ph_identifier("_oniW",pctx),pctx);
-
-
-}
 
 
 
 
-ph_using.prototype=new ph();
-ph_using.prototype.val=function(){var rv="__oni_rt.Nb(function(){var _oniW;"+"return __oni_rt.ex(__oni_rt.Seq("+0+","+this.assign1.v()+",";
-
-
-
-if(this.assign2)rv+=this.assign2.v()+",";
-
-rv+="__oni_rt.Try("+0+","+this.body.v()+",0,"+"__oni_rt.Nb(function(){if(_oniW&&_oniW.__finally__)return _oniW.__finally__()},"+this.line+"),0)),this)},"+this.line+")";
-
-return rv;
-};
-
-
-
-
-
-
-
-function ph_blocklambda(pars,body,pctx){this.code="__oni_rt.Bl(function"+gen_function_header(pars)+body+"})";
+function ph_blocklambda(pars,body,pctx){this.code="function"+gen_function_header(pars)+body+"}";
 
 }
 ph_blocklambda.prototype=new ph();
-ph_blocklambda.prototype.val=function(){return this.code};
+ph_blocklambda.prototype.val=function(){return "__oni_rt.Bl("+this.code+")"};
+ph_blocklambda.prototype.nblock_val=function(){return this.code;
 
+
+};
 
 
 function ph_lbl_stmt(lbl,stmt){this.lbl=lbl;
@@ -4618,6 +4909,7 @@ delete this["$"+key]}};
 
 
 
+
 var TOKENIZER_SA=/(?:[ \f\t\v\u00A0\u2028\u2029]+|\/\/.*|#!.*)*(?:((?:(?:\r\n|\n|\r)|\/\*(?:.|\n|\r)*?\*\/)+)|((?:0[xX][\da-fA-F]+)|(?:(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?))|(\/(?:\\.|\[(?:\\[^\r\n]|[^\n\r\]])*\]|[^\[\/\r\n])+\/[gimy]*)|(==|!=|->|=>|>>|<<|<=|>=|--|\+\+|\|\||&&|\.\.|\:\:|[-*\/%+&^|]=|[;,?:|^&=<>+\-*\/%!~.\[\]{}()\"`]|[$@_\w]+)|('(?:\\[^\r\n]|[^\\\'\r\n])*')|('(?:\\(?:(?:[^\r\n]|(?:\r\n|\n|\r)))|[^\\\'])*')|(\S+))/g;
 
 
@@ -4630,6 +4922,8 @@ var TOKENIZER_IS=/((?:\\[^\r\n]|\#(?!\{)|[^#\\\"\r\n])+)|(\\(?:\r\n|\n|\r))|((?:
 
 
 var TOKENIZER_QUASI=/((?:\\[^\r\n]|\$(?![\{a-zA-Z_$@])|[^$\\\`\r\n])+)|(\\(?:\r\n|\n|\r))|((?:\r\n|\n|\r))|(\`|\$\{|\$(?=[a-zA-Z_$@]))/g;
+
+
 
 
 
@@ -4674,11 +4968,11 @@ this.stmtf=f;
 return this;
 },ifx:function(bp,right_assoc){
 
-
 this.excbp=bp;
 
 if(right_assoc)bp-=.5;
 this.excf=function(left,pctx){var right=parseExp(pctx,bp);
+
 
 
 return new ph_infix_op(left,this.id,right,pctx);
@@ -4692,6 +4986,7 @@ if(right_assoc)bp-=.5;
 this.excf=function(left,pctx){var right=parseExp(pctx,bp);
 
 
+
 return new ph_assign_op(left,this.id,right,pctx);
 };
 return this;
@@ -4699,6 +4994,8 @@ return this;
 
 return this.exs(function(pctx){
 var right=parseExp(pctx,bp);
+
+
 
 
 return new ph_prefix_op(this.id,right,pctx);
@@ -4709,12 +5006,14 @@ return this.exc(bp,function(left,pctx){
 return new ph_postfix_op(left,this.id,pctx);
 
 
+
+
 });
 }};
 
 
 
-function Literal(type,value){this.id=type;
+function Literal(type,value,length){this.id=type;
 
 this.value=value;
 }
@@ -4763,8 +5062,11 @@ t.id=id;
 if(tokenizer)t.tokenizer=tokenizer;
 
 ST.put(id,t);
+
+
 return t;
 }
+
 
 
 
@@ -4845,6 +5147,7 @@ S("[").exs(function(pctx){
 
 var elements=[];
 
+
 while(pctx.token.id!="]"){
 if(elements.length)scan(pctx,",");
 if(pctx.token.id==","){
@@ -4862,21 +5165,35 @@ return new ph_arr_lit(elements,pctx);
 
 var idxexp=parseExp(pctx);
 
+
+
 scan(pctx,"]");
 
 return new ph_idx_accessor(l,idxexp,pctx);
 });
 
-S(".").exc(270,function(l,pctx){if(pctx.token.id!="<id>")throw new Error("Expected an identifier, found '"+pctx.token+"' instead");
 
 
-var name=pctx.token.value;
+
+var VALID_IDENTIFIER_NAME=/^[a-z]+$/;
+
+S(".").exc(270,function(l,pctx){var name;
+
+
+if(pctx.token.id=="<id>")name=pctx.token.value;else if(VALID_IDENTIFIER_NAME.test(pctx.token.id))name=pctx.token.id;else throw new Error("Expected an identifier, found '"+pctx.token+"' instead");
+
+
+
+
+
+
 scan(pctx);
 
 return new ph_dot_accessor(l,name,pctx);
 });
 
 S("new").exs(function(pctx){var exp=parseExp(pctx,260);
+
 
 var args=[];
 if(pctx.token.id=="("){
@@ -4885,6 +5202,7 @@ while(pctx.token.id!=")"){
 if(args.length)scan(pctx,",");
 args.push(parseExp(pctx,110));
 }
+
 scan(pctx,")");
 }
 
@@ -4903,6 +5221,7 @@ if(op.id!='->'&&op.id!='=>')throw new Error("Was expecting '->' or '=>' after em
 scan(pctx);
 return op.exsf(pctx);
 }
+
 var e=parseExp(pctx);
 scan(pctx,")");
 
@@ -4911,10 +5230,12 @@ return new ph_group(e,pctx);
 
 var args=[];
 
+
 while(pctx.token.id!=")"){
 if(args.length)scan(pctx,",");
 args.push(parseExp(pctx,110));
 }
+
 scan(pctx,")");
 
 
@@ -4943,6 +5264,7 @@ return new ph_fun_call(l,args,pctx);
 S("..").exc(255,function(l,pctx){var r=parseExp(pctx,255);
 
 
+
 return gen_doubledot_call(l,r,pctx);
 });
 
@@ -4967,7 +5289,8 @@ S("<<").ifx(210);
 S(">>").ifx(210);
 S(">>>").ifx(210);
 
-S("::").exc(205,function(l,pctx){var r=parseExp(pctx,204.5);
+S("::").exc(205,function(l,pctx){var r=parseExp(pctx,110);
+
 
 
 return gen_doublecolon_call(l,r,pctx);
@@ -4995,6 +5318,7 @@ S("||").ifx(140);
 
 S("?").exc(130,function(test,pctx){var consequent=parseExp(pctx,110);
 
+
 if(pctx.token.id==":"){
 scan(pctx,":");
 var alternative=parseExp(pctx,110);
@@ -5021,10 +5345,12 @@ S("->").exs(function(pctx){
 var body=parseExp(pctx,119.5);
 
 
+
 return new ph_arrow(undefined,body,pctx);
 }).exc(120,function(left,pctx){
 
 var body=parseExp(pctx,119.5);
+
 
 
 return new ph_arrow(left,body,pctx);
@@ -5034,10 +5360,12 @@ S("=>").exs(function(pctx){
 var body=parseExp(pctx,119.5);
 
 
+
 return new ph_arrow(undefined,body,pctx,true);
 }).exc(120,function(left,pctx){
 
 var body=parseExp(pctx,119.5);
+
 
 
 return new ph_arrow(left,body,pctx,true);
@@ -5061,10 +5389,13 @@ if((token=scan(pctx)).id!="<string>"||scan(pctx,undefined,TOKENIZER_IS).id!='ist
 
 return '"'+token.value+'"';
 }
+if(VALID_IDENTIFIER_NAME.test(token.id))return token.id;
+
 throw new Error("Invalid object literal syntax; property name expected, but saw "+token);
 }
 
 function parseBlock(pctx){push_stmt_scope(pctx);
+
 
 
 while(pctx.token.id!="}"){
@@ -5072,12 +5403,14 @@ var stmt=parseStmt(pctx);
 
 add_stmt(stmt,pctx);
 }
+
 scan(pctx,"}");
 
 return pop_block(pctx);
 }
 
 function parseBlockLambdaBody(pctx){push_decl_scope(pctx,true);
+
 
 push_stmt_scope(pctx);
 while(pctx.token.id!="}"){
@@ -5090,6 +5423,7 @@ scan(pctx,"}");
 var decls=pctx.decl_scopes.pop();var flags=1+64;if(decls.notail)flags+=8;return collect_decls(decls)+pop_stmt_scope(pctx,"return __oni_rt.exbl(this,["+flags,"])");
 }
 function parseBlockLambda(start,pctx){var pars;
+
 
 
 if(start=='||'){
@@ -5114,6 +5448,7 @@ return parseBlockLambda(start,pctx);
 
 
 var props=[];
+
 while(pctx.token.id!="}"){
 if(props.length)scan(pctx,",");
 var prop=pctx.token;
@@ -5143,11 +5478,12 @@ return new ph_obj_lit(props,pctx);
 
 var start=pctx.token.id;
 
+
 if(start!="|"&&start!="||")throw new Error("Unexpected token '"+pctx.token+"' - was expecting '|' or '||'");
 
 var args=[parseBlockLambda(start,pctx)];
 
-return new ph_fun_call(l,args,pctx);;
+return new ph_fun_call(l,args,pctx);
 }).stmt(parseBlock);
 
 
@@ -5166,18 +5502,20 @@ throw new Error("Unexpected end of input (stmt)")});
 
 
 
-function parseFunctionBody(pctx,implicit_return){push_decl_scope(pctx);
+function parseFunctionBody(pctx){push_decl_scope(pctx);
 
 push_stmt_scope(pctx);
+
 scan(pctx,"{");
 while(pctx.token.id!="}"){
 var stmt=parseStmt(pctx);
 
 add_stmt(stmt,pctx);
 }
+
 scan(pctx,"}");
 
-var decls=pctx.decl_scopes.pop();var flags=1;if(decls.notail)flags+=8;if(implicit_return)flags+=32;return collect_decls(decls)+pop_stmt_scope(pctx,"return __oni_rt.exseq(arguments,this,"+pctx.filename+",["+flags,"])");
+var decls=pctx.decl_scopes.pop();var flags=1;if(decls.notail)flags+=8;return collect_decls(decls)+pop_stmt_scope(pctx,"return __oni_rt.exseq(arguments,this,"+pctx.filename+",["+flags,"])");
 }
 
 function parseFunctionParam(pctx){var t=pctx.token;
@@ -5211,16 +5549,15 @@ break;
 default:
 throw new Error("Expected function parameter but found '"+pctx.token+"'");
 }
-token=pctx.token;
 }
 scan(pctx,endtok);
 return pars;
 }
 
-
 S("function").exs(function(pctx){
 
 var fname="";
+
 
 if(pctx.token.id=="<id>"){
 fname=pctx.token.value;
@@ -5229,15 +5566,18 @@ scan(pctx);
 var pars=parseFunctionParams(pctx);
 var body=parseFunctionBody(pctx);
 
-return new ph_fun_exp(fname,pars,body,pctx,false);
+
+return new ph_fun_exp(fname,pars,body,pctx);
 }).stmt(function(pctx){
 
 if(pctx.token.id!="<id>")throw new Error("Malformed function declaration");
+
 
 var fname=pctx.token.value;
 scan(pctx);
 var pars=parseFunctionParams(pctx);
 var body=parseFunctionBody(pctx);
+
 
 return gen_fun_decl(fname,pars,body,pctx);
 });
@@ -5281,14 +5621,17 @@ break;
 default:
 throw new Error("Internal parser error: Unknown token in string ("+pctx.token+")");
 }
+
 scan(pctx,undefined,TOKENIZER_IS);
 }
-scan(pctx);
 
 if(last==-1){
+
 parts.push('');
 last=0;
 }
+
+scan(pctx);
 
 if(last==0&&typeof parts[0]=='string'){
 var val='"'+parts[0]+'"';
@@ -5301,6 +5644,7 @@ S('istr-#{',TOKENIZER_SA);
 S('istr-"',TOKENIZER_OP);
 
 S('`',TOKENIZER_QUASI).exs(function(pctx){var parts=[],current=0;
+
 
 while(pctx.token.id!='quasi-`'){
 switch(pctx.token.id){case '<string>':
@@ -5344,6 +5688,7 @@ break;
 default:
 throw new Error('Internal parser error: Unknown token in string ('+pctx.token+')');
 }
+
 scan(pctx,undefined,TOKENIZER_QUASI);
 }
 scan(pctx);
@@ -5365,6 +5710,7 @@ if(pctx.src.charAt(pctx.lastIndex)!='('){
 return identifier.exsf(pctx);
 }else{
 
+
 scan(pctx);
 scan(pctx,'(');
 
@@ -5385,9 +5731,11 @@ function isStmtTermination(token){return token.id==";"||token.id=="}"||token.id=
 
 }
 
-function parseStmtTermination(pctx){if(pctx.token.id!="}"&&pctx.token.id!="<eof>"&&!pctx.newline)scan(pctx,";");
+function parseStmtTermination(pctx){if(pctx.token.id!="}"&&pctx.token.id!="<eof>"&&!pctx.newline){
 
 
+scan(pctx,";");
+}
 }
 
 function parseVarDecls(pctx,noIn){var decls=[];
@@ -5395,19 +5743,21 @@ function parseVarDecls(pctx,noIn){var decls=[];
 var parse=noIn?parseExpNoIn:parseExp;
 do {
 if(decls.length)scan(pctx,",");
-var id_or_pattern=parse(pctx,120);
+
+var id_or_pattern=parse(pctx,120),initialiser=null;
 if(pctx.token.id=="="){
 scan(pctx);
-var initialiser=parse(pctx,110);
-decls.push([id_or_pattern,initialiser]);
-}else decls.push([id_or_pattern]);
+initialiser=parse(pctx,110);
 
-
+}
+decls.push([id_or_pattern,initialiser,null]);
 }while(pctx.token.id==",");
+
 return decls;
 }
 
 S("var").stmt(function(pctx){var decls=parseVarDecls(pctx);
+
 
 parseStmtTermination(pctx);
 
@@ -5417,6 +5767,7 @@ return gen_var_decl(decls,pctx);
 S("else");
 
 S("if").stmt(function(pctx){scan(pctx,"(");
+
 
 var test=parseExp(pctx);
 scan(pctx,")");
@@ -5432,6 +5783,7 @@ return new ph_if(test,consequent,alternative,pctx);
 
 S("while").stmt(function(pctx){scan(pctx,"(");
 
+
 var test=parseExp(pctx);
 scan(pctx,")");
 ++top_decl_scope(pctx).break_scope;++top_decl_scope(pctx).continue_scope;
@@ -5442,12 +5794,14 @@ return new ph_loop(0,test,body);
 });
 
 S("do").stmt(function(pctx){++top_decl_scope(pctx).break_scope;
+
 ++top_decl_scope(pctx).continue_scope;
 var body=parseStmt(pctx);
 --top_decl_scope(pctx).break_scope;--top_decl_scope(pctx).continue_scope;
 scan(pctx,"while");
 scan(pctx,"(");
 var test=parseExp(pctx);
+
 scan(pctx,")");
 parseStmtTermination(pctx);
 
@@ -5456,9 +5810,11 @@ return new ph_loop(2,test,body);
 
 S("for").stmt(function(pctx){scan(pctx,"(");
 
+
 var start_exp=null;
 var decls=null;
 if(pctx.token.id=="var"){
+
 scan(pctx);
 decls=parseVarDecls(pctx,true);
 }else{
@@ -5503,8 +5859,10 @@ return gen_for_in(start_exp,decl,obj_exp,body,pctx);
 
 S("continue").stmt(function(pctx){var label=null;
 
+
 if(pctx.token.id=="<id>"&&!pctx.newline){
 label=pctx.token.value;
+
 scan(pctx);
 }
 parseStmtTermination(pctx);
@@ -5514,8 +5872,10 @@ if(top_decl_scope(pctx).continue_scope)return new ph_cfe("c",pctx,label);else if
 
 S("break").stmt(function(pctx){var label=null;
 
+
 if(pctx.token.id=="<id>"&&!pctx.newline){
 label=pctx.token.value;
+
 scan(pctx);
 }
 parseStmtTermination(pctx);
@@ -5525,8 +5885,11 @@ if(top_decl_scope(pctx).break_scope)return new ph_cfe("b",pctx,label);else if(to
 
 S("return").stmt(function(pctx){var exp=null;
 
-if(!isStmtTermination(pctx.token)&&!pctx.newline)exp=parseExp(pctx);
 
+if(!isStmtTermination(pctx.token)&&!pctx.newline){
+exp=parseExp(pctx);
+
+}
 parseStmtTermination(pctx);
 
 if(top_decl_scope(pctx).bl)return new ph_bl_return(exp,pctx);else return new ph_return(exp,pctx);
@@ -5534,9 +5897,11 @@ if(top_decl_scope(pctx).bl)return new ph_bl_return(exp,pctx);else return new ph_
 
 S("with").stmt(function(pctx){scan(pctx,"(");
 
+
 var exp=parseExp(pctx);
 scan(pctx,")");
 var body=parseStmt(pctx);
+
 
 return new ph_with(exp,body,pctx);
 });
@@ -5546,6 +5911,7 @@ S("default");
 
 S("switch").stmt(function(pctx){scan(pctx,"(");
 
+
 var exp=parseExp(pctx);
 scan(pctx,")");
 scan(pctx,"{");
@@ -5553,6 +5919,7 @@ scan(pctx,"{");
 var clauses=[];
 while(pctx.token.id!="}"){
 var clause_exp=null;
+
 if(pctx.token.id=="case"){
 scan(pctx);
 clause_exp=parseExp(pctx);
@@ -5564,23 +5931,31 @@ scan(pctx);
 
 scan(pctx,":");
 
+
 push_stmt_scope(pctx);top_stmt_scope(pctx).exp=clause_exp;
 while(pctx.token.id!="case"&&pctx.token.id!="default"&&pctx.token.id!="}"){
 var stmt=parseStmt(pctx);
 
+
 add_stmt(stmt,pctx);
 }
-clauses.push((function(pctx){return [top_stmt_scope(pctx).exp,pop_block(pctx)]})(pctx));
+clauses.push((function(pctx){return [top_stmt_scope(pctx).exp,pop_block(pctx)];
+
+
+})(pctx));
 }
 --top_decl_scope(pctx).break_scope;
+
 scan(pctx,"}");
 
-return new ph_switch(exp,clauses);(exp,clauses,pctx);
+return new ph_switch(exp,clauses);(exp,clauses,pctx,null);
 });
 
 S("throw").stmt(function(pctx){if(pctx.newline)throw new Error("Illegal newline after throw");
 
+
 var exp=parseExp(pctx);
+
 parseStmtTermination(pctx);
 
 return new ph_throw(exp,pctx);;
@@ -5630,6 +6005,7 @@ return rv;
 
 S("try").stmt(function(pctx){scan(pctx,"{");
 
+
 var block=parseBlock(pctx);
 var op=pctx.token.value;
 if(op!="and"&&op!="or"){
@@ -5654,6 +6030,7 @@ return gen_waitfor_andor(op,blocks,crf,pctx);
 });
 
 S("waitfor").stmt(function(pctx){if(pctx.token.id=="{"){
+
 
 
 scan(pctx,"{");
@@ -5694,30 +6071,8 @@ return gen_suspend(has_var,decls,block,crf,pctx);
 });
 
 
-S("using").stmt(function(pctx){var has_var;
-
-scan(pctx,"(");
-if(has_var=(pctx.token.id=="var"))scan(pctx);
-
-var lhs,exp;
-var e1=parseExp(pctx,120);
-if(pctx.token.id=="="){
-lhs=e1;
-scan(pctx);
-exp=parseExp(pctx);
-}else{
-
-if(has_var)throw new Error("Syntax error in 'using' expression");
-
-exp=e1;
-}
-scan(pctx,")");
-var body=parseStmt(pctx);
-
-return gen_using(has_var,lhs,exp,body,pctx);
-});
-
 S("__js").stmt(function(pctx){if(pctx.allow_nblock)++pctx.js_ctx;
+
 
 
 var body=parseStmt(pctx);
@@ -5725,6 +6080,15 @@ var body=parseStmt(pctx);
 if(pctx.allow_nblock)--pctx.js_ctx;
 
 body.is_nblock=pctx.allow_nblock;return body;
+}).exs(function(pctx){
+if(pctx.allow_nblock)++pctx.js_ctx;
+
+
+var right=parseExp(pctx,112);
+if(pctx.allow_nblock)--pctx.js_ctx;
+
+
+right.is_nblock=pctx.allow_nblock;return right;
 });
 
 
@@ -5772,7 +6136,7 @@ function makeParserContext(src,settings){var ctx={src:src,line:1,lastIndex:0,tok
 
 
 
-if(settings)for(var a in settings)ctx[a]=settings[a];
+if(settings)for(var a=null in settings)ctx[a]=settings[a];
 
 
 
@@ -5801,7 +6165,7 @@ exception.compileError={message:mes,line:line};
 throw exception;
 }
 }
-exports.compile=compile;
+exports.compile=exports.parse=compile;
 
 function parseScript(pctx){begin_script(pctx);
 
@@ -5816,10 +6180,13 @@ return end_script(pctx);
 
 function parseStmt(pctx){var t=pctx.token;
 
+
+
 scan(pctx);
 if(t.stmtf){
 
-return t.stmtf(pctx);
+var rv=t.stmtf(pctx);
+return rv;
 }else if(t.id=="<id>"&&pctx.token.id==":"){
 
 
@@ -5827,12 +6194,15 @@ scan(pctx);
 
 var stmt=parseStmt(pctx);
 
+
 return new ph_lbl_stmt(t.value,stmt);
 }else{
 
 
 var exp=parseExp(pctx,0,t);
+
 parseStmtTermination(pctx);
+
 
 return new ph_exp_stmt(exp,pctx);
 }
@@ -5845,14 +6215,18 @@ if(!t){
 t=pctx.token;
 scan(pctx);
 }
+
+
 var left=t.exsf(pctx);
 while(bp<pctx.token.excbp){
-t=pctx.token;
 
-if(pctx.newline&&t.asi_restricted)return left;
+if(pctx.newline&&t.asi_restricted)break;
+
+t=pctx.token;
 
 scan(pctx);
 left=t.excf(left,pctx);
+
 }
 return left;
 }
@@ -5864,6 +6238,8 @@ if(!t){
 t=pctx.token;
 scan(pctx);
 }
+
+
 var left=t.exsf(pctx);
 while(bp<pctx.token.excbp&&pctx.token.id!='in'){
 t=pctx.token;
@@ -5885,7 +6261,7 @@ if(pctx.token)tokenizer=pctx.token.tokenizer;else tokenizer=TOKENIZER_SA;
 
 }
 
-if(id&&(!pctx.token||pctx.token.id!=id))throw new Error("Unexpected "+pctx.token);
+if(id&&(!pctx.token||pctx.token.id!=id))throw new Error("Unexpected "+pctx.token+", looking for "+id+" on "+pctx.line);
 
 pctx.token=null;
 pctx.newline=0;
@@ -5913,16 +6289,18 @@ pctx.newline+=m.length;
 
 }
 
-}else if(matches[5])pctx.token=new Literal("<string>",matches[5]);else if(matches[6]){
+}else if(matches[5]){
 
-
+pctx.token=new Literal("<string>",matches[5]);
+}else if(matches[6]){
 
 var val=matches[6];
 var m=val.match(/(?:\r\n|\n|\r)/g);
 pctx.line+=m.length;
 pctx.newline+=m.length;
-val=val.replace(/\\(?:\r\n|\n|\r)/g,"").replace(/(?:\r\n|\n|\r)/g,"\\n");
-pctx.token=new Literal("<string>",val);
+var lit=val.replace(/\\(?:\r\n|\n|\r)/g,"").replace(/(?:\r\n|\n|\r)/g,"\\n");
+pctx.token=new Literal("<string>",lit);
+
 }else if(matches[2])pctx.token=new Literal("<number>",matches[2]);else if(matches[3])pctx.token=new Literal("<regex>",matches[3]);else if(matches[7])throw new Error("Unexpected characters: '"+matches[7]+"'");else throw new Error("Internal scanner error");
 
 
@@ -5961,9 +6339,9 @@ tokenizer=TOKENIZER_SA;
 }else if(tokenizer==TOKENIZER_IS){
 
 
-if(matches[1])pctx.token=new Literal("<string>",matches[1]);else if(matches[2]){
-
-
+if(matches[1]){
+pctx.token=new Literal("<string>",matches[1]);
+}else if(matches[2]){
 ++pctx.line;
 ++pctx.newline;
 
@@ -5971,7 +6349,7 @@ if(matches[1])pctx.token=new Literal("<string>",matches[1]);else if(matches[2]){
 
 ++pctx.line;
 ++pctx.newline;
-pctx.token=new Literal("<string>",'\\n');
+pctx.token=new Literal("<string>",'\\n',1);
 }else if(matches[4]){
 
 pctx.token=ST.lookup("istr-"+matches[4]);
@@ -5979,9 +6357,10 @@ pctx.token=ST.lookup("istr-"+matches[4]);
 }else if(tokenizer==TOKENIZER_QUASI){
 
 
-if(matches[1])pctx.token=new Literal("<string>",matches[1]);else if(matches[2]){
-
-
+if(matches[1]){
+pctx.token=new Literal("<string>",matches[1]);
+pctx.token.inner='`';
+}else if(matches[2]){
 ++pctx.line;
 ++pctx.newline;
 
@@ -6002,7 +6381,7 @@ return pctx.token;
 }
 
 
-})(__oni_rt.c1={});__oni_rt.modsrc['builtin:apollo-sys-common.sjs']="__oni_rt.sys=exports;\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\nvar UNDEF;\n\n\n\n\n\nif(!(__oni_rt.G.__oni_rt_bundle)){\n__oni_rt.G.__oni_rt_bundle={};\n}\n\n\n\n\n\n\n\n\n\nexports.hostenv=__oni_rt.hostenv;\n\n\n\n\n\n__js exports.getGlobal=function(){return __oni_rt.G};\n\n\n\n\n\n\n\n\n\n__js exports.isArrayLike=function(obj){return Array.isArray(obj)||!!(obj&&Object.prototype.hasOwnProperty.call(obj,\'callee\'))||!!(__oni_rt.G.NodeList&&obj instanceof NodeList)||!!(__oni_rt.G.HTMLCollection&&obj instanceof HTMLCollection)||!!(__oni_rt.G.FileList&&obj instanceof FileList)||!!(__oni_rt.G.StaticNodeList&&obj instanceof StaticNodeList);\n\n\n\n\n\n\n};\n\n\n\n\n\n\n\n\n\n\n\n__js {\nvar _flatten=function(arr,rv){var l=arr.length;\n\nfor(var i=0;i<l;++i){\nvar elem=arr[i];\nif(exports.isArrayLike(elem))_flatten(elem,rv);else rv.push(elem);\n\n\n\n}\n};\n\nexports.flatten=function(arr){var rv=[];\n\nif(arr.length===UNDEF)throw new Error(\"flatten() called on non-array\");\n_flatten(arr,rv);\nreturn rv;\n};\n}\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n__js exports.expandSingleArgument=function(args){if(args.length==1&&exports.isArrayLike(args[0]))args=args[0];\n\n\nreturn args;\n};\n\n\n\n\n\n\n\n\n\n__js exports.isQuasi=function(obj){return (obj instanceof __oni_rt.QuasiProto);\n\n};\n\n\n\n\n\n\n__js exports.Quasi=function(arr){return __oni_rt.Quasi.apply(__oni_rt,arr)};\n\n\n\n\n\n\n__js exports.mergeObjects=function(){var rv={};\n\nvar sources=exports.expandSingleArgument(arguments);\nfor(var i=0;i<sources.length;i++ ){\nexports.extendObject(rv,sources[i]);\n}\nreturn rv;\n};\n\n\n\n\n\n__js exports.extendObject=function(dest,source){for(var o in source){\n\nif(Object.prototype.hasOwnProperty.call(source,o))dest[o]=source[o];\n}\nreturn dest;\n};\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n__js {\nfunction URI(){}\nURI.prototype={toString:function(){\nreturn \"#{this.protocol}://#{this.authority}#{this.relative}\";\n\n}};\n\nURI.prototype.params=function(){if(!this._params){\n\nvar rv={};\nthis.query.replace(parseURLOptions.qsParser,function(_,k,v){if(k)rv[decodeURIComponent(k)]=decodeURIComponent(v);\n\n});\nthis._params=rv;\n}\nreturn this._params;\n};\n\nvar parseURLOptions={key:[\"source\",\"protocol\",\"authority\",\"userInfo\",\"user\",\"password\",\"host\",\"port\",\"relative\",\"path\",\"directory\",\"file\",\"query\",\"anchor\"],qsParser:/(?:^|&)([^&=]*)=?([^&]*)/g,parser:/^(?:([^:\\/?#]+):)?(?:\\/\\/((?:(([^:@]*)(?::([^:@]*))?)?@)?([^:\\/?#]*)(?::(\\d*))?))?((((?:[^?#\\/]*\\/)*)([^?#]*))(?:\\?([^#]*))?(?:#(.*))?)/};\n\n\n\n\n\n\nexports.parseURL=function(str){var o=parseURLOptions,m=o.parser.exec(str),uri=new URI(),i=14;\n\n\n\n\nwhile(i-- )uri[o.key[i]]=m[i]||\"\";\nreturn uri;\n};\n}\n\n\n\n\n\n\n\n\n\n__js exports.constructQueryString=function(){var hashes=exports.flatten(arguments);\n\nvar hl=hashes.length;\nvar parts=[];\nfor(var h=0;h<hl;++h){\nvar hash=hashes[h];\nfor(var q in hash){\nvar l=encodeURIComponent(q)+\"=\";\nvar val=hash[q];\nif(!exports.isArrayLike(val))parts.push(l+encodeURIComponent(val));else{\n\n\nfor(var i=0;i<val.length;++i)parts.push(l+encodeURIComponent(val[i]));\n\n}\n}\n}\nreturn parts.join(\"&\");\n};\n\n\n\n\n\n\n\n\n__js exports.constructURL=function(){var url_spec=exports.flatten(arguments);\n\nvar l=url_spec.length;\nvar rv=url_spec[0];\n\n\nfor(var i=1;i<l;++i){\nvar comp=url_spec[i];\nif(typeof comp!=\"string\")break;\nif(rv.charAt(rv.length-1)!=\"/\")rv+=\"/\";\nrv+=comp.charAt(0)==\"/\"?comp.substr(1):comp;\n}\n\n\nvar qparts=[];\nfor(;i<l;++i){\nvar part=exports.constructQueryString(url_spec[i]);\nif(part.length)qparts.push(part);\n\n}\nvar query=qparts.join(\"&\");\nif(query.length){\nif(rv.indexOf(\"?\")!=-1)rv+=\"&\";else rv+=\"?\";\n\n\n\nrv+=query;\n}\nreturn rv;\n};\n\n\n\n\n\n\n\n__js exports.isSameOrigin=function(url1,url2){var a1=exports.parseURL(url1).authority;\n\nif(!a1)return true;\nvar a2=exports.parseURL(url2).authority;\nreturn !a2||(a1==a2);\n};\n\n\n\n\n\n\n\n\n\n\n__js exports.canonicalizeURL=function(url,base){if(__oni_rt.hostenv==\"nodejs\"&&__oni_rt.G.process.platform==\'win32\'){\n\n\n\nurl=url.replace(/\\\\/g,\"/\");\nbase=base.replace(/\\\\/g,\"/\");\n}\n\nvar a=exports.parseURL(url);\n\n\nif(base&&(base=exports.parseURL(base))&&(!a.protocol||a.protocol==base.protocol)){\n\nif(!a.directory&&!a.protocol){\na.directory=base.directory;\nif(!a.path&&(a.query||a.anchor))a.file=base.file;\n\n}else if(a.directory&&a.directory.charAt(0)!=\'/\'){\n\n\na.directory=(base.directory||\"/\")+a.directory;\n}\nif(!a.protocol){\na.protocol=base.protocol;\nif(!a.authority)a.authority=base.authority;\n\n}\n}\n\n\nvar pin=a.directory.split(\"/\");\nvar l=pin.length;\nvar pout=[];\nfor(var i=0;i<l;++i){\nvar c=pin[i];\nif(c==\".\")continue;\nif(c==\"..\"&&pout.length>1)pout.pop();else pout.push(c);\n\n\n\n}\na.directory=pout.join(\"/\");\n\n\nvar rv=\"\";\nif(a.protocol)rv+=a.protocol+\":\";\nif(a.authority)rv+=\"//\"+a.authority;else if(a.protocol==\"file\")rv+=\"//\";\n\n\n\nrv+=a.directory+a.file;\nif(a.query)rv+=\"?\"+a.query;\nif(a.anchor)rv+=\"#\"+a.anchor;\nreturn rv;\n};\n\n\n\n\n\n\n\n\n\n\n\nexports.jsonp=jsonp_hostenv;\n\n\n\n\n\n\n\nexports.getXDomainCaps=getXDomainCaps_hostenv;\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\nexports.request=request_hostenv;\n\n\n\n\n\n\nexports.makeMemoizedFunction=function(f,keyfn){var lookups_in_progress={};\n\n\nvar memoizer=function(){var key=keyfn?keyfn.apply(this,arguments):arguments[0];\n\nvar rv=memoizer.db[key];\nif(typeof rv!==\'undefined\')return rv;\nif(!lookups_in_progress[key])lookups_in_progress[key]=spawn (function(self,args){\nreturn memoizer.db[key]=f.apply(self,args);\n\n})(this,arguments);\ntry{\nreturn lookups_in_progress[key].waitforValue();\n}finally{\n\nif(lookups_in_progress[key].waiting()==0){\nlookups_in_progress[key].abort();\ndelete lookups_in_progress[key];\n}\n}\n};\n\nmemoizer.db={};\nreturn memoizer;\n};\n\n\n\n\n\n\n\nexports.eval=eval_hostenv;\n\n\n\n\nvar pendingLoads={};\n\n\n\n\nfunction makeRequire(parent){var rf=function(module,settings){\n\n__js var opts=exports.extendObject({},settings);\n\nif(opts.callback){\ntry{\nvar rv=exports.isArrayLike(module)?requireInnerMultiple(module,rf,parent,opts):requireInner(module,rf,parent,opts);\n}catch(e){\nopts.callback(e);return;\n}\nopts.callback(UNDEF,rv);\nreturn;\n}else return exports.isArrayLike(module)?requireInnerMultiple(module,rf,parent,opts):requireInner(module,rf,parent,opts);\n\n\n};\n\n__js {\n\nrf.resolve=function(module,settings){var opts=exports.extendObject({},settings);\n\nreturn resolve(module,rf,parent,opts);\n};\n\nrf.path=\"\";\nrf.alias={};\n\n\nif(exports.require){\nrf.hubs=exports.require.hubs;\nrf.modules=exports.require.modules;\nrf.extensions=exports.require.extensions;\n}else{\n\n\nrf.hubs=augmentHubs(getHubs_hostenv());\nrf.modules={};\n\nrf.extensions=getExtensions_hostenv();\n}\n\n}\n\n\nrf.url=function(relative){return resolve(relative,rf,parent,{loader:\'dummy\'}).path;\n\n\n};\n\nreturn rf;\n}\nexports._makeRequire=makeRequire;\n\n__js function augmentHubs(hubs){hubs.addDefault=function(hub){\n\nif(!this.defined(hub[0])){\n\nthis.unshift(hub);\nreturn true;\n}\nreturn false;\n};\nhubs.defined=function(prefix){for(var i=0;i<this.length;i++ ){\n\nvar h=this[i][0];\nvar l=Math.min(h.length,prefix.length);\nif(h.substr(0,l)==prefix.substr(0,l))return true;\n}\nreturn false;\n};\nreturn hubs;\n}\n\nfunction html_sjs_extractor(html,descriptor){var re=/<script (?:[^>]+ )?(?:type=[\'\"]text\\/sjs[\'\"]|main=[\'\"]([^\'\"]+)[\'\"])[^>]*>((.|[\\r\\n])*?)<\\/script>/mg;\n\nvar match;\nvar src=\'\';\nwhile(match=re.exec(html)){\nif(match[1])src+=\'require(\"\'+match[1]+\'\")\';else src+=match[2];\n\nsrc+=\';\';\n}\nif(!src)throw new Error(\"No sjs found in HTML file\");\nreturn default_compiler(src,descriptor);\n}\n\n\n__js function resolveAliases(module,aliases){var ALIAS_REST=/^([^:]+):(.*)$/;\n\nvar alias_rest,alias;\nvar rv=module;\nvar level=10;\nwhile((alias_rest=ALIAS_REST.exec(rv))&&(alias=aliases[alias_rest[1]])){\n\nif(--level==0)throw new Error(\"Too much aliasing in modulename \'\"+module+\"\'\");\n\nrv=alias+alias_rest[2];\n}\nreturn rv;\n}\n\n\n__js function resolveHubs(module,hubs,require_obj,parent,opts){var path=module;\n\nvar loader=opts.loader||default_loader;\nvar src=opts.src||default_src_loader;\nvar resolve=default_resolver;\n\n\nif(path.indexOf(\":\")==-1)path=resolveSchemelessURL_hostenv(path,require_obj,parent);\n\n\nvar level=10;\nfor(var i=0,hub;hub=hubs[i++ ];){\nif(path.indexOf(hub[0])==0){\n\nif(typeof hub[1]==\"string\"){\npath=hub[1]+path.substring(hub[0].length);\ni=0;\n\nif(path.indexOf(\":\")==-1)path=resolveSchemelessURL_hostenv(path,require_obj,parent);\n\nif(--level==0)throw new Error(\"Too much indirection in hub resolution for module \'\"+module+\"\'\");\n\n}else if(typeof hub[1]==\"object\"){\n\nif(hub[1].src)src=hub[1].src;\nif(hub[1].loader)loader=hub[1].loader;\nresolve=hub[1].resolve||loader.resolve||resolve;\n\nbreak;\n}else throw new Error(\"Unexpected value for require.hubs element \'\"+hub[0]+\"\'\");\n\n\n}\n}\n\nreturn {path:path,loader:loader,src:src,resolve:resolve};\n}\n\n\n__js function default_src_loader(path){throw new Error(\"Don\'t know how to load module at \"+path);\n\n}\n\n\nvar compiled_src_tag=/^\\/\\*\\__oni_compiled_sjs_1\\*\\//;\nfunction default_compiler(src,descriptor){var f;\n\n\nif(typeof (src)===\'function\'){\nf=src;\n}else if(compiled_src_tag.exec(src)){\n\n\n\n\n\n\nf=new Function(\"module\",\"exports\",\"require\",\"__onimodulename\",\"__oni_altns\",src);\n}else{\n\nf=exports.eval(\"(function(module,exports,require, __onimodulename, __oni_altns){\"+src+\"\\n})\",{filename:\"module #{descriptor.id}\"});\n\n}\nf(descriptor,descriptor.exports,descriptor.require,\"module #{descriptor.id}\",{});\n\n}\n\ndefault_compiler.module_args=[\'module\',\'exports\',\'require\',\'__onimodulename\',\'__oni_altns\'];\n\nvar canonical_id_to_module={};\n\nfunction default_loader(path,parent,src_loader,opts,spec){var compile=exports.require.extensions[spec.type];\n\nif(!compile)throw new Error(\"Unknown type \'\"+spec.type+\"\'\");\n\n\nvar descriptor=exports.require.modules[path];\nvar pendingHook=pendingLoads[path];\n\nif((!descriptor&&!pendingHook)||opts.reload){\n\n\npendingHook=pendingLoads[path]=spawn (function(){waitfor{\n\nvar src,loaded_from;\nif(typeof src_loader===\"string\"){\nsrc=src_loader;\nloaded_from=\"[src string]\";\n}else if(path in __oni_rt.modsrc){\n\n\nloaded_from=\"[builtin]\";\nsrc=__oni_rt.modsrc[path];\ndelete __oni_rt.modsrc[path];\n\n}else{\n\n({src,loaded_from})=src_loader(path);\n}\nvar descriptor={id:path,exports:{},loaded_from:loaded_from,loaded_by:parent,required_by:{}};\n\n\n\n\n\n\ndescriptor.require=makeRequire(descriptor);\n\nvar canonical_id=null;\n\ndescriptor.getCanonicalId=function(){return canonical_id;\n\n};\n\ndescriptor.setCanonicalId=function(id){if(id==null){\n\nthrow new Error(\"Canonical ID cannot be null\");\n}\n\nif(canonical_id!==null){\nthrow new Error(\"Canonical ID is already defined for module \"+path);\n}\n\nvar canonical=canonical_id_to_module[id];\nif(canonical!=null){\nthrow new Error(\"Canonical ID \"+id+\" is already defined in module \"+canonical.id);\n}\n\ncanonical_id=id;\ncanonical_id_to_module[id]=descriptor;\n};\n\nif(opts.main)descriptor.require.main=descriptor;\nexports.require.modules[path]=descriptor;\ntry{\ncompile(src,descriptor);\nreturn descriptor;\n}catch(e){\ndelete exports.require.modules[path];\nthrow e;\n}retract{\ndelete exports.require.modules[path];\n}\n}or{\nwaitfor(){\nhold(0);\npendingHook.resume=resume;\n}\n}\n})();\n}\n\nif(pendingHook){\n\n\n\nvar p=parent;\n\n\n\n\n\nwhile(p.loaded_by){\nif(path===p.id)return descriptor.exports;\n\np=p.loaded_by;\n}\n\n\ntry{\ndescriptor=pendingHook.waitforValue();\n}retract{\n\nif(pendingHook.waiting()==0&&pendingHook.resume){\npendingHook.resume();\npendingHook.value();\n}\n}finally{\n\n\nif(pendingHook.waiting()==0)delete pendingLoads[path];\n\n}\n}\n\nif(!descriptor.required_by[parent.id])descriptor.required_by[parent.id]=1;else ++descriptor.required_by[parent.id];\n\n\n\n\nreturn descriptor.exports;\n}\n\n__js function default_resolver(spec){if(!spec.ext)spec.path+=\".\"+spec.type;\n\n\n};\n\n\nfunction http_src_loader(path){return {src:request_hostenv([path,{format:\'compiled\'}],{mime:\'text/plain\'}),loaded_from:path};\n\n\n\n\n}\n\n\n\n\n\n\nvar github_api=\"https://api.github.com/\";\nvar github_opts={cbfield:\"callback\"};\nfunction github_src_loader(path){var user,repo,tag;\n\ntry{\n[ ,user,repo,tag,path]=/github:\\/([^\\/]+)\\/([^\\/]+)\\/([^\\/]+)\\/(.+)/.exec(path);\n}catch(e){throw new Error(\"Malformed module id \'\"+path+\"\'\")}\n\nvar url=exports.constructURL(github_api,\'repos\',user,repo,\"contents\",path,{ref:tag});\n\nwaitfor{\nvar data=jsonp_hostenv(url,github_opts).data;\n}or{\n\nhold(10000);\nthrow new Error(\"Github timeout\");\n}\nif(data.message&&!data.content)throw new Error(data.message);\n\n\n\nvar str=exports.require(\'sjs:string\');\n\nreturn {src:str.utf8ToUtf16(str.base64ToOctets(data.content)),loaded_from:url};\n\n\n\n}\n\n\nfunction resolve(module,require_obj,parent,opts){var path=resolveAliases(module,require_obj.alias);\n\n\n\nvar hubs=exports.require.hubs;\n\nvar resolveSpec=resolveHubs(path,hubs,require_obj,parent,opts);\n\n\nresolveSpec.path=exports.canonicalizeURL(resolveSpec.path,parent.id);\n\n\n\nvar ext,extMatch=/.+\\.([^\\.\\/]+)$/.exec(resolveSpec.path);\nif(extMatch){\next=extMatch[1].toLowerCase();\nresolveSpec.ext=ext;\nif(!exports.require.extensions[ext])ext=null;\n}\nresolveSpec.type=ext||\'sjs\';\n\nresolveSpec.resolve(resolveSpec,parent);\n\n__js {\n\nvar preload=__oni_rt.G.__oni_rt_bundle;\nvar pendingHubs=false;\nif(preload.h){\n\nvar deleteHubs=[];\nfor(var k in preload.h){\nif(!Object.prototype.hasOwnProperty.call(preload.h,k))continue;\nvar entries=preload.h[k];\nvar parent=getTopReqParent_hostenv();\nvar resolved=resolveHubs(k,hubs,exports.require,parent,{});\nif(resolved.path===k){\n\npendingHubs=true;\ncontinue;\n}\n\nfor(var i=0;i<entries.length;i++ ){\nvar ent=entries[i];\npreload.m[resolved.path+ent[0]]=ent[1];\n}\ndeleteHubs.push(k);\n}\n\nif(!pendingHubs)delete preload.h;else{\n\n\nfor(var i=0;i<deleteHubs.length;i++ )delete preload.h[deleteHubs[i]];\n\n}\n}\n\nif(module in __oni_rt.modsrc){\n\n\nif(!preload.m)preload.m={};\npreload.m[resolveSpec.path]=__oni_rt.modsrc[module];\ndelete __oni_rt.modsrc[module];\n}\n\nif(preload.m){\nvar path=resolveSpec.path;\n\nif(path.indexOf(\'!sjs\',path.length-4)!==-1)path=path.slice(0,-4);\n\nvar contents=preload.m[path];\nif(contents!==undefined){\nresolveSpec.src=function(){delete preload.m[path];\n\n\nreturn {src:contents,loaded_from:path+\"#bundle\"};\n};\n}\n}\n\n}\nreturn resolveSpec;\n}\n\n\n\n\n\n__js exports.resolve=function(url,require_obj,parent,opts){require_obj=require_obj||exports.require;\n\nparent=parent||getTopReqParent_hostenv();\nopts=opts||{};\nreturn resolve(url,require_obj,parent,opts);\n};\n\n\nfunction requireInner(module,require_obj,parent,opts){var resolveSpec=resolve(module,require_obj,parent,opts);\n\n\n\n\nmodule=resolveSpec.loader(resolveSpec.path,parent,resolveSpec.src,opts,resolveSpec);\nif(opts.copyTo){\nexports.extendObject(opts.copyTo,module);\n}\n\nreturn module;\n}\n\n\nfunction requireInnerMultiple(modules,require_obj,parent,opts){var rv={};\n\n\n\n\nfunction inner(i,l){if(l===1){\n\nvar descriptor=modules[i];\nvar id,exclude,include,name;\n__js if(typeof descriptor===\'string\'){\nid=descriptor;\nexclude=[];\ninclude=null;\nname=null;\n}else{\n\nid=descriptor.id;\nexclude=descriptor.exclude||[];\ninclude=descriptor.include||null;\nname=descriptor.name||null;\n}\n\nvar module=requireInner(id,require_obj,parent,opts);\n\n\n__js {\nvar addSym=function(k,v){if(rv[k]!==undefined){\n\nif(rv[k]===v)return;\nthrow new Error(\"require([.]) name clash while merging module \'#{id}\': Symbol \'#{k}\' defined in multiple modules\");\n}\nrv[k]=v;\n};\n\nif(name){\naddSym(name,module);\n}else if(include){\nfor(var i=0;i<include.length;i++ ){\nvar o=include[i];\nif(!(o in module))throw new Error(\"require([.]) module #{id} has no symbol #{o}\");\naddSym(o,module[o]);\n}\n}else{\nfor(var o in module){\n\n\n\nif(exclude.indexOf(o)!==-1)continue;\naddSym(o,module[o]);\n}\n}\n}\n}else{\n\nvar split=Math.floor(l/2);\nwaitfor{\ninner(i,split);\n}and{\n\ninner(i+split,l-split);\n}\n}\n}\n\n\ninner(0,modules.length);\n\nreturn rv;\n}\n\n\n__js exports.require=makeRequire(getTopReqParent_hostenv());\n\n__js exports.require.modules[\'builtin:apollo-sys.sjs\']={id:\'builtin:apollo-sys.sjs\',exports:exports,loaded_from:\"[builtin]\",required_by:{\"[system]\":1}};\n\n\n\n\n\n\nexports.init=function(cb){init_hostenv();\n\ncb();\n};\n\n";__oni_rt.modsrc['builtin:apollo-sys-xbrowser.sjs']="var location;\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n__js function determineLocation(){if(!location){\n\nlocation={};\nvar scripts=document.getElementsByTagName(\"script\"),matches;\nfor(var i=0;i<scripts.length;++i){\nif((matches=/^(.*\\/)(?:[^\\/]*)stratified(?:[^\\/]*)\\.js(?:\\?.*)?$/.exec(scripts[i].src))){\nlocation.location=exports.canonicalizeURL(matches[1]+\"modules/\",document.location.href);\nlocation.requirePrefix=scripts[i].getAttribute(\"require-prefix\");\nlocation.req_base=scripts[i].getAttribute(\"req-base\")||document.location.href;\nlocation.main=scripts[i].getAttribute(\"main\");\nbreak;\n}\n}\n}\nreturn location;\n}\n\n\n\n\nif(determineLocation().requirePrefix){\n__oni_rt.G[determineLocation().requirePrefix]={require:__oni_rt.sys.require};\n}else __oni_rt.G.require=__oni_rt.sys.require;\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\nfunction jsonp_hostenv(url,settings){var opts=exports.mergeObjects({iframe:false,cbfield:\"callback\"},settings);\n\n\n\n\n\n\n\n\n\n\nurl=exports.constructURL(url,opts.query);\nif(opts.iframe||opts.forcecb)return jsonp_iframe(url,opts);else return jsonp_indoc(url,opts);\n\n\n\n};\n\nvar jsonp_req_count=0;\nvar jsonp_cb_obj=\"_oni_jsonpcb\";\nfunction jsonp_indoc(url,opts){if(!window[jsonp_cb_obj])window[jsonp_cb_obj]={};\n\n\nvar cb=\"cb\"+(jsonp_req_count++ );\nvar cb_query={};\ncb_query[opts.cbfield]=jsonp_cb_obj+\".\"+cb;\nurl=exports.constructURL(url,cb_query);\nvar elem=document.createElement(\"script\");\nelem.setAttribute(\"src\",url);\nelem.setAttribute(\"async\",\"async\");\nelem.setAttribute(\"type\",\"text/javascript\");\nvar complete=false;\nwaitfor(var rv){\nwindow[jsonp_cb_obj][cb]=resume;\ndocument.getElementsByTagName(\"head\")[0].appendChild(elem);\n\nwaitfor(){\nif(elem.addEventListener)elem.addEventListener(\"error\",resume,false);else{\n\n\nvar readystatechange=function(){if(elem.readyState==\'loaded\'&&!complete)resume();\n\n};\nelem.attachEvent(\"onreadystatechange\",readystatechange);\n}\n}finally{\n\nif(elem.removeEventListener)elem.removeEventListener(\"error\",resume,false);else elem.detachEvent(\"onreadystatechange\",readystatechange);\n\n\n\n}\n\nthrow new Error(\"Could not complete JSONP request to \'\"+url+\"\'\");\n}finally{\n\nelem.parentNode.removeChild(elem);\ndelete window[jsonp_cb_obj][cb];\n}\ncomplete=true;\nreturn rv;\n}\n\nfunction jsonp_iframe(url,opts){var cb=opts.forcecb||\"R\";\n\nvar cb_query={};\nif(opts.cbfield)cb_query[opts.cbfield]=cb;\n\nurl=exports.constructURL(url,cb_query);\nvar iframe=document.createElement(\"iframe\");\ndocument.getElementsByTagName(\"head\")[0].appendChild(iframe);\nvar doc=iframe.contentWindow.document;\nwaitfor(var rv){\ndoc.open();\niframe.contentWindow[cb]=resume;\n\n\nhold(0);\ndoc.write(\"\\x3Cscript type=\'text/javascript\' src=\\\"\"+url+\"\\\">\\x3C/script>\");\ndoc.close();\n}finally{\n\niframe.parentNode.removeChild(iframe);\n}\n\n\nhold(0);\nreturn rv;\n};\n\n\nvar XHR_caps;\nvar activex_xhr_ver;\n\nfunction getXHRCaps(){if(!XHR_caps){\n\nXHR_caps={};\n\nif(__oni_rt.G.XMLHttpRequest)XHR_caps.XHR_ctor=function(){\nreturn new XMLHttpRequest()};else XHR_caps.XHR_ctor=function(){\n\nif(typeof activex_xhr_ver!==\'undefined\')return new ActiveXObject(activex_xhr_ver);\n\n\nfor(var v in {\"MSXML2.XMLHTTP.6.0\":1,\"MSXML2.XMLHTTP.3.0\":1,\"MSXML2.XMLHTTP\":1}){\n\n\n\n\ntry{\nvar req=new ActiveXObject(v);\nactivex_xhr_ver=v;\nreturn req;\n}catch(e){\n}\n}\nthrow new Error(\"Browser does not support XMLHttpRequest\");\n};\n\n\nXHR_caps.XHR_CORS=(\"withCredentials\" in XHR_caps.XHR_ctor());\nif(!XHR_caps.XHR_CORS)XHR_caps.XDR=(typeof __oni_rt.G.XDomainRequest!==\'undefined\');\n\nXHR_caps.CORS=(XHR_caps.XHR_CORS||XHR_caps.XDR)?\"CORS\":\"none\";\n}\nreturn XHR_caps;\n}\n\n\n\n\n\n\nfunction getXDomainCaps_hostenv(){return getXHRCaps().CORS;\n\n}\n\n\n\n\n\n__js function getTopReqParent_hostenv(){var base=determineLocation().req_base;\n\nreturn {id:base,loaded_from:base,required_by:{\"[system]\":1}};\n\n\n\n}\n\n\n\n\n\n\n\n\n\n__js function resolveSchemelessURL_hostenv(url_string,req_obj,parent){if(req_obj.path&&req_obj.path.length)url_string=exports.constructURL(req_obj.path,url_string);\n\n\nreturn exports.canonicalizeURL(url_string,parent.id);\n}\n\n\n\n\n\n\nfunction request_hostenv(url,settings){var opts=exports.mergeObjects({method:\"GET\",body:null,response:\'string\',throwing:true},settings);\n\n\n\n\n\n\n\n\n\n\n\nurl=exports.constructURL(url,opts.query);\n\nvar caps=getXHRCaps();\nif(!caps.XDR||exports.isSameOrigin(url,document.location)){\nvar req=caps.XHR_ctor();\nreq.open(opts.method,url,true,opts.username||\"\",opts.password||\"\");\n}else{\n\n\nreq=new XDomainRequest();\nreq.open(opts.method,url);\n}\n\nwaitfor(var error){\nif(typeof req.onerror!==\'undefined\'){\nreq.onload=function(){resume()};\nreq.onerror=function(){resume(true)};\nreq.onabort=function(){resume(true)};\n}else{\n\nreq.onreadystatechange=function(evt){if(req.readyState!=4)return;else resume();\n\n\n\n\n};\n}\n\nif(opts.headers&&req.setRequestHeader)for(var h in opts.headers)req.setRequestHeader(h,opts.headers[h]);\n\n\n\n\n\nif(opts.mime&&req.overrideMimeType)req.overrideMimeType(opts.mime);\n\nif(opts.response===\'arraybuffer\')req.responseType=\'arraybuffer\';\n\n\nreq.send(opts.body);\n}retract{\n\nreq.abort();\n}\n\n\nif(error||(typeof req.status!==\'undefined\'&&!(req.status.toString().charAt(0) in {\'0\':1,\'2\':1}))){\n\n\nif(opts.throwing){\nvar txt=\"Failed \"+opts.method+\" request to \'\"+url+\"\'\";\nif(req.statusText)txt+=\": \"+req.statusText;\nif(req.status)txt+=\" (\"+req.status+\")\";\nvar err=new Error(txt);\nerr.status=req.status;\nerr.data=req.response;\nthrow err;\n}else if(opts.response===\'string\'){\n\nreturn \"\";\n}\n\n}\nif(opts.response===\'string\')return req.responseText;else if(opts.response===\'arraybuffer\'){\n\n\nreturn {status:req.status,content:req.response,getHeader:name->req.getResponseHeader(name)};\n\n\n\n\n}else{\n\n\nreturn {status:req.status,content:req.responseText,getHeader:name->req.getResponseHeader(name)};\n\n\n\n\n}\n}\n\n\n\n\n__js function getHubs_hostenv(){return [[\"sjs:\",determineLocation().location||{src:function(path){\n\n\nthrow new Error(\"Can\'t load module \'\"+path+\"\': The location of the StratifiedJS standard module lib is unknown - it can only be inferred automatically if you load stratified.js in the normal way through a <script> element.\");\n\n}}],[\"github:\",{src:github_src_loader}],[\"http:\",{src:http_src_loader}],[\"https:\",{src:http_src_loader}],[\"file:\",{src:http_src_loader}],[\"x-wmapp1:\",{src:http_src_loader}],[\"local:\",{src:http_src_loader}]];\n\n\n\n\n\n\n\n\n\n\n\n\n}\n\nfunction getExtensions_hostenv(){return {\'sjs\':default_compiler,\'js\':function(src,descriptor){\n\n\n\n\n\nvar f=new Function(\"module\",\"exports\",src);\n\nf.apply(descriptor.exports,[descriptor,descriptor.exports]);\n},\'html\':html_sjs_extractor};\n\n\n\n}\n\n\n\n\nfunction eval_hostenv(code,settings){if(__oni_rt.UA==\"msie\"&&__oni_rt.G.execScript)return eval_msie(code,settings);\n\n\n\nvar filename=(settings&&settings.filename)||\"sjs_eval_code\";\nfilename=\"\'#{filename.replace(/\\\'/g,\'\\\\\\\'\')}\'\";\nvar mode=(settings&&settings.mode)||\"normal\";\nvar js=__oni_rt.c1.compile(code,{filename:filename,mode:mode});\nreturn __oni_rt.G.eval(js);\n}\n\n\n\n\n\n\n\nvar IE_resume_counter=0;\n__oni_rt.IE_resume={};\nfunction eval_msie(code,settings){var filename=(settings&&settings.filename)||\"sjs_eval_code\";\n\nfilename=\"\'#{filename.replace(/\\\'/g,\'\\\\\\\'\')}\'\";\nvar mode=(settings&&settings.mode)||\"normal\";\ntry{\nwaitfor(var rv,isexception){\nvar rc=++IE_resume_counter;\n__oni_rt.IE_resume[rc]=resume;\nvar js=__oni_rt.c1.compile(\"try{\"+code+\"\\n}catchall(rv) { spawn(hold(0),__oni_rt.IE_resume[\"+rc+\"](rv[0],rv[1])) }\",{filename:filename,mode:mode});\n\n\n__oni_rt.G.execScript(js);\n}\nif(isexception)throw rv;\n}finally{\n\ndelete __oni_rt.IE_resume[rc];\n}\nreturn rv;\n}\n\n\n\n\nfunction init_hostenv(){}\n\n\n\n\nif(!__oni_rt.G.__oni_rt_no_script_load){\nfunction runScripts(){var scripts=document.getElementsByTagName(\"script\");\n\n\n\n\n\n\n\n\n\nvar ss=[];\nfor(var i=0;i<scripts.length;++i){\nvar s=scripts[i];\nif(s.getAttribute(\"type\")==\"text/sjs\"){\nss.push(s);\n}\n}\n\nfor(var i=0;i<ss.length;++i){\nvar s=ss[i];\nvar m=s.getAttribute(\"module\");\n\nvar content=s.textContent||s.innerHTML;\nif(__oni_rt.UA==\"msie\"){\n\ncontent=content.replace(/\\r\\n/,\"\");\n}\nif(m)__oni_rt.modsrc[m]=content;else{\n\n\nvar descriptor={id:document.location.href+\"_inline_sjs_\"+(i+1)};\n\n\n__oni_rt.sys.require.main=descriptor;\nvar f=exports.eval(\"(function(module, __onimodulename){\"+content+\"\\n})\",{filename:\"module #{descriptor.id}\"});\n\nf(descriptor);\n}\n}\n\nvar mainModule=determineLocation().main;\nif(mainModule){\n__oni_rt.sys.require(mainModule,{main:true});\n}\n};\n\nif(document.readyState===\"complete\"){\nrunScripts();\n}else{\n\n\nif(__oni_rt.G.addEventListener)__oni_rt.G.addEventListener(\"load\",runScripts,true);else __oni_rt.G.attachEvent(\"onload\",runScripts);\n\n\n\n}\n}\n\n\n";if(!Array.isArray){
+})(__oni_rt.c1={});if(!Array.isArray){
 
 
 
@@ -6199,56 +6578,5 @@ String.prototype.trim=function(){return this.replace(/^\s+|\s+$/g,'');
 
 
 
-if(!__oni_rt.sys){
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-__oni_rt.G.eval("(function(exports) {"+__oni_rt.c1.compile(__oni_rt.modsrc['builtin:apollo-sys-common.sjs'],{filename:"'apollo-sys-common.sjs'"})+"\n"+__oni_rt.c1.compile(__oni_rt.modsrc['builtin:apollo-sys-'+__oni_rt.hostenv+'.sjs'],{filename:"'apollo-sys-"+__oni_rt.hostenv+".sjs'"})+"})({})");
-
-
-
-
-
-delete __oni_rt.modsrc['builtin:apollo-sys-common.sjs'];
-delete __oni_rt.modsrc['builtin:apollo-sys-'+__oni_rt.hostenv+'.sjs'];
-}
-
-
-
-
+(function(exports) {var UNDEF,arrayCtors,arrayCtorNames,c,i,_flatten,parseURLOptions,pendingLoads,compiled_src_tag,canonical_id_to_module,github_api,github_opts;function URI(){}function makeRequire(parent){var rf;return __oni_rt.exseq(arguments,this,'apollo-sys-common.sjs',[1,__oni_rt.Nb(function(){rf=function (module,settings){var opts,rv;return __oni_rt.exseq(arguments,this,'apollo-sys-common.sjs',[1,__oni_rt.Nb(function(){opts=exports.extendObject({},settings);},559),__oni_rt.Nb(function(){if(opts.callback)return __oni_rt.ex(__oni_rt.Seq(0,__oni_rt.Try(0,__oni_rt.Sc(562,function(_oniX){return rv=_oniX;},__oni_rt.If(__oni_rt.C(function(){return exports.isArrayLike(module)},561),__oni_rt.C(function(){return requireInnerMultiple(module,rf,parent,opts)},561),__oni_rt.C(function(){return requireInner(module,rf,parent,opts)},561))),function(__oni_env,e){return __oni_rt.ex(__oni_rt.Seq(0,__oni_rt.C(function(){return opts.callback(e)},563),__oni_rt.Nb(function(){return __oni_rt.Return();},563)),__oni_env)},0),__oni_rt.C(function(){return opts.callback(UNDEF,rv)},565),__oni_rt.Nb(function(){return __oni_rt.Return();},566)),this);else return __oni_rt.ex(__oni_rt.Sc(569,__oni_rt.Return,__oni_rt.If(__oni_rt.C(function(){return exports.isArrayLike(module)},569),__oni_rt.C(function(){return requireInnerMultiple(module,rf,parent,opts)},569),__oni_rt.C(function(){return requireInner(module,rf,parent,opts)},569))),this);},559)])};rf.resolve=function (module,settings){var opts;opts=exports.extendObject({},settings);return resolve(module,rf,parent,opts);};rf.path="";rf.alias={};if(exports.require){rf.hubs=exports.require.hubs;rf.modules=exports.require.modules;rf.extensions=exports.require.extensions;}else{rf.hubs=augmentHubs(getHubs_hostenv());rf.modules={};rf.extensions=getExtensions_hostenv();}rf.url=function (relative){return __oni_rt.exseq(arguments,this,'apollo-sys-common.sjs',[1,__oni_rt.Sc(600,__oni_rt.Return,__oni_rt.Sc(600,function(l){return l.path;},__oni_rt.C(function(){return resolve(relative,rf,parent)},600)))])};return __oni_rt.Return(rf);},572)])}function augmentHubs(hubs){hubs.addDefault=function (hub){if(! this.defined(hub[0])){this.unshift(hub);return true;}return false;};hubs.defined=function (prefix){var h,l,i;i=0;for(;i < this.length;i++ ){h=this[i][0];l=Math.min(h.length,prefix.length);if(h.substr(0,l) == prefix.substr(0,l)){return true;}}return false;};return hubs;}function html_sjs_extractor(html,descriptor){var re,match,src;re=/<script (?:[^>]+ )?(?:type=['"]text\/sjs['"]|main=['"]([^'"]+)['"])[^>]*>((.|[\r\n])*?)<\/script>/mg;src='';while(match=re.exec(html)){if(match[1]){src+='require("' + match[1] + '")';}else{src+=match[2];}src+=';';}if(! src){throw new Error("No sjs found in HTML file");}return default_compiler(src,descriptor);}function resolveAliases(module,aliases){var ALIAS_REST,alias_rest,alias,rv,level;ALIAS_REST=/^([^:]+):(.*)$/;rv=module;level=10;while((alias_rest=ALIAS_REST.exec(rv)) && (alias=aliases[alias_rest[1]])){if(-- level == 0){throw new Error("Too much aliasing in modulename '" + module + "'");}rv=alias + alias_rest[2];}return rv;}function resolveHubs(module,hubs,require_obj,parent,opts){var path,loader,src,resolve,level,i,hub;path=module;loader=opts.loader || default_loader;src=opts.src || default_src_loader;resolve=default_resolver;if(path.indexOf(":") == - 1){path=resolveSchemelessURL_hostenv(path,require_obj,parent);}level=10;i=0;while(hub=hubs[i++ ]){if(path.indexOf(hub[0]) == 0){if(typeof hub[1] == "string"){path=hub[1] + path.substring(hub[0].length);i=0;if(path.indexOf(":") == - 1){path=resolveSchemelessURL_hostenv(path,require_obj,parent);}if(-- level == 0){throw new Error("Too much indirection in hub resolution for module '" + module + "'");}}else{if(typeof hub[1] == "object"){if(hub[1].src){src=hub[1].src;}if(hub[1].loader){loader=hub[1].loader;}resolve=hub[1].resolve || loader.resolve || resolve;break;}else{throw new Error("Unexpected value for require.hubs element '" + hub[0] + "'");}}}}return {path:path,loader:loader,src:src,resolve:resolve};}function default_src_loader(path){throw new Error("Don't know how to load module at " + path);}function default_compiler(src,descriptor){var f;return __oni_rt.exseq(arguments,this,'apollo-sys-common.sjs',[1,__oni_rt.Nb(function(){if(typeof (src) === 'function')return __oni_rt.ex(__oni_rt.Nb(function(){return f=src;},705),this);else return __oni_rt.ex(__oni_rt.If(__oni_rt.C(function(){return compiled_src_tag.exec(src)},707),__oni_rt.Sc(713,function(_oniX){return f=_oniX;},__oni_rt.Fcall(2,713,__oni_rt.Nb(function(){return Function},713),"module","exports","require","__onimodulename","__oni_altns",__oni_rt.Nb(function(){return src},713))),__oni_rt.Sc(717,function(_oniX){return f=_oniX;},__oni_rt.C(function(){return exports.eval("(function(module,exports,require, __onimodulename, __oni_altns){" + src + "\n})",{filename:("module "+(descriptor.id))})},717))),this);},704),__oni_rt.C(function(){return f(descriptor,descriptor.exports,descriptor.require,("module "+(descriptor.id)),{})},719)])}function default_loader(path,parent,src_loader,opts,spec){var compile,descriptor,pendingHook,p;return __oni_rt.exseq(arguments,this,'apollo-sys-common.sjs',[9,__oni_rt.Nb(function(){compile=exports.require.extensions[spec.type];},731),__oni_rt.Nb(function(){if(! compile)return __oni_rt.ex(__oni_rt.Sc(732,__oni_rt.Throw,__oni_rt.Fcall(2,732,__oni_rt.Nb(function(){return Error},732),__oni_rt.Nb(function(){return "Unknown type '" + spec.type + "'"},732)),732,'apollo-sys-common.sjs'),this);},731),__oni_rt.Nb(function(){descriptor=exports.require.modules[path];pendingHook=pendingLoads[path];},735),__oni_rt.Nb(function(){if((! descriptor && ! pendingHook) || opts.reload)return __oni_rt.ex(__oni_rt.Sc(813,function(_oniX){return pendingHook=_oniX;},__oni_rt.Sc(813,function(_oniX){return pendingLoads[path]=_oniX;},__oni_rt.Spawn(813,__oni_rt.C(function(){return (function (){var src,loaded_from,descriptor,canonical_id;return __oni_rt.exseq(arguments,this,'apollo-sys-common.sjs',[1,__oni_rt.Alt(__oni_rt.Seq(0,__oni_rt.Nb(function(){if(typeof src_loader === "string")return __oni_rt.ex(__oni_rt.Nb(function(){src=src_loader;loaded_from="[src string]";},0),this);else return __oni_rt.ex(__oni_rt.Nb(function(){if(path in __oni_rt.modsrc)return __oni_rt.ex(__oni_rt.Nb(function(){loaded_from="[builtin]";src=__oni_rt.modsrc[path];delete __oni_rt.modsrc[path];},0),this);else return __oni_rt.ex(__oni_rt.Sc(759,function(_oniX){src=_oniX.src;loaded_from=_oniX.loaded_from;return _oniX;},__oni_rt.C(function(){return src_loader(path)},759)),this);},749),this);},743),__oni_rt.Nb(function(){descriptor={id:path,exports:{},loaded_from:loaded_from,loaded_by:parent,required_by:{}};descriptor.require=makeRequire(descriptor);canonical_id=null;descriptor.getCanonicalId=function (){return canonical_id;};descriptor.setCanonicalId=function (id){var canonical;if(id == null){throw new Error("Canonical ID cannot be null");}if(canonical_id !== null){throw new Error("Canonical ID is already defined for module " + path);}canonical=canonical_id_to_module[id];if(canonical != null){throw new Error("Canonical ID " + id + " is already defined in module " + canonical.id);}canonical_id=id;canonical_id_to_module[id]=descriptor;};if(opts.main){descriptor.require.main=descriptor;}exports.require.modules[path]=descriptor;},0),__oni_rt.Try(0,__oni_rt.Seq(0,__oni_rt.C(function(){return compile(src,descriptor)},799),__oni_rt.Nb(function(){return __oni_rt.Return(descriptor);},800)),function(__oni_env,e){return __oni_rt.ex(__oni_rt.Seq(0,__oni_rt.Nb(function(){return delete exports.require.modules[path];},802),__oni_rt.Sc(803,__oni_rt.Throw,__oni_rt.Nb(function(){return e},803),803,'apollo-sys-common.sjs')),__oni_env)},0,__oni_rt.Nb(function(){return delete exports.require.modules[path];},805))),__oni_rt.Suspend(function(__oni_env,resume){return __oni_rt.ex(__oni_rt.Seq(0,__oni_rt.C(function(){return __oni_rt.Hold(0)},809),__oni_rt.Nb(function(){return pendingHook.resume=resume;},810)),__oni_env)}, function() {}))])})()},813)))),this);},737),__oni_rt.Nb(function(){if(pendingHook)return __oni_rt.ex(__oni_rt.Seq(0,__oni_rt.Nb(function(){p=parent;},826),__oni_rt.Nb(function(){if(descriptor)return __oni_rt.ex(__oni_rt.Loop(0,__oni_rt.Nb(function(){return p.loaded_by},827),0,__oni_rt.Nb(function(){if(path === p.id)return __oni_rt.ex(__oni_rt.Nb(function(){return __oni_rt.Return(descriptor.exports);},829),this);},828),__oni_rt.Nb(function(){return p=p.loaded_by;},830)),this);},826),__oni_rt.Try(0,__oni_rt.Sc(836,function(_oniX){return descriptor=_oniX;},__oni_rt.C(function(){return pendingHook.waitforValue()},836)),0,__oni_rt.If(__oni_rt.Sc(846,__oni_rt.infix['=='],__oni_rt.C(function(){return pendingHook.waiting()},846),0),__oni_rt.Nb(function(){return delete pendingLoads[path]},847)),__oni_rt.If(__oni_rt.Seq(4,__oni_rt.Sc(839,__oni_rt.infix['=='],__oni_rt.C(function(){return pendingHook.waiting()},839),0),__oni_rt.Nb(function(){return pendingHook.resume},839)),__oni_rt.Seq(0,__oni_rt.C(function(){return pendingHook.resume()},840),__oni_rt.C(function(){return pendingHook.value()},841))))),this);},816),__oni_rt.Nb(function(){if(! descriptor.required_by[parent.id]){descriptor.required_by[parent.id]=1;}else{++ descriptor.required_by[parent.id];}return __oni_rt.Return(descriptor.exports);},851)])}function default_resolver(spec){if(! spec.ext && spec.path.charAt(spec.path.length - 1) !== '/'){spec.path+="." + spec.type;}}function http_src_loader(path){return __oni_rt.exseq(arguments,this,'apollo-sys-common.sjs',[1,__oni_rt.Sc(869,__oni_rt.Return,__oni_rt.Sc(869,__oni_rt.Obj, ["src","loaded_from"],__oni_rt.C(function(){return request_hostenv([path,{format:'compiled'}],{mime:'text/plain'})},867),__oni_rt.Nb(function(){return path},869)))])}function github_src_loader(path){var user,repo,tag,url,data,str;return __oni_rt.exseq(arguments,this,'apollo-sys-common.sjs',[1,__oni_rt.Try(0,__oni_rt.Sc(882,function(_oniX){user=_oniX[1];repo=_oniX[2];tag=_oniX[3];path=_oniX[4];return _oniX;},__oni_rt.C(function(){return /github:\/([^\/]+)\/([^\/]+)\/([^\/]+)\/(.+)/.exec(path)},882)),function(__oni_env,e){return __oni_rt.ex(__oni_rt.Sc(883,__oni_rt.Throw,__oni_rt.Fcall(2,883,__oni_rt.Nb(function(){return Error},883),__oni_rt.Nb(function(){return "Malformed module id '" + path + "'"},883)),883,'apollo-sys-common.sjs'),__oni_env)},0),__oni_rt.Sc(887,function(_oniX){return url=_oniX;},__oni_rt.C(function(){return exports.constructURL(github_api,'repos',user,repo,"contents",path,{ref:tag})},885)),__oni_rt.Alt(__oni_rt.Sc(889,function(_oniX){return data=_oniX;},__oni_rt.Sc(888,function(l){return l.data;},__oni_rt.C(function(){return jsonp_hostenv(url,github_opts)},888))),__oni_rt.Seq(0,__oni_rt.C(function(){return __oni_rt.Hold(10000)},891),__oni_rt.Sc(892,__oni_rt.Throw,__oni_rt.Fcall(2,892,__oni_rt.Nb(function(){return Error},892),"Github timeout"),892,'apollo-sys-common.sjs'))),__oni_rt.Nb(function(){if(data.message && ! data.content)return __oni_rt.ex(__oni_rt.Sc(895,__oni_rt.Throw,__oni_rt.Fcall(2,895,__oni_rt.Nb(function(){return Error},895),__oni_rt.Nb(function(){return data.message},895)),895,'apollo-sys-common.sjs'),this);},894),__oni_rt.Sc(900,function(_oniX){return str=_oniX;},__oni_rt.C(function(){return exports.require('sjs:string')},898)),__oni_rt.Sc(903,__oni_rt.Return,__oni_rt.Sc(903,__oni_rt.Obj, ["src","loaded_from"],__oni_rt.Fcall(1,901,__oni_rt.Sc(901,function(l){return [l,'utf8ToUtf16'];},__oni_rt.Nb(function(){return str},901)),__oni_rt.C(function(){return str.base64ToOctets(data.content)},901)),__oni_rt.Nb(function(){return url},903)))])}function resolve(module,require_obj,parent,opts){var path,hubs,resolveSpec,ext,extMatch,preload,pendingHubs,deleteHubs,entries,parent,resolved,ent,i,k,i,path,contents;return __oni_rt.exseq(arguments,this,'apollo-sys-common.sjs',[1,__oni_rt.Sc(911,function(_oniX){return path=_oniX;},__oni_rt.C(function(){return resolveAliases(module,require_obj.alias)},909)),__oni_rt.Nb(function(){hubs=exports.require.hubs;},913),__oni_rt.Sc(916,function(_oniX){return resolveSpec=_oniX;},__oni_rt.C(function(){return resolveHubs(path,hubs,require_obj,parent,opts || {})},913)),__oni_rt.Nb(function(){resolveSpec.path=exports.normalizeURL(resolveSpec.path,parent.id);extMatch=/.+\.([^\.\/]+)$/.exec(resolveSpec.path);if(extMatch){ext=extMatch[1].toLowerCase();resolveSpec.ext=ext;if(! exports.require.extensions[ext]){ext=null;}}return resolveSpec.type=ext || 'sjs';},916),__oni_rt.C(function(){return resolveSpec.resolve(resolveSpec,parent)},928),__oni_rt.Nb(function(){preload=__oni_rt.G.__oni_rt_bundle;pendingHubs=false;if(preload.h){deleteHubs=[];for(k in preload.h){if(! Object.prototype.hasOwnProperty.call(preload.h,k)){continue;}entries=preload.h[k];parent=getTopReqParent_hostenv();resolved=resolveHubs(k,hubs,exports.require,parent,{});if(resolved.path === k){pendingHubs=true;continue;}i=0;for(;i < entries.length;i++ ){ent=entries[i];preload.m[resolved.path + ent[0]]=ent[1];}deleteHubs.push(k);}if(! pendingHubs){delete preload.h;}else{i=0;for(;i < deleteHubs.length;i++ ){delete preload.h[deleteHubs[i]];}}}if(module in __oni_rt.modsrc){if(! preload.m){preload.m={};}preload.m[resolveSpec.path]=__oni_rt.modsrc[module];delete __oni_rt.modsrc[module];}if(preload.m){path=resolveSpec.path;if(path.indexOf('!sjs',path.length - 4) !== - 1){path=path.slice(0,- 4);}contents=preload.m[path];if(contents !== undefined){resolveSpec.src=function (){delete preload.m[path];return {src:contents,loaded_from:path + "#bundle"};};}}return __oni_rt.Return(resolveSpec);},0)])}function requireInner(module,require_obj,parent,opts){var resolveSpec;return __oni_rt.exseq(arguments,this,'apollo-sys-common.sjs',[1,__oni_rt.Sc(1007,function(_oniX){return resolveSpec=_oniX;},__oni_rt.C(function(){return resolve(module,require_obj,parent,opts)},1004)),__oni_rt.Sc(1007,function(_oniX){return module=_oniX;},__oni_rt.C(function(){return resolveSpec.loader(resolveSpec.path,parent,resolveSpec.src,opts,resolveSpec)},1007)),__oni_rt.Nb(function(){return __oni_rt.Return(module);},1009)])}function requireInnerMultiple(modules,require_obj,parent,opts){var rv;function inner(i,l){var descriptor,id,exclude,include,name,module,addSym,o,i,o,split;return __oni_rt.exseq(arguments,this,'apollo-sys-common.sjs',[1,__oni_rt.Nb(function(){if(l === 1)return __oni_rt.ex(__oni_rt.Seq(0,__oni_rt.Nb(function(){descriptor=modules[i];if(typeof descriptor === 'string'){id=descriptor;exclude=[];include=null;name=null;}else{id=descriptor.id;exclude=descriptor.exclude || [];include=descriptor.include || null;name=descriptor.name || null;}},1021),__oni_rt.Sc(1038,function(_oniX){return module=_oniX;},__oni_rt.C(function(){return requireInner(id,require_obj,parent,opts)},1035)),__oni_rt.Nb(function(){addSym=function (k,v){if(rv[k] !== undefined){if(rv[k] === v){return;}throw new Error(("require([.]) name clash while merging module '"+(id)+"': Symbol '"+(k)+"' defined in multiple modules"));}rv[k]=v;};if(name){addSym(name,module);}else{if(include){i=0;for(;i < include.length;i++ ){o=include[i];if(! (o in module)){throw new Error(("require([.]) module "+(id)+" has no symbol "+(o)));}addSym(o,module[o]);}}else{for(o in module){if(exclude.indexOf(o) !== - 1){continue;}addSym(o,module[o]);}}}},0)),this);else return __oni_rt.ex(__oni_rt.Seq(0,__oni_rt.Sc(1068,function(_oniX){return split=_oniX;},__oni_rt.C(function(){return Math.floor(l / 2)},1067)),__oni_rt.Par(__oni_rt.C(function(){return inner(i,split)},1069),__oni_rt.C(function(){return inner(i + split,l - split)},1072))),this);},1019)])}return __oni_rt.exseq(arguments,this,'apollo-sys-common.sjs',[1,__oni_rt.Nb(function(){rv={};},1018),__oni_rt.Nb(function(){if(modules.length !== 0)return __oni_rt.ex(__oni_rt.C(function(){return inner(0,modules.length)},1078),this);},1078),__oni_rt.Nb(function(){return __oni_rt.Return(rv);},1079)])}__oni_rt.exseq(this.arguments,this,'apollo-sys-common.sjs',[24,__oni_rt.Nb(function(){__oni_rt.sys=exports;if(! (__oni_rt.G.__oni_rt_bundle)){__oni_rt.G.__oni_rt_bundle={};}exports.hostenv=__oni_rt.hostenv;exports.getGlobal=function (){return __oni_rt.G;};exports.withDynVarContext=function (block){var old_dyn_vars;return __oni_rt.exseq(arguments,this,'apollo-sys-common.sjs',[1,__oni_rt.Nb(function(){old_dyn_vars=__oni_rt.current_dyn_vars;},92),__oni_rt.Try(0,__oni_rt.Seq(0,__oni_rt.Nb(function(){return __oni_rt.current_dyn_vars=Object.create(old_dyn_vars);},93),__oni_rt.C(function(){return block()},94)),0,__oni_rt.Nb(function(){return __oni_rt.current_dyn_vars=old_dyn_vars;},97))])};exports.setDynVar=function (name,value){var key;if(__oni_rt.current_dyn_vars === null){throw new Error(("No dynamic variable context to retrieve "+(name)));}key='$' + name;__oni_rt.current_dyn_vars[key]=value;};exports.clearDynVar=function (name){var key;if(__oni_rt.current_dyn_vars === null){throw new Error(("No dynamic variable context to clear "+(name)));}key='$' + name;delete __oni_rt.current_dyn_vars[key];};exports.getDynVar=function (name,default_val){var key;key='$' + name;if(__oni_rt.current_dyn_vars === null){if(arguments.length > 1){return default_val;}else{throw new Error(("Dynamic Variable '"+(name)+"' does not exist (no dynamic variable context)"));}}if(! (key in __oni_rt.current_dyn_vars)){if(arguments.length > 1){return default_val;}else{throw new Error(("Dynamic Variable '"+(name)+"' does not exist"));}}return __oni_rt.current_dyn_vars[key];};arrayCtors=[];arrayCtorNames=['Uint8Array','Uint16Array','Uint32Array','Int8Array','Int16Array','Int32Array','Float32Array','Float64Array','NodeList','HTMLCollection','FileList','StaticNodeList'];i=0;for(;i < arrayCtorNames.length;i++ ){c=__oni_rt.G[arrayCtorNames[i]];if(c){arrayCtors.push(c);}}exports.isArrayLike=function (obj){var i;if(Array.isArray(obj) || ! ! (obj && Object.prototype.hasOwnProperty.call(obj,'callee'))){return true;}i=0;for(;i < arrayCtors.length;i++ ){if(obj instanceof arrayCtors[i]){return true;}}return false;};_flatten=function (arr,rv){var l,elem,i;l=arr.length;i=0;for(;i < l;++ i){elem=arr[i];if(exports.isArrayLike(elem)){_flatten(elem,rv);}else{rv.push(elem);}}};exports.flatten=function (arr){var rv;rv=[];if(arr.length === UNDEF){throw new Error("flatten() called on non-array");}_flatten(arr,rv);return rv;};exports.expandSingleArgument=function (args){if(args.length == 1 && exports.isArrayLike(args[0])){args=args[0];}return args;};exports.isQuasi=function (obj){return (obj instanceof __oni_rt.QuasiProto);};exports.Quasi=function (arr){return __oni_rt.Quasi.apply(__oni_rt,arr);};exports.mergeObjects=function (){var rv,sources,i;rv={};sources=exports.expandSingleArgument(arguments);i=0;for(;i < sources.length;i++ ){exports.extendObject(rv,sources[i]);}return rv;};exports.extendObject=function (dest,source){var o;for(o in source){if(Object.prototype.hasOwnProperty.call(source,o)){dest[o]=source[o];}}return dest;};URI.prototype={toString:function (){return ((this.protocol)+"://"+(this.authority)+(this.relative));}};URI.prototype.params=function (){var rv;if(! this._params){rv={};this.query.replace(parseURLOptions.qsParser,function (_,k,v){if(k){rv[decodeURIComponent(k)]=decodeURIComponent(v);}});this._params=rv;}return this._params;};parseURLOptions={key:["source","protocol","authority","userInfo","user","password","host","port","relative","path","directory","file","query","anchor"],qsParser:/(?:^|&)([^&=]*)=?([^&]*)/g,parser:/^(?:([^:\/?#]+):)?(?:\/\/((?:(([^:@]*)(?::([^:@]*))?)?@)?([^:\/?#]*)(?::(\d*))?))?((((?:[^?#\/]*\/)*)([^?#]*))(?:\?([^#]*))?(?:#(.*))?)/};exports.parseURL=function (str){var o,m,uri,i;o=parseURLOptions;m=o.parser.exec(str);uri=new URI();i=14;while(i-- ){uri[o.key[i]]=m[i] || "";}return uri;};exports.constructQueryString=function (){var hashes,hl,parts,hash,l,val,i,q,h;hashes=exports.flatten(arguments);hl=hashes.length;parts=[];h=0;for(;h < hl;++ h){hash=hashes[h];for(q in hash){l=encodeURIComponent(q) + "=";val=hash[q];if(! exports.isArrayLike(val)){parts.push(l + encodeURIComponent(val));}else{i=0;for(;i < val.length;++ i){parts.push(l + encodeURIComponent(val[i]));}}}}return parts.join("&");};exports.constructURL=function (){var url_spec,l,rv,comp,i,qparts,part,query;url_spec=exports.flatten(arguments);l=url_spec.length;rv=url_spec[0];i=1;for(;i < l;++ i){comp=url_spec[i];if(typeof comp != "string"){break;}if(rv.charAt(rv.length - 1) != "/"){rv+="/";}rv+=comp.charAt(0) == "/"?comp.substr(1):comp;}qparts=[];for(;i < l;++ i){part=exports.constructQueryString(url_spec[i]);if(part.length){qparts.push(part);}}query=qparts.join("&");if(query.length){if(rv.indexOf("?") != - 1){rv+="&";}else{rv+="?";}rv+=query;}return rv;};exports.isSameOrigin=function (url1,url2){var a1,a2;a1=exports.parseURL(url1).authority;if(! a1){return true;}a2=exports.parseURL(url2).authority;return ! a2 || (a1 == a2);};exports.normalizeURL=function (url,base){var a,pin,l,pout,c,i,rv;if(__oni_rt.hostenv == "nodejs" && __oni_rt.G.process.platform == 'win32'){url=url.replace(/\\/g,"/");base=base.replace(/\\/g,"/");}a=exports.parseURL(url);if(base && (base=exports.parseURL(base)) && (! a.protocol || a.protocol == base.protocol)){if(! a.directory && ! a.protocol){a.directory=base.directory;if(! a.path && (a.query || a.anchor)){a.file=base.file;}}else{if(a.directory && a.directory.charAt(0) != '/'){a.directory=(base.directory || "/") + a.directory;}}if(! a.protocol){a.protocol=base.protocol;if(! a.authority){a.authority=base.authority;}}}a.directory=a.directory.replace(/\/\/+/g,'/');pin=a.directory.split("/");l=pin.length;pout=[];i=0;for(;i < l;++ i){c=pin[i];if(c == "."){continue;}if(c == ".." && pout.length > 1){pout.pop();}else{pout.push(c);}}a.directory=pout.join("/");rv="";if(a.protocol){rv+=a.protocol + ":";}if(a.authority){rv+="//" + a.authority;}else{if(a.protocol == "file"){rv+="//";}}rv+=a.directory + a.file;if(a.query){rv+="?" + a.query;}if(a.anchor){rv+="#" + a.anchor;}return rv;};exports.jsonp=jsonp_hostenv;exports.getXDomainCaps=getXDomainCaps_hostenv;exports.request=request_hostenv;exports.makeMemoizedFunction=function (f,keyfn){var lookups_in_progress,memoizer;return __oni_rt.exseq(arguments,this,'apollo-sys-common.sjs',[1,__oni_rt.Nb(function(){lookups_in_progress={};memoizer=function (){var key,rv;return __oni_rt.exseq(arguments,this,'apollo-sys-common.sjs',[9,__oni_rt.Sc(518,function(_oniX){return key=_oniX;},__oni_rt.If(__oni_rt.Nb(function(){return keyfn},517),__oni_rt.C(function(){return keyfn.apply(this.tobj,this.aobj)},517),__oni_rt.Nb(function(){return this.aobj[0]},517))),__oni_rt.Nb(function(){rv=memoizer.db[key];},519),__oni_rt.Nb(function(){if(typeof rv !== 'undefined')return __oni_rt.ex(__oni_rt.Nb(function(){return __oni_rt.Return(rv);},519),this);},519),__oni_rt.Nb(function(){if(! lookups_in_progress[key])return __oni_rt.ex(__oni_rt.Sc(523,function(_oniX){return lookups_in_progress[key]=_oniX;},__oni_rt.Spawn(523,__oni_rt.C(function(){return (function (self,args){return __oni_rt.exseq(arguments,this,'apollo-sys-common.sjs',[1,__oni_rt.Sc(522,__oni_rt.Return,__oni_rt.Sc(522,function(_oniX){return memoizer.db[key]=_oniX;},__oni_rt.C(function(){return f.apply(self,args)},522)))])})(this.tobj,this.aobj)},523))),this);},520),__oni_rt.Try(0,__oni_rt.Sc(525,__oni_rt.Return,__oni_rt.C(function(){return lookups_in_progress[key].waitforValue()},525)),0,__oni_rt.If(__oni_rt.Sc(528,__oni_rt.infix['=='],__oni_rt.C(function(){return lookups_in_progress[key].waiting()},528),0),__oni_rt.Seq(0,__oni_rt.C(function(){return lookups_in_progress[key].abort()},529),__oni_rt.Nb(function(){return delete lookups_in_progress[key];},530))))])};memoizer.db={};return __oni_rt.Return(memoizer);},516)])};exports.eval=eval_hostenv;pendingLoads={};exports._makeRequire=makeRequire;compiled_src_tag=/^\/\*\__oni_compiled_sjs_1\*\//;default_compiler.module_args=['module','exports','require','__onimodulename','__oni_altns'];canonical_id_to_module={};github_api="https://api.github.com/";github_opts={cbfield:"callback"};exports.resolve=function (url,require_obj,parent,opts){require_obj=require_obj || exports.require;parent=parent || getTopReqParent_hostenv();opts=opts || {};return resolve(url,require_obj,parent,opts);};exports.require=makeRequire(getTopReqParent_hostenv());exports.require.modules['builtin:apollo-sys.sjs']={id:'builtin:apollo-sys.sjs',exports:exports,loaded_from:"[builtin]",required_by:{"[system]":1}};return exports.init=function (cb){return __oni_rt.exseq(arguments,this,'apollo-sys-common.sjs',[1,__oni_rt.C(function(){return init_hostenv()},1093),__oni_rt.C(function(){return cb()},1094)])};},55)])
+var location,jsonp_req_count,jsonp_cb_obj,XHR_caps,activex_xhr_ver,IE_resume_counter;function determineLocation(){var scripts,matches,i;if(! location){location={};scripts=document.getElementsByTagName("script");i=0;for(;i < scripts.length;++ i){if((matches=/^(.*\/)(?:[^\/]*)stratified(?:[^\/]*)\.js(?:\?.*)?$/.exec(scripts[i].src))){location.location=exports.normalizeURL(matches[1] + "modules/",document.location.href);location.requirePrefix=scripts[i].getAttribute("require-prefix");location.req_base=scripts[i].getAttribute("req-base") || document.location.href;location.main=scripts[i].getAttribute("main");location.noInlineScripts=scripts[i].getAttribute("no-inline-scripts");location.waitForBundle=scripts[i].getAttribute("wait-for-bundle");break;}}if(! location.req_base){location.req_base=document.location.href;}}return location;}function jsonp_hostenv(url,settings){var opts;return __oni_rt.exseq(arguments,this,'apollo-sys-xbrowser.sjs',[1,__oni_rt.Nb(function(){opts=exports.mergeObjects({iframe:false,cbfield:"callback"},settings);url=exports.constructURL(url,opts.query);},0),__oni_rt.Nb(function(){if(opts.iframe || opts.forcecb)return __oni_rt.ex(__oni_rt.Sc(112,__oni_rt.Return,__oni_rt.C(function(){return jsonp_iframe(url,opts)},112)),this);else return __oni_rt.ex(__oni_rt.Sc(114,__oni_rt.Return,__oni_rt.C(function(){return jsonp_indoc(url,opts)},114)),this);},111)])}function jsonp_indoc(url,opts){var cb,cb_query,elem,complete,readystatechange,error,rv;return __oni_rt.exseq(arguments,this,'apollo-sys-xbrowser.sjs',[1,__oni_rt.Nb(function(){if(! window[jsonp_cb_obj]){window[jsonp_cb_obj]={};}cb="cb" + (jsonp_req_count++ );cb_query={};cb_query[opts.cbfield]=jsonp_cb_obj + "." + cb;url=exports.constructURL(url,cb_query);elem=document.createElement("script");elem.setAttribute("src",url);elem.setAttribute("async","async");elem.setAttribute("type","text/javascript");complete=false;},0),__oni_rt.Nb(function(){var resume;return __oni_rt.ex(__oni_rt.Try(0,__oni_rt.Suspend(function(__oni_env,_oniX){resume=_oniX;return __oni_rt.ex(__oni_rt.Seq(0,__oni_rt.Nb(function(){window[jsonp_cb_obj][cb]=resume;return document.getElementsByTagName("head")[0].appendChild(elem);},136),__oni_rt.Nb(function(){var resume;return __oni_rt.ex(__oni_rt.Try(0,__oni_rt.Suspend(function(__oni_env,_oniX){resume=_oniX;return __oni_rt.ex(__oni_rt.Nb(function(){if(elem.addEventListener)return __oni_rt.ex(__oni_rt.C(function(){return elem.addEventListener("error",resume,false)},141),this);else return __oni_rt.ex(__oni_rt.Seq(0,__oni_rt.Nb(function(){readystatechange=function (){return __oni_rt.exseq(arguments,this,'apollo-sys-xbrowser.sjs',[1,__oni_rt.Nb(function(){if(elem.readyState == 'loaded' && ! complete)return __oni_rt.ex(__oni_rt.Fcall(0,145,__oni_rt.Nb(function(){return resume},144),__oni_rt.Fcall(2,144,__oni_rt.Nb(function(){return Error},144),"script loaded but `complete` flag not set")),this);},144)])};},146),__oni_rt.C(function(){return elem.attachEvent("onreadystatechange",readystatechange)},146)),this);},140),__oni_env)}, function() {error=arguments[0];}),0,__oni_rt.Nb(function(){if(elem.removeEventListener)return __oni_rt.ex(__oni_rt.C(function(){return elem.removeEventListener("error",resume,false)},151),this);else return __oni_rt.ex(__oni_rt.C(function(){return elem.detachEvent("onreadystatechange",readystatechange)},153),this);},150)),this)},155),__oni_rt.Sc(155,__oni_rt.Throw,__oni_rt.Fcall(2,155,__oni_rt.Nb(function(){return Error},155),__oni_rt.Nb(function(){return "Could not complete JSONP request to '" + url + "'" + (error?"\n" + error.message:"")},155)),155,'apollo-sys-xbrowser.sjs')),__oni_env)}, function() {rv=arguments[0];}),0,__oni_rt.Seq(0,__oni_rt.C(function(){return elem.parentNode.removeChild(elem)},158),__oni_rt.Nb(function(){return delete window[jsonp_cb_obj][cb];},159))),this)},161),__oni_rt.Nb(function(){complete=true;return __oni_rt.Return(rv);},161)])}function jsonp_iframe(url,opts){var cb,cb_query,iframe,doc,rv;return __oni_rt.exseq(arguments,this,'apollo-sys-xbrowser.sjs',[1,__oni_rt.Nb(function(){cb=opts.forcecb || "R";cb_query={};if(opts.cbfield){cb_query[opts.cbfield]=cb;}url=exports.constructURL(url,cb_query);iframe=document.createElement("iframe");document.getElementsByTagName("head")[0].appendChild(iframe);doc=iframe.contentWindow.document;},0),__oni_rt.Nb(function(){var resume;return __oni_rt.ex(__oni_rt.Try(0,__oni_rt.Suspend(function(__oni_env,_oniX){resume=_oniX;return __oni_rt.ex(__oni_rt.Seq(0,__oni_rt.C(function(){return doc.open()},178),__oni_rt.Nb(function(){return iframe.contentWindow[cb]=resume;},179),__oni_rt.C(function(){return __oni_rt.Hold(0)},182),__oni_rt.C(function(){return doc.write("\x3Cscript type='text/javascript' src=\"" + url + "\">\x3C/script>")},183),__oni_rt.C(function(){return doc.close()},184)),__oni_env)}, function() {rv=arguments[0];}),0,__oni_rt.C(function(){return iframe.parentNode.removeChild(iframe)},187)),this)},191),__oni_rt.C(function(){return __oni_rt.Hold(0)},191),__oni_rt.Nb(function(){return __oni_rt.Return(rv);},192)])}function getXHRCaps(){if(! XHR_caps){XHR_caps={};if(__oni_rt.G.XMLHttpRequest){XHR_caps.XHR_ctor=function (){return new XMLHttpRequest();};}else{XHR_caps.XHR_ctor=function (){var req,v;if(typeof activex_xhr_ver !== 'undefined'){return new ActiveXObject(activex_xhr_ver);}for(v in {"MSXML2.XMLHTTP.6.0":1,"MSXML2.XMLHTTP.3.0":1,"MSXML2.XMLHTTP":1}){try{req=new ActiveXObject(v);activex_xhr_ver=v;return req;}catch(e){;}}throw new Error("Browser does not support XMLHttpRequest");};}XHR_caps.XHR_CORS=("withCredentials" in XHR_caps.XHR_ctor());if(! XHR_caps.XHR_CORS){XHR_caps.XDR=(typeof __oni_rt.G.XDomainRequest !== 'undefined');}XHR_caps.CORS=(XHR_caps.XHR_CORS || XHR_caps.XDR)?"CORS":"none";}return XHR_caps;}function getXDomainCaps_hostenv(){return getXHRCaps().CORS;}function getTopReqParent_hostenv(){var base;base=determineLocation().req_base;return {id:base,loaded_from:base,required_by:{"[system]":1}};}function resolveSchemelessURL_hostenv(url_string,req_obj,parent){if(req_obj.path && req_obj.path.length){url_string=exports.constructURL(req_obj.path,url_string);}return exports.normalizeURL(url_string,parent.id);}function request_hostenv(url,settings){var opts,caps,req,h,error,txt,err;return __oni_rt.exseq(arguments,this,'apollo-sys-xbrowser.sjs',[1,__oni_rt.Nb(function(){opts=exports.mergeObjects({method:"GET",body:null,response:'string',throwing:true},settings);url=exports.constructURL(url,opts.query);caps=getXHRCaps();if(! caps.XDR || exports.isSameOrigin(url,document.location)){req=caps.XHR_ctor();req.open(opts.method,url,true,opts.username || "",opts.password || "");}else{req=new XDomainRequest();req.open(opts.method,url);}},0),__oni_rt.Nb(function(){var resume;return __oni_rt.ex(__oni_rt.Try(0,__oni_rt.Suspend(function(__oni_env,_oniX){resume=_oniX;return __oni_rt.ex(__oni_rt.Seq(0,__oni_rt.Nb(function(){if(typeof req.onerror !== 'undefined')return __oni_rt.ex(__oni_rt.Nb(function(){req.onload=function (){return __oni_rt.exseq(arguments,this,'apollo-sys-xbrowser.sjs',[1,__oni_rt.C(function(){return resume()},300)])};req.onerror=function (){return __oni_rt.exseq(arguments,this,'apollo-sys-xbrowser.sjs',[1,__oni_rt.C(function(){return resume(true)},301)])};return req.onabort=function (){return __oni_rt.exseq(arguments,this,'apollo-sys-xbrowser.sjs',[1,__oni_rt.C(function(){return resume(true)},302)])};},300),this);else return __oni_rt.ex(__oni_rt.Nb(function(){return req.onreadystatechange=function (evt){return __oni_rt.exseq(arguments,this,'apollo-sys-xbrowser.sjs',[1,__oni_rt.Nb(function(){if(req.readyState != 4)return __oni_rt.ex(__oni_rt.Nb(function(){return __oni_rt.Return();},307),this);else return __oni_rt.ex(__oni_rt.C(function(){return resume()},309),this);},306)])};},310),this);},299),__oni_rt.Nb(function(){if(opts.headers && req.setRequestHeader){for(h in opts.headers){req.setRequestHeader(h,opts.headers[h]);}}if(opts.mime && req.overrideMimeType){req.overrideMimeType(opts.mime);}if(opts.response === 'arraybuffer'){req.responseType='arraybuffer';}req.send(opts.body);},0)),__oni_env)}, function() {error=arguments[0];}),0,__oni_rt.Nb(function(){if(typeof req.onerror !== 'undefined')return __oni_rt.ex(__oni_rt.Nb(function(){req.onload=null;req.onerror=null;return req.onabort=null;},333),this);else return __oni_rt.ex(__oni_rt.Nb(function(){return req.onreadystatechange=null},338),this);},332),__oni_rt.C(function(){return req.abort()},329)),this)},342),__oni_rt.If(__oni_rt.Seq(2,__oni_rt.Nb(function(){return error},342),__oni_rt.Seq(4,__oni_rt.Nb(function(){return typeof req.status !== 'undefined'},343),__oni_rt.Sc(344,function(r){return ! r},__oni_rt.Sc(344,__oni_rt.infix['in'],__oni_rt.Fcall(1,344,__oni_rt.Sc(344,function(l){return [l,'charAt'];},__oni_rt.C(function(){return req.status.toString()},344)),0),__oni_rt.Nb(function(){return {'0':1,'2':1}},344))))),__oni_rt.Seq(0,__oni_rt.Nb(function(){if(opts.throwing){txt="Failed " + opts.method + " request to '" + url + "'";if(req.statusText){txt+=": " + req.statusText;}if(req.status){txt+=" (" + req.status + ")";}err=new Error(txt);err.status=req.status;err.data=req.response;throw err;}},345),__oni_rt.Nb(function(){if(opts.response === 'string')return __oni_rt.ex(__oni_rt.Nb(function(){return __oni_rt.Return("");},356),this);},355))),__oni_rt.Nb(function(){if(opts.response === 'string')return __oni_rt.ex(__oni_rt.Nb(function(){return __oni_rt.Return(req.responseText);},361),this);else return __oni_rt.ex(__oni_rt.Nb(function(){if(opts.response === 'arraybuffer')return __oni_rt.ex(__oni_rt.Nb(function(){return __oni_rt.Return({status:req.status,content:req.response,getHeader:function(name){return __oni_rt.exseq(arguments,this,'apollo-sys-xbrowser.sjs',[33,__oni_rt.C(function(){return req.getResponseHeader(name)},367)])}});},367),this);else return __oni_rt.ex(__oni_rt.Nb(function(){return __oni_rt.Return({status:req.status,content:req.responseText,getHeader:function(name){return __oni_rt.exseq(arguments,this,'apollo-sys-xbrowser.sjs',[33,__oni_rt.C(function(){return req.getResponseHeader(name)},375)])}});},375),this);},362),this);},360)])}function getHubs_hostenv(){return [["sjs:",determineLocation().location || {src:function (path){throw new Error("Can't load module '" + path + "': The location of the StratifiedJS standard module lib is unknown - it can only be inferred automatically if you load stratified.js in the normal way through a <script> element.");}}],["github:",{src:github_src_loader}],["http:",{src:http_src_loader}],["https:",{src:http_src_loader}],["file:",{src:http_src_loader}],["x-wmapp1:",{src:http_src_loader}],["local:",{src:http_src_loader}]];}function getExtensions_hostenv(){return {'sjs':default_compiler,'js':function (src,descriptor){var f;f=new Function("module","exports",src);return f.apply(descriptor.exports,[descriptor,descriptor.exports]);},'html':html_sjs_extractor};}function eval_hostenv(code,settings){var filename,mode,js;return __oni_rt.exseq(arguments,this,'apollo-sys-xbrowser.sjs',[1,__oni_rt.Nb(function(){if(__oni_rt.UA == "msie" && __oni_rt.G.execScript)return __oni_rt.ex(__oni_rt.Sc(422,__oni_rt.Return,__oni_rt.C(function(){return eval_msie(code,settings)},422)),this);},421),__oni_rt.Nb(function(){filename=(settings && settings.filename) || "sjs_eval_code";},425),__oni_rt.Sc(425,function(_oniX){return filename=_oniX;},__oni_rt.Sc(425,__oni_rt.join_str,"'",__oni_rt.C(function(){return filename.replace(/\'/g,'\\\'')},425),"'")),__oni_rt.Nb(function(){mode=(settings && settings.mode) || "normal";},427),__oni_rt.Sc(428,function(_oniX){return js=_oniX;},__oni_rt.C(function(){return __oni_rt.c1.compile(code,{filename:filename,mode:mode})},427)),__oni_rt.Sc(428,__oni_rt.Return,__oni_rt.C(function(){return __oni_rt.G.eval(js)},428))])}function eval_msie(code,settings){var filename,mode,rc,js,rv,isexception;return __oni_rt.exseq(arguments,this,'apollo-sys-xbrowser.sjs',[1,__oni_rt.Nb(function(){filename=(settings && settings.filename) || "sjs_eval_code";},441),__oni_rt.Sc(441,function(_oniX){return filename=_oniX;},__oni_rt.Sc(441,__oni_rt.join_str,"'",__oni_rt.C(function(){return filename.replace(/\'/g,'\\\'')},441),"'")),__oni_rt.Nb(function(){mode=(settings && settings.mode) || "normal";},443),__oni_rt.Try(0,__oni_rt.Seq(0,__oni_rt.Suspend(function(__oni_env,resume){return __oni_rt.ex(__oni_rt.Seq(0,__oni_rt.Nb(function(){rc=++ IE_resume_counter;return __oni_rt.IE_resume[rc]=resume;},446),__oni_rt.Sc(450,function(_oniX){return js=_oniX;},__oni_rt.C(function(){return __oni_rt.c1.compile("try{" + code + "\n}catchall(rv) { spawn(hold(0),__oni_rt.IE_resume[" + rc + "](rv[0],rv[1])) }",{filename:filename,mode:mode})},449)),__oni_rt.C(function(){return __oni_rt.G.execScript(js)},450)),__oni_env)}, function() {rv=arguments[0];isexception=arguments[1];}),__oni_rt.Nb(function(){if(isexception)return __oni_rt.ex(__oni_rt.Sc(452,__oni_rt.Throw,__oni_rt.Nb(function(){return rv},452),452,'apollo-sys-xbrowser.sjs'),this);},452)),0,__oni_rt.Nb(function(){return delete __oni_rt.IE_resume[rc];},455)),__oni_rt.Nb(function(){return __oni_rt.Return(rv);},457)])}function init_hostenv(){}function runScripts(){var scripts,ss,s,i,s,m,content,descriptor,f,i,mainModule;return __oni_rt.exseq(arguments,this,'apollo-sys-xbrowser.sjs',[1,__oni_rt.If(__oni_rt.Sc(471,function(l){return l.waitForBundle;},__oni_rt.C(function(){return determineLocation()},471)),__oni_rt.Nb(function(){if(__oni_rt_bundle.h === undefined)return __oni_rt.ex(__oni_rt.Nb(function(){__oni_rt_bundle_hook=runScripts;return __oni_rt.Return();},475),this);},473)),__oni_rt.If(__oni_rt.Sc(480,function(r){return ! r[0][r[1]]},__oni_rt.Sc(480,function(l){return [l,'noInlineScripts'];},__oni_rt.C(function(){return determineLocation()},480))),__oni_rt.Seq(0,__oni_rt.Nb(function(){scripts=document.getElementsByTagName("script");ss=[];i=0;for(;i < scripts.length;++ i){s=scripts[i];if(s.getAttribute("type") == "text/sjs"){ss.push(s);}}},0),__oni_rt.Seq(0,__oni_rt.Nb(function(){i=0;},523),__oni_rt.Loop(0,__oni_rt.Nb(function(){return i < ss.length},500),__oni_rt.Nb(function(){return ++ i},500),__oni_rt.Nb(function(){s=ss[i];m=s.getAttribute("module");content=s.textContent || s.innerHTML;if(__oni_rt.UA == "msie"){content=content.replace(/\r\n/,"");}},0),__oni_rt.Nb(function(){if(m)return __oni_rt.ex(__oni_rt.Nb(function(){return __oni_rt.modsrc[m]=content},512),this);else return __oni_rt.ex(__oni_rt.Seq(0,__oni_rt.Nb(function(){descriptor={id:document.location.href + "_inline_sjs_" + (i + 1)};return __oni_rt.sys.require.main=descriptor;},517),__oni_rt.Sc(520,function(_oniX){return f=_oniX;},__oni_rt.C(function(){return exports.eval("(function(module, __onimodulename){" + content + "\n})",{filename:("module "+(descriptor.id))})},519)),__oni_rt.C(function(){return f(descriptor)},520)),this);},511))))),__oni_rt.Nb(function(){mainModule=determineLocation().main;},525),__oni_rt.Nb(function(){if(mainModule)return __oni_rt.ex(__oni_rt.C(function(){return __oni_rt.sys.require(mainModule,{main:true})},526),this);},525)])}__oni_rt.exseq(this.arguments,this,'apollo-sys-xbrowser.sjs',[24,__oni_rt.Nb(function(){if(determineLocation().requirePrefix){__oni_rt.G[determineLocation().requirePrefix]={require:__oni_rt.sys.require};}else{__oni_rt.G.require=__oni_rt.sys.require;}jsonp_req_count=0;jsonp_cb_obj="_oni_jsonpcb";IE_resume_counter=0;return __oni_rt.IE_resume={};},78),__oni_rt.Nb(function(){if(! __oni_rt.G.__oni_rt_no_script_load)return __oni_rt.ex(__oni_rt.Nb(function(){if(document.readyState === "complete" || document.readyState === "interactive")return __oni_rt.ex(__oni_rt.C(function(){return runScripts()},531),this);else return __oni_rt.ex(__oni_rt.Nb(function(){if(__oni_rt.G.addEventListener)return __oni_rt.ex(__oni_rt.C(function(){return __oni_rt.G.addEventListener("DOMContentLoaded",runScripts,true)},535),this);else return __oni_rt.ex(__oni_rt.C(function(){return __oni_rt.G.attachEvent("onload",runScripts)},537),this);},534),this);},530),this);},468)])})({})

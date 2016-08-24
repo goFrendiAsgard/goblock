@@ -110,6 +110,10 @@ testEq('sanitize', "abc&amp;foo;def&gt;ght&lt;", function() {
   return str.sanitize("abc&foo;def>ght<");
 });
 
+testEq('sanitize quotes', "foo&#39;s and &quot;bars&quot;", function() {
+  return str.sanitize("foo's and \"bars\"");
+});
+
 context("substring tests") {||
   testEq('startsWith("foo", "oo")', false, function() { return str.startsWith("foo", "oo"); });
   testEq('startsWith("foo", "foo")', true, function() { return str.startsWith("foo", "foo"); });
@@ -313,3 +317,22 @@ testEq('arrayBufferToOctets: large inputs', true, function() {
   str.arrayBufferToOctets(arr.buffer);
   return true;
 });
+
+context {||
+  var cafebuf = new Buffer('636166c3a9', 'hex');
+  var cafestr = 'caf\u00e9';
+
+  test("encode") {||
+    cafestr .. str.encode('utf-8') .. assert.eq(cafebuf);
+    str.encode('utf-8')(cafestr) .. assert.eq(cafebuf);
+    assert.raises({message:"Not a string"},
+      -> str.encode(new Buffer([]), 'hex'));
+  }
+
+  test('decode') {||
+    cafebuf .. str.decode('utf-8') .. assert.eq(cafestr);
+    str.decode('utf-8')(cafebuf) .. assert.eq(cafestr);
+    assert.raises({message:"Not a buffer"},
+      -> str.decode('str', 'hex'));
+  }
+}.serverOnly();

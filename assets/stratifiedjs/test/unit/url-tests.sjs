@@ -39,6 +39,7 @@ context('build URL') {||
 
 context("normalize URL") {||
   testFn(url, 'normalize', ["/foo/bar.txt", "http://a.b/c/d/baz.txt"], "http://a.b/foo/bar.txt");
+  testFn(url, 'normalize', ["/foo//bar.txt", "http://a.b/c/d/baz.txt"], "http://a.b/foo/bar.txt");
   testFn(url, 'normalize', ["foo/bar.txt", "http://a.b/c/d/baz.txt"], "http://a.b/c/d/foo/bar.txt");
   testFn(url, 'normalize', ["././foo/./bar.txt", "http://a.b/c/d/"], "http://a.b/c/d/foo/bar.txt");
   testFn(url, 'normalize', [".././foo/../bar.txt", "http://a.b/c/d/"], "http://a.b/c/bar.txt");
@@ -173,6 +174,29 @@ context {|| // serverOnly()
         'sjs:test/run',
       ] .. each {|u|
         u .. url.coerceToURL() .. assert.eq(u);
+      }
+    }
+  }
+
+  context("coerceToPath") {||
+    test("leave non-URLs as-is") {||
+      [
+        './local/file',
+        'C:\\local\\file',
+        '/var/local/file',
+        'filename',
+      ] .. each {|path|
+        path .. url.coerceToPath() .. assert.eq(path);
+      }
+    }
+
+    test("coerce 'file:' URLs to paths") {||
+      [
+        'file://C:/path',
+        'file:///path/to/file',
+        'file:test/run',
+      ] .. each {|u|
+        u .. url.coerceToPath() .. assert.eq(u .. url.toPath);
       }
     }
   }

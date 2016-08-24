@@ -53,16 +53,22 @@
         @assert.number(f.file);
 
         var writable = f.writeStream({'encoding':'ascii'});
-        writable .. @stream.write("data");
-        writable .. @stream.end();
+        'data' .. @stream.pump(writable);
 
         var bufs = [];
         var readable = f.readStream({'encoding':'ascii'});
-        while(true) {
-          var buf = readable .. @stream.read(1);
-          if(buf == null) break;
-          bufs.push(buf);
+        waitfor {
+          throw readable .. @wait('error');
+        } or {
+          readable .. @wait('end');
+        } or {
+          while(true) {
+            var buf = readable .. @stream._read(1);
+            if(buf == null) break;
+            bufs.push(buf);
+          }
         }
+        @info("got bufs:", bufs);
         bufs.length .. @assert.eq(4);
         bufs .. @join .. @assert.eq("data");
 
@@ -102,7 +108,7 @@
 
     @test("allows the user to close the file before the end of the block") {||
       tmp.TemporaryFile {|f|
-        f.writeStream() .. @stream.write("abcd");
+        'abcd' .. @stream.pump(f.writeStream());
         f.close();
         @fs.readFile(f.path, 'utf-8') .. @assert.eq("abcd");
       }

@@ -380,6 +380,25 @@ var LogReporterMixins = {
     this.prefix = repeatStr(this.indent, this.indentLevels);
   },
 
+  print: function(msg, endl) {
+    if(msg === undefined) msg = '';
+    this._print(msg, endl);
+  },
+
+  report: function(results) {
+    var parts = [];
+    if (results.failed > 0)  parts.push(this.color('red',   " #{results.failed} failed"));
+    if (results.skipped > 0) parts.push(this.color('cyan',  " #{results.skipped} skipped"));
+    if (results.passed > 0)  parts.push(this.color('green', " #{results.passed} passed"));
+
+
+    this.print(this.color({attribute: 'bright'}, "Ran #{results.count()} tests."), false);
+    parts .. seq.intersperse(",") .. each(x => this.print(x, false));
+    this.print(this.color({attribute: 'dim'}, " (in #{results.durationSeconds()}s)"), false);
+    if(this.endReport) this.endReport();
+    this.print();
+  },
+
   mixInto: function (cls) {
     this .. object.ownKeys .. each { |k|
       if (k == 'mixInto') continue;
@@ -388,6 +407,30 @@ var LogReporterMixins = {
     ReporterMixins.mixInto(cls);
   },
 };
+
+function initConsoleColors(opts) {
+  // initialize console (ANSI) coloring, for both NodeJS & Karma reporters
+  var color_pref = opts.color;
+  var color_noop = function(col, text) { return text; }
+  if (color_pref === false) {
+    this.color = color_noop;
+  } else if (color_pref === true) {
+  } else if (color_pref === 'auto' || color_pref == null) {
+    if (sys.hostenv === 'nodejs' && !require('nodejs:tty').isatty(process.stdout.fd)) {
+      this.color = color_noop;
+    }
+  } else {
+    throw new Error("Unknown color pref: #{color_pref}");
+  }
+
+  if(!this.color) {
+    // if color has not been set (to color_noop), set it:
+    // NOTE: this actually works in the browser (for the functionality we use)
+    var terminal = require('../nodejs/terminal');
+    this.color = function(col, text) { return terminal._color(col) + text + terminal.reset_code; };
+  }
+}
+
 
 
 var HtmlOutput = exports.HtmlOutput = function() {
@@ -460,7 +503,6 @@ var getDocumentHeight = -> Math.max(document.documentElement.offsetHeight, docum
 HtmlOutput.prototype.print = function(msg, endl) {
   var scrollBottom = getScrollBottom();
   var followOutput = getDocumentHeight() <= scrollBottom;
-  if (msg === undefined) msg = '';
   if (!dom.isDOMNode(msg)) {
     msg = document.createTextNode(msg);
   }
@@ -489,7 +531,7 @@ HtmlReporter.prototype.init = function(opts) {
     throw new Error("HtmlReporter instantiated before HtmlOutput.instance set");
   }
   this.console = exports.HtmlOutput.instance;
-  this.print = this.console.print.bind(this.console);
+  this._print = this.console.print.bind(this.console);
 }
 
 HtmlReporter.prototype.color = function(col, text, endl) {
@@ -508,21 +550,7 @@ HtmlReporter.prototype.color = function(col, text, endl) {
 LogReporterMixins.mixInto(HtmlReporter);
 
 
-HtmlReporter.prototype.report = function(results) {
-  var parts = [];
-  if (results.failed > 0)  parts.push(this.color('red',   "#{results.failed} failed"));
-  if (results.skipped > 0) parts.push(this.color('cyan',  "#{results.skipped} skipped"));
-  if (results.passed > 0)  parts.push(this.color('green', "#{results.passed} passed"));
-  this.print(this.color({attribute: 'bright'}, "Ran #{results.count()} tests. "), false);
-  var first = true;
-  parts .. each {|part|
-    if (!first) {
-      this.print(", ", false)
-    }
-    first = false;
-    this.print(part, false);
-  }
-  this.print(this.color({attribute: 'dim'}, " (in #{results.durationSeconds()}s)"), false);
+HtmlReporter.prototype.endReport = function(results) {
   if (document.location.hash) {
     var elem = document.createElement("a");
     elem.appendChild(document.createTextNode("#"));
@@ -531,7 +559,6 @@ HtmlReporter.prototype.report = function(results) {
     this.print(" ", false);
     this.print(elem, false);
   }
-  this.print();
 }
 
 HtmlReporter.prototype.linkToTest = function(testId, inline) {
@@ -555,16 +582,12 @@ var KarmaReporter = exports.KarmaReporter = function() {
 
 KarmaReporter.prototype.init = function(opts) {
   this.ctx = window.__karma__;
+  this._pendingLog = "";
+  initConsoleColors.call(this, opts);
 }
 
 KarmaReporter.prototype.suiteBegin = function(results) {
   this.ctx.info({total:results.total});
-};
-
-KarmaReporter.prototype.suiteEnd = function(results) {
-  if (!results.ok()) {
-    throw new Error();
-  }
 };
 
 KarmaReporter.prototype.testBegin = function(result) {
@@ -581,31 +604,29 @@ KarmaReporter.prototype.testEnd = function(result) {
     time: new Date().getTime() - this.testStartTime.getTime(),
     log: []
   };
-  if (result.skipped) {
-    report.log = this.formatSkip(result.test.skipReason).split("\n");
-  } else if (result.ok) {
-    // noop
-  } else {
-    this.failures.push(result);
-    var log = ["# " + this.linkToTest(fullDescription)];
-    log = log.concat(String(result.error).split("\n"));
-    if (this.logCapture && this.logCapture.messages.length > 0) {
-      log.push('-- Captured logging ---');
-      log = log.concat(this.logCapture.messages);
-    }
-    report.log = log;
-  }
   this.ctx.result(report);
-
-  if (this.logCapture) this.logCapture.reset();
 };
 
-KarmaReporter.prototype.linkToTest = function(testId) {
+KarmaReporter.prototype.linkToTest = function(testId, inline) {
+  if(inline) this.print();
+  this.print(this.prefix + "# " + this._linkToTest(testId));
+}
+
+KarmaReporter.prototype._linkToTest = function(testId) {
   return shell_quote.quote([testId]);
 }
 
+KarmaReporter.prototype._print = function(txt, endl) {
+  if(endl === false) {
+    this._pendingLog += txt;
+    return;
+  }
+  this.ctx.info({log:this._pendingLog+txt, type:'SUITE'});
+  this._pendingLog = "";
+}
 
 ReporterMixins.mixInto(KarmaReporter);
+LogReporterMixins.mixInto(KarmaReporter);
 
 
 /** NodeJS Reporter **/
@@ -615,24 +636,7 @@ var NodejsReporter = exports.NodejsReporter = function() {
 };
 
 NodejsReporter.prototype.init = function(opts) {
-  var color_pref = opts.color;
-  var color_noop = function(col, text) { return text; }
-  if (color_pref === false) {
-    this.color = color_noop;
-  } else if (color_pref === true) {
-  } else if (color_pref === 'auto' || color_pref == null) {
-    if (! require('nodejs:tty').isatty(process.stdout.fd)) {
-      this.color = color_noop;
-    }
-  } else {
-    throw new Error("Unknown color pref: #{color_pref}");
-  }
-
-  if(!this.color) {
-    // if color has not been set (to color_noop), set it:
-    var terminal = require('../nodejs/terminal');
-    this.color = function(col, text) { return terminal._color(col) + text + terminal.reset_code; };
-  }
+  initConsoleColors.call(this, opts);
 }
 
 LogReporterMixins.mixInto(NodejsReporter);
@@ -649,19 +653,9 @@ NodejsReporter.prototype.linkToTest = function(testId, inline) {
   this.print(this.color({attribute:'dim'}, this.prefix + "# " + shell_quote.quote(args)));
 }
 
-NodejsReporter.prototype.print = function(msg, endl) {
-  if (msg === undefined) msg = '';
+NodejsReporter.prototype._print = function(msg, endl) {
   process.stdout.write(String(msg));
   if (endl !== false) process.stdout.write('\n');
-}
-
-NodejsReporter.prototype.report = function(results) {
-  var parts = [];
-  if (results.failed > 0)  parts.push(this.color('red',   "#{results.failed} failed"));
-  if (results.skipped > 0) parts.push(this.color('cyan',  "#{results.skipped} skipped"));
-  if (results.passed > 0)  parts.push(this.color('green', "#{results.passed} passed"));
-  var durationDesc = this.color({attribute: 'dim'}, "(in #{results.durationSeconds()}s)");
-  console.log("Ran #{results.count()} tests. #{parts.join(", ")} #{durationDesc}");
 }
 
 // initialization should only be performed once globally, so we 

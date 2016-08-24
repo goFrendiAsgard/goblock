@@ -767,9 +767,9 @@ test('reentrant stratum abort', 'stratum aborted|a|b|c', function() {
     function() {
       hold(0); // ensure 'stratum' var is filled in
       try {
-        stratum.abort();
+        spawn stratum.abort();
         append_to_rv('|a');
-        hold(0); // this should be aborted
+        hold(0); // this should be retracted
         rv += 'X';
       }
       retract {
@@ -784,7 +784,35 @@ test('reentrant stratum abort', 'stratum aborted|a|b|c', function() {
   return rv;
 });
 
-test('reentrant stratum abort via loop & blocklambda', 'stratum aborted|a|b|c', function() {
+test('synchronous reentrant stratum abort', 'stratum aborted|c', function() {
+
+  var rv = '';
+
+  function append_to_rv(txt) { rv += txt }
+
+  var stratum = spawn (
+    function() {
+      hold(0); // ensure 'stratum' var is filled in
+      try {
+        stratum.abort(); // this should be aborted
+        append_to_rv('|a');
+        hold(0); 
+        rv += 'X';
+      }
+      retract {
+        rv += '|b';
+      } 
+    })();
+
+   // wait for stratum to finish
+   try { stratum.value(); rv += 'Y'; } catch(e) { rv += String(e).substr(7,15); }
+   hold(0);
+   rv += '|c';
+  return rv;
+});
+
+
+test('reentrant stratum abort via loop & blocklambda', 'stratum aborted|b|c', function() {
 
   var rv = '';
 
@@ -802,9 +830,45 @@ test('reentrant stratum abort via loop & blocklambda', 'stratum aborted|a|b|c', 
       try {
         bl_caller { 
           ||
-          stratum.abort();
+          stratum.abort(); // this should be aborted
           rv += '|a';
-          hold(0); // this should be aborted
+          hold(0); 
+          rv += 'X';
+        }
+      }
+      retract {
+        rv += '|b';
+      } 
+    })();
+
+   // wait for stratum to finish
+   try { stratum.value(); rv += 'Y'; } catch(e) { rv += String(e).substr(7,15); }
+   hold(100);
+   rv += '|c';
+  return rv;
+});
+
+test('synchronous reentrant stratum abort via loop & blocklambda', 'stratum aborted|a|b|c', function() {
+
+  var rv = '';
+
+  function bl_caller(f) {
+    while (1) {
+      hold(0);
+      f();
+      hold(0);
+    }
+  }
+
+  var stratum = spawn (
+    function() {
+      hold(0); // ensure 'stratum' var is filled in
+      try {
+        bl_caller { 
+          ||
+          spawn stratum.abort();
+          rv += '|a';
+          hold(0); // this should be retracted
           rv += 'X';
         }
       }
@@ -821,7 +885,7 @@ test('reentrant stratum abort via loop & blocklambda', 'stratum aborted|a|b|c', 
 });
 
 
-test('reentrant stratum abort via loop & resume', 'stratum aborted|a|b|c', function() {
+test('reentrant stratum abort via loop & resume', 'stratum aborted|b|c', function() {
 
   var rv = '';
 
@@ -838,9 +902,9 @@ test('reentrant stratum abort via loop & resume', 'stratum aborted|a|b|c', funct
           retract {
             console.log('hitting weird retract');
           }
-          stratum.abort();
+          stratum.abort(); // this should be aborted
           rv += '|a';
-          hold(0); // this should be aborted
+          hold(0); 
           rv += 'X';
         }
       }
@@ -858,6 +922,45 @@ test('reentrant stratum abort via loop & resume', 'stratum aborted|a|b|c', funct
    rv += '|c';
   return rv;
 });
+
+test('synchronous reentrant stratum abort via loop & resume', 'stratum aborted|a|b|c', function() {
+
+  var rv = '';
+
+  var R;
+
+  var stratum = spawn (
+    function() {
+      hold(0); // ensure 'stratum' var is filled in
+      try {
+        while (1) {
+          waitfor() {
+            R = resume;
+          }
+          retract {
+            console.log('hitting weird retract');
+          }
+          spawn stratum.abort();
+          rv += '|a';
+          hold(0); // this should be retracted
+          rv += 'X';
+        }
+      }
+      retract {
+        rv += '|b';
+      } 
+    })();
+
+  hold(0);
+  spawn (hold(100),R());
+
+   // wait for stratum to finish
+   try { stratum.value(); rv += 'Y'; } catch(e) { rv += String(e).substr(7,15); }
+   hold(100);
+   rv += '|c';
+  return rv;
+});
+
 
 test("single-sided conditional: true ? 'yes'", 'yes', function() {
   return true ? 'yes';
@@ -985,7 +1088,7 @@ function makeAbortBreakTest(async_try_catch, late_pickup) {
           throw new Error('foo');
         }
         catch(e) {
-          stratum.abort();
+          spawn stratum.abort();
           rv += 'b';
           break;
           rv += 'x';
@@ -1047,5 +1150,767 @@ test('tailcalled blocklambda break / par edge case', 'b',
          hold(10);
          rv += 'b';
        }
+       return rv;
+     });
+
+test('waitfor/and exception edgecase', 'ok',
+     function() {
+       function f() {
+         waitfor {
+           try {
+             hold();
+           }
+           finally {
+             hold(0);
+             throw new Error('foo');
+           }
+         }
+         and {
+           // this return used to cause the Error 'foo' being swallowed
+           return;
+         }
+       }
+
+       try {
+         f();
+       }
+       catch(e) {
+         return 'ok';
+       }
+       return 'not ok';
+     });
+
+test('waitfor/and exception edgecase (async)', 'ok',
+     function() {
+       function f() {
+         waitfor {
+           try {
+             hold();
+           }
+           finally {
+             hold(0);
+             throw new Error('foo');
+           }
+         }
+         and {
+           hold(0);
+           // this return used to cause the Error 'foo' being swallowed
+           return;
+         }
+       }
+
+       try {
+         f();
+       }
+       catch(e) {
+         return 'ok';
+       }
+       return 'not ok';
+     });
+
+test('waitfor/and exception edgecase 2', 'ok',
+     function() {
+       function f() {
+         var X;
+         waitfor {
+           waitfor() {
+             X = resume;
+           }
+           return;
+         }
+         and {
+           try {
+             throw new Error('foo');
+           }
+           finally {
+             X();
+           }
+         }
+       }
+
+       try {
+         f();
+       }
+       catch(e) {
+         return 'ok';
+       }
+       return 'not ok';
+     });
+
+
+test('waitfor/and exception edgecase 2 (async)', 'ok',
+     function() {
+       function f() {
+         var X;
+         waitfor {
+           waitfor() {
+             X = resume;
+           }
+           return;
+         }
+         and {
+           try {
+             hold(0);
+             throw new Error('foo');
+           }
+           finally {
+             X();
+           }
+         }
+       }
+
+       try {
+         f();
+       }
+       catch(e) {
+         return 'ok';
+       }
+       return 'not ok';
+     });
+
+//---
+
+test('waitfor/or exception edgecase', 'ok',
+     function() {
+       function f() {
+         waitfor {
+           try {
+             hold();
+           }
+           finally {
+             hold(0);
+             throw new Error('foo');
+           }
+         }
+         or {
+           // this return used to cause the Error 'foo' being swallowed
+           return;
+         }
+       }
+
+       try {
+         f();
+       }
+       catch(e) {
+         return 'ok';
+       }
+       return 'not ok';
+     });
+
+test('waitfor/or exception edgecase (async)', 'ok',
+     function() {
+       function f() {
+         waitfor {
+           try {
+             hold();
+           }
+           finally {
+             hold(0);
+             throw new Error('foo');
+           }
+         }
+         or {
+           hold(0);
+           // this return used to cause the Error 'foo' being swallowed
+           return;
+         }
+       }
+
+       try {
+         f();
+       }
+       catch(e) {
+         return 'ok';
+       }
+       return 'not ok';
+     });
+
+test('waitfor/or exception edgecase 2', 'ok',
+     function() {
+       function f() {
+         var X;
+         waitfor {
+           waitfor() {
+             X = resume;
+           }
+           // the return here used to cause the error 'foo' being swallowed
+           return;
+         }
+         or {
+           try {
+             throw new Error('foo');
+           }
+           finally {
+             X();
+           }
+         }
+       }
+
+       try {
+         f();
+       }
+       catch(e) {
+         return 'ok';
+       }
+       return 'not ok';
+     });
+
+
+test('waitfor/or exception edgecase 2 (async)', 'ok',
+     function() {
+       function f() {
+         var X;
+         waitfor {
+           waitfor() {
+             X = resume;
+           }
+           // the return here used to cause the error 'foo' being swallowed
+           return;
+         }
+         or {
+           try {
+             hold(0);
+             throw new Error('foo');
+           }
+           finally {
+             X();
+           }
+         }
+       }
+
+       try {
+         f();
+       }
+       catch(e) {
+         return 'ok';
+       }
+       return 'not ok';
+     });
+
+//--
+
+test('waitfor/or exception edgecase 3', 'ok',
+     function() {
+       function f() {
+         var X;
+         waitfor {
+           waitfor() {
+             X = resume;
+           }
+           // the implicit teardown of the waitfor/or here used to cause the error 'foo' being swallowed
+         }
+         or {
+           try {
+             throw new Error('foo');
+           }
+           finally {
+             X();
+           }
+         }
+       }
+
+       try {
+         f();
+       }
+       catch(e) {
+         return 'ok';
+       }
+       return 'not ok';
+     });
+
+test('waitfor/or exception edgecase 3 (async)', 'ok',
+     function() {
+       function f() {
+         var X;
+         waitfor {
+           waitfor() {
+             X = resume;
+           }
+           // the implicit teardown of the waitfor/or here used to cause the error 'foo' being swallowed
+         }
+         or {
+           try {
+             hold(0);
+             throw new Error('foo');
+           }
+           finally {
+             X();
+           }
+         }
+       }
+
+       try {
+         f();
+       }
+       catch(e) {
+         return 'ok';
+       }
+       return 'not ok';
+     });
+
+//--
+
+test('waitfor/or exception edgecase 4', 'ok',
+     function() {
+       function f() {
+         var X;
+         waitfor {
+           waitfor() {
+             X = resume;
+           }
+           // the collapse of the waitfor/or here used to cause the error 'foo' being swallowed
+           collapse;
+         }
+         or {
+           try {
+             throw new Error('foo');
+           }
+           finally {
+             X();
+           }
+         }
+       }
+
+       try {
+         f();
+       }
+       catch(e) {
+         return 'ok';
+       }
+       return 'not ok';
+     });
+
+test('waitfor/or exception edgecase 4 (async)', 'ok',
+     function() {
+       function f() {
+         var X;
+         waitfor {
+           waitfor() {
+             X = resume;
+           }
+           // the collapse of the waitfor/or here used to cause the error 'foo' being swallowed
+           collapse;
+         }
+         or {
+           try {
+             hold(0);
+             throw new Error('foo');
+           }
+           finally {
+             X();
+           }
+         }
+       }
+
+       try {
+         f();
+       }
+       catch(e) {
+         return 'ok';
+       }
+       return 'not ok';
+     });
+
+//--
+
+test('waitfor/or uncaught exception edgecase', 'ok',
+     function() {
+       function f() {
+         waitfor {
+           try {
+             hold();
+           }
+           finally {
+             // this used to be thrown as an uncaught exception
+             throw new Error('foo');
+           }
+         }
+         or {
+           hold(0);
+           return;
+         }
+       }
+       
+       try {
+         f();
+       }
+       catch(e) {
+         return 'ok';
+       }
+       return 'not ok';
+     });
+
+test('waitfor/and uncaught exception edgecase', 'ok',
+     function() {
+       function f() {
+         waitfor {
+           try {
+             hold();
+           }
+           finally {
+             // this used to be thrown as an uncaught exception
+             throw new Error('foo');
+           }
+         }
+         and {
+           hold(0);
+           return;
+         }
+       }
+       
+       try {
+         f();
+       }
+       catch(e) {
+         return 'ok';
+       }
+       return 'not ok';
+     });
+
+
+test('stratum abort waits for blocking finally', 'AabB',
+     function() {
+       var rv = '';
+       var stratum = spawn (function() { try { hold(); } finally { rv += 'a';  hold(0); rv += 'b'; } })();
+       hold(0);
+       rv += 'A';
+       stratum.abort();
+       rv += 'B';
+       return rv;
+     });
+
+test('detached blocklambda return / stratum.value / stratum.abort interaction', 'finally blocklambda',
+     function() {
+
+       var rv = '';
+
+       function outer() {
+         function inner(r) {
+           var stratum;
+           try {
+             stratum = spawn r();
+             stratum.value();
+             rv += 'not reached ';
+             return 'inner';
+           }
+           finally {
+             rv += 'finally ';
+             stratum.abort();
+           }
+         }
+         
+         return inner { || hold(0); return 'blocklambda'; };
+       }
+
+       rv += outer();
+       return rv;
+     });
+
+test("detached blocklambda break", 'ad', function() {
+  var rv = '';
+  function f(g) {
+    spawn g();
+    hold(10);
+    rv += 'c';
+  }
+  f { || rv += 'a'; break; rv += 'b' };
+  rv += 'd';
+  return rv;
+});
+
+test("detached async blocklambda break 1", 'ad', function() {
+  var rv = '';
+  function f(g) {
+    spawn g();
+    hold(10);
+    rv += 'c';
+  }
+ 
+  f { || rv += 'a'; hold(0); break; rv += 'b' };
+
+  rv += 'd';
+  return rv;
+});
+
+test("detached async blocklambda break with blocking finally", 'ahfd', function() {
+  var rv = '';
+  function f(g) {
+    spawn g();
+    try {
+      rv += 'h';
+      hold(10);
+    }
+    finally {
+      hold(10);
+      rv += 'f';
+    }
+    rv += 'c';
+  }
+ 
+  f { || rv += 'a'; hold(0); break; rv += 'b' };
+
+  rv += 'd';
+  return rv;
+});
+
+
+
+test("expired detached async blocklambda break", 'acde', function() {
+  var stratum;
+  var rv = '';
+  function foo() {
+    function f(g) {
+      stratum = spawn g();
+      hold(0);
+      rv += 'c';
+    }
+    
+    f { || rv += 'a'; try { break; } finally { hold(10); } rv += 'b' };
+    
+    rv += 'd';
+    hold(2000);
+    return rv;
+  }
+
+  waitfor { 
+    return foo();
+  }
+  or {
+    stratum.value(); // this should throw
+  }
+  catch (e) {
+    if (e.message === 'Blocklambda break from spawned stratum to invalid or inactive scope')
+      rv += 'e';
+    return rv;
+  }
+});
+
+test("detached blocklambda break with value pickup", 'vb', function() {
+  var stratum;
+  var rv = '';
+  function f(s) { 
+    stratum = spawn s();
+    hold(10);
+    rv += 'a';
+  }
+  
+  waitfor {
+    f {|| hold(0); break; }
+    rv += 'b';
+  }
+  and {
+    stratum.value();
+    rv += 'v';
+  }
+  return rv;
+});
+
+test("detached blocklambda break with value pickup & finally", 'vfb', function() {
+  var stratum;
+  var rv = '';
+  function f(s) { 
+    stratum = spawn s();
+    hold(10);
+    rv += 'a';
+  }
+  
+  waitfor {
+    try {
+      f {|| hold(0); break; }
+    }
+    finally {
+      hold(10);
+      rv += 'f';
+    }
+    rv += 'b';
+  }
+  and {
+    stratum.value();
+    rv += 'v';
+  }
+  return rv;
+});
+
+test('detached blocklambda break / stratum.value / stratum.abort interaction', 'finally outer',
+     function() {
+
+       var rv = '';
+
+       function outer() {
+         function inner(r) {
+           var stratum;
+           try {
+             stratum = spawn r();
+             stratum.value();
+             rv += 'not reached ';
+             return 'inner';
+           }
+           finally {
+             rv += 'finally ';
+             stratum.abort();
+           }
+         }
+         
+         inner { || hold(0); break; };
+         return 'outer';
+       }
+
+       rv += outer();
+       return rv;
+     });
+
+// this test exercises some features used in our sequence::each.track implementation:
+test('nested blocklambda abort/break', '0(0)(1)(2)(3)(4)5(5)6(6)7(7)8(8)9', 
+     function() {
+       var rv = '';
+
+       function driver(consumer) {
+         var stratum;
+
+         function abort_stratum(i) {
+           try {
+             stratum.abort();
+           }
+           finally {
+             rv += '('+i+')';
+           }
+         }
+
+         for (var i=0; i<10; ++i) {
+           stratum = spawn (stratum ? abort_stratum(i-1), consumer(i));
+           if (i == 5) hold(10);
+         }         
+         rv += 'not reached';
+       }
+       
+       driver { 
+         |x| 
+         rv += x; 
+         if (x === 9) break;
+         try { hold(); } finally { if (x<5) hold(0); } 
+       };
+       
+       return rv;
+     });
+
+test('cyclic abort 1', '1',
+     function() {
+       var rv = '';
+       var stratum = spawn (function() { hold(0); try { stratum.abort(); } finally { rv += '1' } })();
+       hold(10);
+       return rv;
+     });
+
+test('cyclic abort 2', '12',
+     function() {
+       var rv = '';
+       var stratum = spawn (function() { hold(0); try { try { stratum.abort(); } finally { rv += '1' } }finally{ rv+='2'} })();
+       hold(10);
+       return rv;
+     });
+
+test('cyclic abort 3', '12',
+     function() {
+       var rv = '';
+       var stratum = spawn (function() { hold(0); waitfor { stratum.abort(); } and { try { hold(); } finally { rv += '1'} } finally { rv += '2' } })();
+       hold(10);
+       return rv;
+     });
+
+test('cyclic abort 1 async', '1',
+     function() {
+       var rv = '';
+       var stratum = spawn (function() { try { hold(0); stratum.abort(); } finally { rv += '1' } })();
+       hold(10);
+       return rv;
+     });
+
+test('cyclic abort 2 async', '12',
+     function() {
+       var rv = '';
+       var stratum = spawn (function() {  try { try { hold(0); stratum.abort(); } finally { rv += '1' } }finally{ rv+='2'} })();
+       hold(10);
+       return rv;
+     });
+
+test('cyclic abort 3 async', '12',
+     function() {
+       var rv = '';
+       var stratum = spawn (function() { waitfor { hold(0); stratum.abort(); } and { try { hold(); } finally { rv += '1'} } finally { rv += '2' } })();
+       hold(10);
+       return rv;
+     });
+
+test('cyclic abort 4', '12',
+     function() {
+       var rv = '';
+       var stratum = spawn (function() {  waitfor { hold(0); stratum.abort(); } or { try { hold(); } finally { rv += '1'} } finally { rv += '2' } })();
+       hold(10);
+       return rv;
+     });
+
+test('cyclic abort 5', '12',
+     function() {
+       var rv = '';
+       var stratum = spawn (function() { hold(0); waitfor { stratum.abort(); } and { try { hold(); } finally { stratum.abort(); rv += '1'} } finally { rv += '2' } })();
+       hold(10);
+       return rv;
+     });
+
+test('cyclic abort 1 / async finally', '1',
+     function() {
+       var rv = '';
+       var stratum = spawn (function() { hold(0); try { stratum.abort(); } finally { hold(0); rv += '1' } })();
+       hold(10);
+       return rv;
+     });
+
+test('cyclic abort 2 / async finally', '12',
+     function() {
+       var rv = '';
+       var stratum = spawn (function() { hold(0); try { try { stratum.abort(); } finally { hold(0); rv += '1' } }finally{ hold(0); rv+='2'} })();
+       hold(10);
+       return rv;
+     });
+
+test('cyclic abort 3 / async finally', '12',
+     function() {
+       var rv = '';
+       var stratum = spawn (function() { hold(0); waitfor { stratum.abort(); } and { try { hold(); } finally { hold(0); rv += '1'} } finally { hold(0); rv += '2' } })();
+       hold(10);
+       return rv;
+     });
+
+test('cyclic abort 4 / async finally', '12',
+     function() {
+       var rv = '';
+       var stratum = spawn (function() {  waitfor { hold(0); stratum.abort(); } or { try { hold(); } finally { hold(0); rv += '1'} } finally { hold(0); rv += '2' } })();
+       hold(10);
+       return rv;
+     });
+
+test('cyclic abort 5 / async finally', '12',
+     function() {
+       var rv = '';
+       var stratum = spawn (function() { hold(0); waitfor { stratum.abort(); } and { try { hold(); } finally { hold(0); stratum.abort(); rv += '1'} } finally { hold(0); rv += '2' } })();
+       hold(10);
+       return rv;
+     });
+
+test('abort resolved stratum', '1',
+     function() {
+       var rv = '';
+       var stratum = spawn (function() { hold(0); return '1'})();
+       rv += stratum.value();
+       stratum.abort();
+       return rv;
+     });
+
+test('waitfor/or abort', '213',
+     function() {
+       var rv = '';
+       var stratum = spawn (function() {  waitfor { try {hold(); }finally { hold(0); rv+='1'} } or { try { hold(); } finally { rv += '2'} } finally { rv += '3' } })();
+       hold(0);
+       stratum.abort();
        return rv;
      });

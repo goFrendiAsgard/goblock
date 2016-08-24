@@ -20,4 +20,14 @@ dashdash/ git://github.com/trentm/node-dashdash.git cf94c5989381d17315beb5b675a9
 jsdiff/ git://github.com/kpdecker/jsdiff.git 1f4bf7a708fc1121bb49e3b10d2ec7218c52a210
 
 # html2canvas:
-html2canvas/ git://github.com/niklasvh/html2canvas.git 454524cc4041cf6eef3df76f87cfef4a0e9e7c09
+html2canvas/ git://github.com/niklasvh/html2canvas.git 069140974b3bbcaa442a3c7c597b345ff04da1ce
+
+# FileSaver.js:
+FileSaver.js/ https://github.com/eligrey/FileSaver.js.git ec5c3cca113f9c0fba66c8d0ef44d4a6bf985357
+
+# momentjs
+moment/ https://github.com/moment/moment.git aea2a8961bc4dbff0471d0615af1f4fb98fc81d7
+
+# moment-timezone
+moment-timezone https://github.com/moment/moment-timezone.git a35db0367651d7bafcc750114a124343d349b8f5
+

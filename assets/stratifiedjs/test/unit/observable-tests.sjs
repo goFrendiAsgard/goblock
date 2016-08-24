@@ -10,6 +10,23 @@
     @assert.eq(a .. @isObservableVar, true);
   }
 
+	@test("conflict") {||
+		var a = @ObservableVar();
+		@assert.raises({filter:@isConflictError}, function() {
+			waitfor {
+				a.modify(function() {
+					hold(10);
+					return 'new 1';
+				});
+			} and {
+				hold(0);
+				a.modify(function() {
+					hold(10);
+					return 'new 2';
+				});
+			}
+		});
+	}
 
 	@test("observe multiple values at once") {||
 		var log = [];
@@ -108,4 +125,89 @@
 		c .. @first() .. @assert.eq(0);
 		c .. @first() .. @assert.eq(1);
 	}
+}
+
+@test('each.track edge case') {||
+  // if the block of an each.track blocks while an upstream value is generated, 
+  // we're ok to lose intermediate values, but we want to make sure that we 
+  // always see the last one
+  var rv = '';
+  var X = @ObservableVar('');
+  waitfor {
+    X .. @changes .. @each.track {
+      |x|
+      try {
+        rv += x;
+        hold();
+      }
+      finally {
+        hold(0);
+      }
+    }
+  }
+  or {
+    X.set('a');
+    X.set('b');
+    X.set('c');
+    X.set('d');
+    hold(0);
+  }
+  rv .. @assert.eq('ad');
+}
+
+@context("synchronize") {||
+  @test('B inited from A') {
+    ||
+    var A = @ObservableVar('foo');
+    var B = @ObservableVar('bar');
+    waitfor {
+      @synchronize(A,B);
+    }
+    or {
+    }
+    @assert.eq(B .. @current, 'foo');
+  }
+
+  @test('B inited from A; aToB') {
+    ||
+    var A = @ObservableVar('foo');
+    var B = @ObservableVar('bar');
+    waitfor {
+      @synchronize(A,B, {aToB: x -> x.toUpperCase(), bToA: x -> 'not called'});
+    }
+    or {
+    }
+    @assert.eq(B .. @current, 'FOO');
+    @assert.eq(A .. @current, 'foo');
+  }
+
+  @test('setting A; aToB') {
+    ||
+    var A = @ObservableVar('foo');
+    var B = @ObservableVar('bar');
+    waitfor {
+      @synchronize(A,B, {aToB: x -> x.toUpperCase(), bToA: x -> 'not called'});
+    }
+    or {
+      A.set('xxx');
+    }
+    @assert.eq(B .. @current, 'XXX');
+    @assert.eq(A .. @current, 'xxx');
+  }
+
+  @test('setting B; bToA') {
+    ||
+    var A = @ObservableVar('foo');
+    var B = @ObservableVar('bar');
+    waitfor {
+      @synchronize(A,B, {aToB: x -> x.toUpperCase(), bToA: x -> 'xxx'});
+    }
+    or {
+      B.set('test');
+    }
+    @assert.eq(B .. @current, 'test');
+    @assert.eq(A .. @current, 'xxx');
+  }
+
+
 }

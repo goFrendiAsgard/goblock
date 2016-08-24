@@ -6,6 +6,23 @@ var isSJS = f -> f .. @endsWith('.sjs');
 var removeSJS = f -> f.replace(/\.sjs$/, '');
 var appendSJS = f -> f + '.sjs';
 
+if (@sys.hostenv === 'nodejs') {
+  exports.walk = function(root, emit) {
+    var walkDir = function(base) {
+      var expand = (f) -> @path.join(base, f);
+      var items = @fs.readdir(base);
+      var [dirs, files] = (items
+        .. @partition(f -> @fs.isDirectory(expand(f)))
+        .. @map(@toArray));
+
+      emit([base, dirs, files]);
+      dirs .. @each(d -> walkDir(expand(d)));
+    }
+
+    walkDir(root);
+  };
+}
+
 exports.testLibrary = function(hub) {
   var moduleRoot = require.resolve(hub).path .. removeSJS;
   var dirsFound = 0;
@@ -22,25 +39,9 @@ exports.testLibrary = function(hub) {
       return matches;
     }
 
-
-    var walk = function(root, emit) {
-      var walkDir = function(base) {
-        var expand = (f) -> @path.join(base, f);
-        var items = @fs.readdir(base);
-        var [dirs, files] = (items
-          .. @partition(f -> @fs.isDirectory(expand(f)))
-          .. @map(@toArray));
-
-        emit([base, dirs, files]);
-        dirs .. @each(d -> walkDir(expand(d)));
-      }
-
-      walkDir(root);
-    }
-
     var indexFilename = "sjs-lib-index.txt";
 
-    walk(moduleRoot) {|item|
+    exports.walk(moduleRoot) {|item|
       var [base, dirs, files] = item;
       var sjsFiles = files .. @filter(isSJS) .. @sort;
       if (sjsFiles.length == 0) continue;
@@ -152,7 +153,10 @@ exports.testLibrary = function(hub) {
             // filter out symbols that are specifically unavailable in this hostenv
             function shouldBeImportable(sym) {
               var doc = moduleDoc.children[sym];
-              if (doc.type === 'class') return false; // classes aren't exported, only constructors
+              if (['class','feature'] .. @hasElem(doc.type)) {
+                // these types aren't actually runtime symbols
+                return false;
+              }
               var hostenv = doc.hostenv;
               return (hostenv == null || hostenv === @sys.hostenv);
             }
@@ -170,7 +174,8 @@ exports.testLibrary = function(hub) {
             @info('Docs:', moduleDoc);
             @assert.ok(documentedSymbols.length > 0);
           }
-          .skipIf(['module-guidelines', 'std', 'dom-shim'] .. @hasElem(modulePath .. @split('/') .. @at(-1)), 'whitelisted')
+          .skipIf(['module-guidelines', 'std', 'dom-shim', 'moment', 'moment-timezone'] .. @hasElem(modulePath .. @split('/') .. @at(-1)), 'whitelisted')
+          .skipIf(['google_api'] .. @hasElem(modulePath .. @split('/') .. @at(-2, false)), 'whitelisted')
           .skipIf(['app'] .. @hasElem(modulePath), 'whitelisted')
           .skipIf(moduleDoc.executable, "executable module")
           ;

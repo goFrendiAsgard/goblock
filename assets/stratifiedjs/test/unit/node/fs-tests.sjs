@@ -2,6 +2,11 @@
 
 @context {||
   @stream = require('sjs:nodejs/stream');
+  
+  // appveyor runs as admin, so there's no place we can't create a file :/
+  var isAdministrator = Boolean(@isWindows && process.env.APPVEYOR);
+  var nonexistentFile = (@isWindows ? "C:\\" : "/") + "cant_access_this_file";
+
   @test.beforeAll {|s|
     s.root = @path.join(process.env['TEMPDIR'] || process.env['TEMP'] || '/tmp', 'sjs-fs-tests');
     if (!@fs.isDirectory(s.root)) {
@@ -17,24 +22,24 @@
   @context("WriteStream") {||
     @test("works") {|s|
       @fs.withWriteStream(s.path('output')) {|f|
-        f .. @stream.write('data');
+        'data' .. @stream.pump(f, {end:false});
       }
       @fs.readFile(s.path('output'), 'utf-8') .. @assert.eq('data');
     }
 
     @test("it's OK to call end() twice") {|s|
       @fs.withWriteStream(s.path('output')) {|f|
-        f .. @stream.write('data');
+        'data' .. @stream.pump(f, {end:true});
         f.end();
       }
       @fs.readFile(s.path('output'), 'utf-8') .. @assert.eq('data');
     }
 
-    @test("throws correct error for error opening file") {||
+    @test("throws error creating file with insufficient permissions") {||
       @assert.raises({filter: e -> e.code === 'EACCES' || e.code === 'EPERM' }) {||
-        @fs.withWriteStream('/cant_access_this_file', -> null);
+        @fs.withWriteStream(nonexistentFile, -> null);
       }
-    }
+    }.skipIf(isAdministrator);
   }
 
   @context("ReadStream") {||
@@ -45,21 +50,20 @@
     @test("works") {|s|
       var contents;
       @fs.withReadStream(s.path('data'), {encoding:'utf-8'}) {|f|
-        contents = f .. @stream.read();
+        contents = f .. @stream.contents .. @join();
       }
       contents .. @assert.eq('Hello world');
     }
 
     @test("it's OK to call destroy() twice") {|s|
       @fs.withReadStream(s.path('output')) {|f|
-        f .. @stream.read();
         f.destroy();
       }
     }
 
-    @test("throws correct error for error opening file") {||
+    @test("throws error opening nonexistent file") {||
       @assert.raises({filter: e -> e.code === 'ENOENT'}) {||
-        @fs.withReadStream('/cant_access_this_file', -> null);
+        @fs.withReadStream(nonexistentFile, -> null);
       }
     }
   }

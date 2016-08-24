@@ -128,9 +128,9 @@ function ServerRequest(req, res, ssl) {
   rv.response = res;
   /**
    @variable ServerRequest.url
-   @summary Full canonicalized request URL object in the format as returned by [../url::parse].
+   @summary Full canonicalized & normalized request URL object in the format as returned by [../url::parse].
    */
-  rv.url = url.parse(url.normalize(req.url, 
+  rv.url = url.parse(url.normalize(url.canonicalize(req.url), 
                                       "http#{ssl ? 's' : ''}://#{req.headers.host}"));
   /**
    @variable ServerRequest.body
@@ -172,6 +172,9 @@ var getConnections = function(server) {
    @setting {String}  [cert] The server certificate in PEM format. (Required when `ssl=true`.)
    @setting {Array}   [ca] Optional array of authority certificates. (Only used when `ssl=true`.)
    @setting {String}  [passphrase] Optional passphrase to decrypt an encrypted private `key`.
+   @setting {String}  [secureProtocol] SSL method to use. (Only used when `ssl=true`.)
+   @setting {Integer} [secureOptions] Options to pass to the OpenSSL context. (Only used when `ssl=true`.)
+   @setting {String}  [ciphers] Optional string describing the ciphers to use or exclude, separated by `:`. (Only used when `ssl=true`.)
    @setting {Function} [log] Logging function `f(str)` which will receive debug output. By default, uses [../logging::info]
    @desc
       `withServer` will start a HTTP(S) server according to the given 
@@ -230,7 +233,11 @@ function withServer(config, server_loop) {
     ca: undefined,
     passphrase: undefined,
     fd: undefined,
-    log: x => logging.info(address, ":", x)
+    log: x => logging.info(address, ":", x),
+    print: logging.print,
+    secureOptions: undefined,
+    secureProtocol: undefined,
+    ciphers: undefined
   }, config);
 
   var [,host,port] = /^(?:(.*)?\:)?(\d+)$/.exec(config.address);
@@ -249,7 +256,17 @@ function withServer(config, server_loop) {
       res.end();
       return;
     }
-    request_queue.put(ServerRequest(req, res, config.ssl));
+    try {
+      var server_req = ServerRequest(req, res, config.ssl);
+    }
+    catch(e) {
+      // we hit this e.g. if the body is too long
+      config.log('Dropping request ('+e+')');
+      res.writeHead(500);
+      res.end();
+      return;
+    }
+    request_queue.put(server_req);
   }
 
   var server;
@@ -261,7 +278,10 @@ function withServer(config, server_loop) {
         key: undefined,
         cert: undefined,
         ca: undefined,
-        passphrase: undefined
+        passphrase: undefined,
+        secureOptions: undefined,
+        secureProtocol: undefined,
+        ciphers: undefined
       } .. override(config),
       dispatchRequest);
 
@@ -328,8 +348,7 @@ function withServer(config, server_loop) {
       address = family=='IPv6' ? "[#{address}]:#{port}" : "#{address}:#{port}";
     }
 
-
-    config.log("Listening on #{address}");
+    if(config.print) config.print("Listening on #{address}");
 
     waitfor {
       server .. event.wait('close');

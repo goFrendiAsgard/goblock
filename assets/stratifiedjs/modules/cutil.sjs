@@ -55,7 +55,7 @@ var sys  = require('builtin:apollo-sys');
           }
         }
 */
-exports.StratumAborted = __oni_rt.StratumAborted;
+__js exports.StratumAborted = __oni_rt.StratumAborted;
 
 
 /**
@@ -78,7 +78,7 @@ exports.StratumAborted = __oni_rt.StratumAborted;
     third argument set to the `args`.
 */
 function waitforAll(funcs, args, this_obj) {
-  this_obj = this_obj || null;
+  __js this_obj = this_obj || null;
   if (sys.isArrayLike(funcs)) {
     if (!funcs.length) return;
     //...else
@@ -147,7 +147,7 @@ function waitforAllArgs(f, args, i, l, this_obj) {
     third argument set to the `args`.  
 */
 function waitforFirst(funcs, args, this_obj) {
-  this_obj = this_obj || this;
+  __js this_obj = this_obj || this;
   if (sys.isArrayLike(funcs)) {
     if (!funcs.length) return;
     //...else
@@ -161,7 +161,7 @@ function waitforFirst(funcs, args, this_obj) {
   // else
   throw new Error("waitforFirst: argument error; either funcs or args needs to be an array");
 };
-exports.waitforFirst = waitforFirst;
+__js exports.waitforFirst = waitforFirst;
 
 function waitforFirstFuncs(funcs, args, this_obj) {
   if (funcs.length == 1)
@@ -206,7 +206,7 @@ function waitforFirstArgs(f, args, i, l, this_obj) {
     Example:
     `var S = cutil.Semaphore(10);`
 */
-function Semaphore(permits, sync) {
+__js function Semaphore(permits, sync) {
   var rv = Object.create(SemaphoreProto);
 
   /**
@@ -220,7 +220,7 @@ function Semaphore(permits, sync) {
 
   return rv;
 }
-exports.Semaphore = Semaphore;
+__js exports.Semaphore = Semaphore;
 
 var SemaphoreProto = {
   /**
@@ -277,21 +277,17 @@ var SemaphoreProto = {
      @altsyntax semaphore.synchronize { || ... some code ... }
      @summary Acquire permit, execute function, and release permit.
      @param {Function} [f] Argument-less function or block lambda to execute
+     @return {value} Return the result of `f`
      @desc
-       `f` will be executed in a `try/finally` construct after the 
+       `f` will be executed in a `try/finally` construct after the
        permit has been acquired. The permit will be released in
        the `finally` clause, i.e. it is guaranteed to to be released
        even if `f` throws an exception or is cancelled.
-
-       [::Semaphore::synchronize] is intended to be used with paren-free 
-       block lambda call syntax:
-
-           S.synchronize { || ... some code ... }
    */
   synchronize : function(f) {
     this.acquire();
     try {
-      f();
+      return f();
     }
     finally {
       this.release();
@@ -351,7 +347,7 @@ Waitable.wait = function wait() {
   @summary  the currently set value, or `undefined` if the condition is not set
 */
 function Condition() {
-  var rv = Object.create(ConditionProto);
+  __js var rv = Object.create(ConditionProto);
   rv.init();
   return rv;
 };
@@ -403,7 +399,7 @@ ConditionProto.set = function set(value) {
     Once cleared, the condition can be waited upon and triggered again with
     `wait` and `set`.
 */
-ConditionProto.clear = function clear() {
+__js ConditionProto.clear = function clear() {
   this.isSet = false;
   this.value = undefined;
 };
@@ -419,7 +415,7 @@ ConditionProto.clear = function clear() {
            accept puts when there is a pending get.
   @param   {optional Boolean} [sync=false] Whether or not this queue uses synchronous semaphores (see [::Semaphore]).
 */
-function Queue(capacity, sync) {
+__js function Queue(capacity, sync) {
   var rv = Object.create(QueueProto);
 
   rv.items = [];
@@ -428,9 +424,9 @@ function Queue(capacity, sync) {
 
   return rv;
 }
-exports.Queue = Queue;
+__js exports.Queue = Queue;
 
-QueueProto = {
+var QueueProto = {
   /**
     @function Queue.count
     @summary  Returns current number of elements in the queue.
@@ -508,14 +504,28 @@ QueueProto = {
 
 
 /**
+  @class SuspendedContext
+  @summary The result of [::breaking].
+
+  @variable SuspendedContext.value
+  @valtype Object
+  @summary The value passed to this context
+
+  @function SuspendedContext.resume
+  @summary Resume this context
+
+  @function SuspendedContext.wait
+  @summary Suspend until this context is retracted
+*/
+
+/**
   @function breaking
   @summary Pause a piece of code's execution and resume it later
   @param {Function} [block]
-  @return {Object} An object with `value` and `resume` properties
+  @return {::SuspendedContext}
   @desc
     **Warning**: You should not use this function unless you're certain you
-    need it, since it creates opportunity to leak resources if
-    you're not careful.
+    need it, since it creates opportunity to leak resources if you're not careful.
 
     A common StratifiedJS idiom is the function which takes a "block" argument, and performs
     setup before the block is called, as well as cleanup after the block finishes.
@@ -542,27 +552,47 @@ QueueProto = {
 
     However, in some cases it can be useful to extract the intermediate result
     (in this case, the file object), and explicitly perform the cleanup stage
-    at a later time.
+    at a later time. This is what `breaking` does.
 
-    `breaking` is a way to achieve this with minimal fuss. It will call the
-    provided `block` with a single argument - a function to halt the
-    currently executing code and save it for resuming later:
+    It will call the provided `block` with a single argument - a function to halt the
+    currently executing code and save it for resuming later. Once that function is called,
+    the call to `breaking` will return a [::SuspendedContext] object.
 
+    ### Example:
+
+        // idiomatic code - passing a block to `withFile:
+        
+        withFile('output.txt', 'w') {|file|
+          try {
+            console.log("withFile passed #{file} to the block");
+            hold(1000);
+            console.log("OK, done with file");
+          } retract {
+            console.log("withFile was cancelled, and retracted the block we passed it");
+          }
+        }
+
+        // equivalent code using `breaking` to separate setup & teardown
+        // into explicit functions:
+        
         var ctx = func.breaking {|brk|
           withFile('output.txt', 'w') {|file|
             brk(file);
           }
         }
 
-        ctx.value
-        // -> the argument given to `brk` - in this case, our file object
-        
-        ctx.resume
-        // -> a function that you can call to resume execution from after
-        // you called `brk`. This is the "cleanup" stage - failing to call
-        // this function when you are done with the file will leak resources.
+        waitfor {
+          console.log("withFile passed #{ctx.value} to the block");
+          hold(1000);
+          console.log("OK, done with file");
+        } or {
+          ctx.wait();
+          console.log("withFile was cancelled, and retracted the block we passed it");
+        } finally {
+          ctx.resume();
+        }
 
-    In this case, since all the block does is to call `brk`, we can pass it
+    In this example, since all the block does is to call `brk`, we could pass it
     directly to `withFile`:
 
         var ctx = func.breaking {|brk|
@@ -574,24 +604,67 @@ QueueProto = {
     to `ctx.resume()`.
 */
 exports.breaking = function(block) {
-  var cont;
+  var cont, stratum;
+  var uncaught = Condition();
+  var retracted = function() {
+    if(!stratum) hold(0);
+    try {
+      waitfor {
+        stratum.value();
+      } or {
+        throw uncaught.wait();
+      }
+    } catch(e) {
+      // this should never happen, but just in case:
+      if(!e instanceof exports.StratumAborted) throw e;
+    }
+  }
   waitfor(var err, rv) {
     var ready = resume;
-    spawn (function() {
-      try { // catch exceptions in `block` setup
+    var ret = null;
+    stratum = spawn (function() {
+      try {
         block {|result|
-          waitfor(var err) {
-            cont = resume;
-            ready(null, result);
+          try {
+            waitfor(var err) {
+              var cleanup = resume;
+              cont = function(block_err) {
+                var err;
+                if(cleanup) {
+                  waitfor(err) {
+                    ret = resume;
+                    cleanup(block_err);
+                  }
+                }
+                if(err) throw err;
+                if(uncaught.isSet) throw uncaught.value;
+              };
+              var _ready = ready;
+              ready = null;
+              _ready(null, result);
+            }
+            if (err) throw err;
+          } retract {
+            cleanup = null;
           }
-          if (err) throw err;
         }
       } catch(err) {
-        ready(err);
+        if(ready) ready(err) // exception in block setup
+        else if (ret) {
+          ret(err); // exception in block teardown; reported by resume()
+          ret = null;
+        } else {
+          // Error thrown from main body. This is rare, since the main body
+          // is just waiting for a resume(). But errors can be thrown from
+          // code running concurrently, e.g:
+          //     waitfor { block() } and { throw error.wait() }
+          uncaught.set(err);
+        }
       }
+      if(ret) ret();
     })();
   }
   if(err) throw err;
-  return { value: rv, resume: cont };
+  return { value: rv, resume: cont, wait: retracted };
 }
 

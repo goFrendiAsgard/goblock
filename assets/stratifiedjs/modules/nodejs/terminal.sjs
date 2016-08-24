@@ -60,7 +60,11 @@
   @docsoff
 */
 __js {
-var sys = require('util');
+
+// original lib requires nodejs:util, but only `print` is used (and it's deprecated now)
+var sys = {
+  print: s -> process.stdout.write(s)
+}
 
 // Terminal object
 // Allows for controlling the terminal by outputting control characters

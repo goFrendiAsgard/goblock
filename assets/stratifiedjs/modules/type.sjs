@@ -75,11 +75,12 @@ function type(x) {
     Might be extended to return `true` for other things in future
     versions of StratifiedJS, if they are callable.
  */
-function isCallable(x) {
-  return typeof x === "function";
+__js {
+  function isCallable(x) {
+    return typeof x === "function";
+  }
+  exports.isCallable = isCallable;
 }
-exports.isCallable = isCallable;
-
 /**
   @function isObject
   @param {Any} [x]
@@ -94,10 +95,12 @@ exports.isCallable = isCallable;
         null
         undefined
  */
-function isObject(x) {
-  return Object(x) === x;
+__js {
+  function isObject(x) {
+    return Object(x) === x;
+  }
+  exports.isObject = isObject;
 }
-exports.isObject = isObject;
 
 /**
   @function isNaN
@@ -112,11 +115,12 @@ exports.isObject = isObject;
     This function will only return `true` if its argument is
     `NaN`.
  */
-function isNaN(x) {
-  return x !== x;
+__js {
+  function isNaN(x) {
+    return x !== x;
+  }
+  exports.isNaN = isNaN;
 }
-exports.isNaN = isNaN;
-
 
 /**
   @function isNumber
@@ -124,13 +128,15 @@ exports.isNaN = isNaN;
   @return {Boolean} Whether `x` is a number or not
   @summary Returns whether `x` is a number or not
   @desc
-    This function returns `true` for numbers. 
+    This function returns `true` for numbers.
     It returns `false` for `NaN`.
  */
-function isNumber(x) {
-  return type(x) === "number" && !isNaN(x);
+__js {
+  function isNumber(x) {
+    return typeof x === "number" && !isNaN(x);
+  }
+  exports.isNumber = isNumber;
 }
-exports.isNumber = isNumber;
 
 /**
   @function isString
@@ -140,10 +146,12 @@ exports.isNumber = isNumber;
   @desc
     This function returns `true` for strings.
  */
-function isString(x) {
-  return type(x) === "string";
+__js {
+  function isString(x) {
+    return typeof x === "string";
+  }
+  exports.isString = isString;
 }
-exports.isString = isString;
 
 /**
   @function isArray
@@ -153,10 +161,12 @@ exports.isString = isString;
   @desc
     This function returns `true` for `Array` objects.
  */
-function isArray(x) {
-  return type(x) === "array";
+__js {
+  function isArray(x) {
+    return Array.isArray(x);
+  }
+  exports.isArray = isArray;
 }
-exports.isArray = isArray;
 
 /**
   @function isBoolean
@@ -166,11 +176,12 @@ exports.isArray = isArray;
   @desc
     This function returns `true` for booleans.
  */
-function isBoolean(x) {
-  return type(x) === "boolean";
+__js {
+  function isBoolean(x) {
+    return typeof x === "boolean";
+  }
+  exports.isBoolean = isBoolean;
 }
-exports.isBoolean = isBoolean;
-
 
 function isSamePrototype(x, y) {
   return is(Object.getPrototypeOf(x), Object.getPrototypeOf(y));
@@ -236,23 +247,62 @@ function is(x, y) {
 }
 exports.is = is;
 
+__js function escape(x) {
+  return x.replace(/[\\ ]/g, function (s) {
+    return "\\" + s;
+  });
+}
 
 /**
-  @class Interface
-  @summary A string indentifier uniquely naming an interface across all loaded modules
+  @function Token
+  @summary Create a string unique across all loaded modules
+  @param {Module} [module]
+  @param {String} [type] Token type (such as 'interface')
+  @param {String} [name]
+  @return {String}
+  @desc
+    Before you can use `Interface` you must use [#language/builtins::module.setCanonicalId]
+    to give the current module a unique canonical ID.
 
+    For a given `(type, name)` tuple unique within the current module,
+    `Token(module, type, name)` generates a string that is guaranteed
+    to be unique across all loaded modules, i.e. it will not collide
+    with a token with the same `(name,type)` tuple defined in other modules.
+
+    ### Behavior across system boundaries
+
+    Tokens are "transportable" across system boundaries in the sense
+    that Tokens with the same `(type, name)` tuple are identical
+    strings if they are defined in modules that have identical
+    canonical ids.
+*/
+function Token(module, type, name) {
+  var id = module.getCanonicalId();
+  if (id == null) {
+    throw new Error("You must use module.setCanonicalId before you can use Token(.)");
+  } else {
+    return "(#{type} " + escape(id) + " " + escape(name) + ")";
+  }
+}
+exports.Token = Token;
+
+
+/**
   @function Interface
   @param {Module} [module]
   @param {String} [name]
-  @summary Returns a new unique interface for the module
+  @return {String}
+  @summary Create a string indentifier uniquely naming an interface across all loaded modules
   @desc
     Before you can use `Interface` you must use [#language/builtins::module.setCanonicalId]
     to give the current module a unique canonical ID.
 
     Then you call `Interface(module, "...")` where the second argument is the
-    name of the interface. The returned string for a given `(module,name)` tuple is 
+    name of the interface. The returned string for a given `(module,name)` tuple is
     guaranteed to be unique across all loaded modules, i.e. it will not collide with an
-    interface with the same `name` defined in other modules. 
+    interface with the same `name` defined in other modules.
+
+    `Interface(module, name)` is equivalent to calling `Token(module, 'interface', name)`.
 
     ----
 
@@ -303,12 +353,12 @@ exports.is = is;
 
         module.setCanonicalId('http://mydomain.com/path/to/book.sjs');
 
-        exports.interface_read = @Interface(module, 'read');
+        exports.ITF_READ = @Interface(module, 'read');
 
         exports.Book = function () {
           var o = {};
 
-          o[exports.interface_read] = function () {
+          o[exports.ITF_READ] = function () {
             ...
           };
 
@@ -316,7 +366,7 @@ exports.is = is;
         };
 
         exports.read = function (book) {
-          return book[exports.interface_read](book);
+          return book[exports.ITF_READ](book);
         };
 
 
@@ -326,12 +376,12 @@ exports.is = is;
 
         module.setCanonicalId('http://mydomain.com/path/to/file.sjs');
 
-        exports.interface_read = @Interface(module, 'read');
+        exports.ITF_READ = @Interface(module, 'read');
 
         exports.File = function () {
           var o = {};
 
-          o[exports.interface_read] = function () {
+          o[exports.ITF_READ] = function () {
             ...
           };
 
@@ -339,7 +389,7 @@ exports.is = is;
         };
 
         exports.read = function (file) {
-          return file[exports.interface_read](file);
+          return file[exports.ITF_READ](file);
         };
 
 
@@ -356,7 +406,7 @@ exports.is = is;
     The above code is more verbose and complicated, but it's no longer possible to
     confuse `Book` and `File`, because they use two separate `read` functions.
 
-    In addition, an object can easily implement `interface_read` from both modules,
+    In addition, an object can easily implement `ITF_READ` from both modules,
     and thus be treated as both a `Book` and a `File` at the same time:
 
         // Module filebook.sjs
@@ -369,11 +419,11 @@ exports.is = is;
         exports.FileBook = function () {
           var o = {};
 
-          o[book.interface_read] = function () {
+          o[book.ITF_READ] = function () {
             ...
           };
 
-          o[file.interface_read] = function () {
+          o[file.ITF_READ] = function () {
             ...
           };
 
@@ -386,11 +436,18 @@ exports.is = is;
     to create custom data types that work with SJS's functions.
  */
 function Interface(module, name) {
-  var id = module.getCanonicalId();
-  if (id == null) {
-    throw new Error("You must use module.setCanonicalId before you can use Interface");
-  } else {
-    return "__interface_" + id + "_" + name.replace(/_/g, '__') + "__";
-  }
+  return Token(module, 'interface', name);
 }
 exports.Interface = Interface;
+
+/**
+  @function hasInterface
+  @param {Any} [x]
+  @param {::Interface} [interface]
+  @return {Boolean} `true` if `x` implements `interface`
+  @summary Returns whether `x` implements `interface`
+ */
+function hasInterface(x, interface_) {
+  return isObject(x) && x[interface_] != null;
+}
+exports.hasInterface = hasInterface;

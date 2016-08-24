@@ -37,13 +37,13 @@
 
 module.setCanonicalId('sjs:function');
 
-var sys   = require('builtin:apollo-sys');
+var sys    = require('builtin:apollo-sys');
 var cutil  = require('./cutil');
 var { extend } = require('./object');
 var { map, zip, each } = require('./sequence');
 var { Interface } = require('./type');
 
-exports.isFunction = (f) -> (typeof f == "function");
+__js exports.isFunction = (f) -> (typeof f === "function");
 
 /**
    @function chain
@@ -138,7 +138,7 @@ exports.tryfinally = function(try_func, finally_func) {
    @desc
       A call `c(a1,a2,...)` to the composed function `c = trycatch(f,g)`
       executes as
-      `try{ return f(a1,a2,...) } catch(e) { g(e) }`.
+      `try{ return f(a1,a2,...) } catch(e) { return g(e) }`.
 
       `f` and `g` will be called with the same `this` pointer that `c` is called with.
 
@@ -146,7 +146,7 @@ exports.tryfinally = function(try_func, finally_func) {
 exports.trycatch = function(try_func, catch_func) {
   return function() {
     try     { return try_func.apply(this, arguments); }
-    catch(e) { catch_func.call(this, e); }
+    catch(e) { return catch_func.call(this, e); }
   }
 };
 
@@ -156,13 +156,13 @@ exports.trycatch = function(try_func, catch_func) {
   @param    [argument]
   @summary  Returns whatever argument it receives, unmodified.
 */
-exports.identity = function(a) { return a; };
+__js exports.identity = function(a) { return a; };
 
 /**
   @function nop
   @summary  Null function, taking no argument and returning 'undefined'
 */
-exports.nop = function() { };
+__js exports.nop = function() { };
 
 /**
   @function bound
@@ -214,7 +214,7 @@ exports.exclusive = function(f, reuse) {
   var stratum, cancel;
   return function() {
     if (!reuse && cancel) cancel();
-    if (!cancel) stratum = spawn(function(t,a){
+    if (!cancel) stratum = spawn (function(t,a){
       waitfor {
         waitfor() { cancel = resume; }
       } or {

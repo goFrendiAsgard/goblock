@@ -52,7 +52,7 @@
 
 */
 
-__oni_rt.sys = exports;
+__js __oni_rt.sys = exports;
 
 // we don't want to rely on the global 'undefined' symbol; see
 // https://groups.google.com/d/msg/oni-apollo/fNMz2W8S5mU/sYCgrriYj1MJ
@@ -62,7 +62,7 @@ var UNDEF; // == undefined
 // bundle scripts will preload module sources.
 // Bundles will define this object themselves
 // if they are loaded before us.
-if (!(__oni_rt.G.__oni_rt_bundle)) {
+__js if (!(__oni_rt.G.__oni_rt_bundle)) {
   __oni_rt.G.__oni_rt_bundle = {};
 }
 
@@ -74,7 +74,7 @@ if (!(__oni_rt.G.__oni_rt_bundle)) {
    @variable hostenv
    @summary see [../../modules/sys::hostenv]
 */
-exports.hostenv = __oni_rt.hostenv;
+__js exports.hostenv = __oni_rt.hostenv;
 
 /**
    @function getGlobal
@@ -83,20 +83,93 @@ exports.hostenv = __oni_rt.hostenv;
 __js exports.getGlobal = function() { return __oni_rt.G; };
 
 /**
+   @function withDynVarContext
+   @summary see [../../modules/sys::withDynVarContext]
+   @param {Function} [block]
+*/
+exports.withDynVarContext = function(block) {
+  __js var old_dyn_vars = __oni_rt.current_dyn_vars;
+  try {
+    __js __oni_rt.current_dyn_vars = Object.create(old_dyn_vars);
+    block();
+  }
+  finally {
+    __js __oni_rt.current_dyn_vars = old_dyn_vars;
+  }
+};
+
+/**
+   @function setDynVar
+   @summary  see [../../modules/sys::setDynVar]
+   @param {String} [name]
+   @param {Object} [value]
+*/
+__js exports.setDynVar = function(name, value) {
+  if (__oni_rt.current_dyn_vars === null)
+    throw new Error("No dynamic variable context to retrieve #{name}");
+  var key = '$'+name;
+  __oni_rt.current_dyn_vars[key] = value;
+};
+
+/**
+   @function clearDynVar
+   @summary  see [../../modules/sys::clearDynVar]
+   @param {String} [name]
+*/
+__js exports.clearDynVar = function(name) {
+  if (__oni_rt.current_dyn_vars === null)
+    throw new Error("No dynamic variable context to clear #{name}");  
+  var key = '$'+name;
+  delete __oni_rt.current_dyn_vars[key];
+};
+
+/**
+   @function getDynVar
+   @summary  see [../../modules/sys::getDynVar]
+   @param {String} [name]
+   @param {optional Object} [default_val]
+*/
+__js exports.getDynVar = function(name, default_val) {
+  var key = '$'+name;
+  if (__oni_rt.current_dyn_vars === null) {
+    if (arguments.length > 1)
+      return default_val;
+    else
+      throw new Error("Dynamic Variable '#{name}' does not exist (no dynamic variable context)");
+  }
+  if (!(key in __oni_rt.current_dyn_vars)) {
+    if (arguments.length > 1)
+      return default_val;
+    else
+      throw new Error("Dynamic Variable '#{name}' does not exist");
+  }
+  return __oni_rt.current_dyn_vars[key];
+};
+
+/**
    @function isArrayLike
-   @summary  Tests if an object is an array, `arguments` object or, in an xbrowser hostenv of StratifiedJS, a NodeList or FileList
+   @summary  Tests if an object is an array, `arguments` object, TypedArray or, in an xbrowser hostenv of StratifiedJS, a NodeList or FileList
    @param    {anything} [testObj] Object to test.
    @return   {Boolean}
    @desc
      See [../../modules/array::isArrayLike]
 */
+
+__js var arrayCtors=[], arrayCtorNames = [
+  'Uint8Array', 'Uint16Array', 'Uint32Array',
+  'Int8Array', 'Int16Array', 'Int32Array',
+  'Float32Array', 'Float64Array',
+  'NodeList', 'HTMLCollection', 'FileList', 'StaticNodeList'
+]; 
+
+__js for(var i=0; i<arrayCtorNames.length; i++) {
+  var c = __oni_rt.G[arrayCtorNames[i]];
+  if(c) arrayCtors.push(c);
+}
 __js exports.isArrayLike = function(obj) {
-  return Array.isArray(obj) ||
-         !!(obj && Object.prototype.hasOwnProperty.call(obj, 'callee')) ||
-         !!(__oni_rt.G.NodeList && obj instanceof NodeList) ||
-         !!(__oni_rt.G.HTMLCollection && obj instanceof HTMLCollection) ||
-         !!(__oni_rt.G.FileList && obj instanceof FileList) ||
-         !!(__oni_rt.G.StaticNodeList && obj instanceof StaticNodeList);
+  if ( Array.isArray(obj) || !!(obj && Object.prototype.hasOwnProperty.call(obj, 'callee'))) return true;
+  for (var i=0;i<arrayCtors.length; i++) if(obj instanceof arrayCtors[i]) return true;
+  return false;
 };
 
 /**
@@ -329,14 +402,14 @@ __js exports.isSameOrigin = function(url1, url2) {
 
 
 /**
-  @function canonicalizeURL
+  @function normalizeURL
   @summary Convert relative to absolute URLs and collapse '.' and '..' path
            components.
-  @param {String} [url] URL to canonicalize.
+  @param {String} [url] URL to normalize.
   @param {optional String} [base] URL which will be taken as a base if *url* is relative.
-  @return {String} Canonicalized URL.
+  @return {String} Normalized URL.
 */
-__js exports.canonicalizeURL = function(url, base) {
+__js exports.normalizeURL = function(url, base) {
 
   if (__oni_rt.hostenv == "nodejs" && __oni_rt.G.process.platform == 'win32') {
     // special case for mapping Windows paths in nodejs hostenv
@@ -364,6 +437,9 @@ __js exports.canonicalizeURL = function(url, base) {
         a.authority = base.authority;
     }
   }
+
+  // collapse multiple slashes
+  a.directory = a.directory.replace(/\/\/+/g, '/');
 
   // collapse "." & "..":
   var pin = a.directory.split("/");
@@ -402,7 +478,7 @@ __js exports.canonicalizeURL = function(url, base) {
    @setting {String} [cbfield="callback"] Name of JSONP callback field in query string.
    @setting {String} [forcecb] Force the name of the callback to the given string.
 */
-exports.jsonp = jsonp_hostenv; // to be implemented in hostenv-specific part
+__js exports.jsonp = jsonp_hostenv; // to be implemented in hostenv-specific part
 
 
 /**
@@ -410,7 +486,7 @@ exports.jsonp = jsonp_hostenv; // to be implemented in hostenv-specific part
    @summary Returns the cross-domain capabilities of the host environment ('CORS'|'none'|'*')
    @return {String}
 */
-exports.getXDomainCaps = getXDomainCaps_hostenv; // to be implemented in hostenv-specific part
+__js exports.getXDomainCaps = getXDomainCaps_hostenv; // to be implemented in hostenv-specific part
 
 
 /**
@@ -427,7 +503,7 @@ exports.getXDomainCaps = getXDomainCaps_hostenv; // to be implemented in hostenv
    @setting {String} [password] Password for authentication.
    @setting {Boolean} [throwing=true] Throw exception on error.
 */
-exports.request = request_hostenv;
+__js exports.request = request_hostenv;
 
 /**
   @function makeMemoizedFunction
@@ -466,12 +542,12 @@ exports.makeMemoizedFunction = function(f, keyfn) {
    @function eval
    @summary see [../../modules/sys::eval]
 */
-exports.eval = eval_hostenv;
+__js exports.eval = eval_hostenv;
 
 //----------------------------------------------------------------------
 // require mechanism
 
-var pendingLoads = {};
+__js var pendingLoads = {};
 
 // require.alias, require.path are different for each
 // module. makeRequire is a helper to construct a suitable require
@@ -521,13 +597,12 @@ function makeRequire(parent) {
 
   // because resolve can suspend this must not be in a __js block:
   rf.url = function(relative) {
-    // Hack: We set a 'dummy' loader to prevent the resolver from appending '.sjs'
-    return resolve(relative, rf, parent, {loader: 'dummy'}).path;
+    return resolve(relative, rf, parent).path;
   };
 
   return rf;
 }
-exports._makeRequire = makeRequire;
+__js exports._makeRequire = makeRequire;
 
 __js function augmentHubs(hubs) {
   // add additional methods to the `require.hubs` array:
@@ -549,7 +624,7 @@ __js function augmentHubs(hubs) {
   return hubs;
 }
 
-function html_sjs_extractor(html, descriptor) {
+__js function html_sjs_extractor(html, descriptor) {
   var re = /<script (?:[^>]+ )?(?:type=['"]text\/sjs['"]|main=['"]([^'"]+)['"])[^>]*>((.|[\r\n])*?)<\/script>/mg; // (fix vim highlighting) /
   var match;
   var src = '';
@@ -645,86 +720,94 @@ function default_compiler(src, descriptor) {
   //console.log("eval(#{descriptor.id}) = #{(new Date())-start} ms");
 }
 // used when precompiling modules - must be kept in sync with the above f() call
-default_compiler.module_args = ['module', 'exports', 'require', '__onimodulename', '__oni_altns'];
+__js default_compiler.module_args = ['module', 'exports', 'require', '__onimodulename', '__oni_altns'];
 
-var canonical_id_to_module = {};
+__js var canonical_id_to_module = {};
 
 function default_loader(path, parent, src_loader, opts, spec) {
-  var compile = exports.require.extensions[spec.type];
+
+  
+  __js var compile = exports.require.extensions[spec.type];
   if (!compile)
     throw new Error("Unknown type '"+spec.type+"'");
 
-  var descriptor = exports.require.modules[path];
-  var pendingHook = pendingLoads[path];
+  __js var descriptor = exports.require.modules[path];
+  __js var pendingHook = pendingLoads[path];
 
   if ((!descriptor && !pendingHook) || opts.reload) {
     // the module has not yet started loading, or
     // we've specified `reload`
     pendingHook = pendingLoads[path] = spawn (function() {
       waitfor {
-        var src, loaded_from;
+        __js var src, loaded_from;
         if (typeof src_loader === "string") {
-          src = src_loader;
-          loaded_from = "[src string]";
+          __js {
+            src = src_loader;
+            loaded_from = "[src string]";
+          }
         }
         else if (path in __oni_rt.modsrc) {
-          // a built-in module
-          loaded_from = "[builtin]";
-          src = __oni_rt.modsrc[path];
-          delete __oni_rt.modsrc[path];
-          // xxx support plain js modules for built-ins?
+          __js {
+            // a built-in module
+            loaded_from = "[builtin]";
+            src = __oni_rt.modsrc[path];
+            delete __oni_rt.modsrc[path];
+            // xxx support plain js modules for built-ins?
+          }
         }
         else {
           ({src, loaded_from}) = src_loader(path);
         }
-        var descriptor = {
-          id: path,
-          exports: {},
-          loaded_from: loaded_from,
-          loaded_by: parent,
-          required_by: {}
-        };
-        descriptor.require = makeRequire(descriptor);
+        __js {
+          var descriptor = {
+            id: path,
+            exports: {},
+            loaded_from: loaded_from,
+            loaded_by: parent,
+            required_by: {}
+          };
+          descriptor.require = makeRequire(descriptor);
+          
+          var canonical_id = null;
+          
+          descriptor.getCanonicalId = function () {
+            return canonical_id;
+          };
+          
+          descriptor.setCanonicalId = function (id) {
+            if (id == null) {
+              throw new Error("Canonical ID cannot be null");
+            }
 
-        var canonical_id = null;
+            if (canonical_id !== null) {
+              throw new Error("Canonical ID is already defined for module " + path);
+            }
+            
+            var canonical = canonical_id_to_module[id];
+            if (canonical != null) {
+              throw new Error("Canonical ID " + id + " is already defined in module " + canonical.id);
+            }
+            
+            canonical_id = id;
+            canonical_id_to_module[id] = descriptor;
+          };
 
-        descriptor.getCanonicalId = function () {
-          return canonical_id;
-        };
-
-        descriptor.setCanonicalId = function (id) {
-          if (id == null) {
-            throw new Error("Canonical ID cannot be null");
-          }
-
-          if (canonical_id !== null) {
-            throw new Error("Canonical ID is already defined for module " + path);
-          }
-
-          var canonical = canonical_id_to_module[id];
-          if (canonical != null) {
-            throw new Error("Canonical ID " + id + " is already defined in module " + canonical.id);
-          }
-
-          canonical_id = id;
-          canonical_id_to_module[id] = descriptor;
-        };
-
-        if (opts.main) descriptor.require.main = descriptor;
-        exports.require.modules[path] = descriptor;
+          if (opts.main) descriptor.require.main = descriptor;
+          exports.require.modules[path] = descriptor;
+        } // __js
         try {
           compile(src, descriptor);
           return descriptor;
         } catch(e) {
-          delete exports.require.modules[path];
+          __js delete exports.require.modules[path];
           throw e;
         } retract {
-          delete exports.require.modules[path];
+          __js delete exports.require.modules[path];
         }
       } or {
         waitfor () {
           hold(0); // make sure pendingHook is set
-          pendingHook.resume = resume;
+          __js pendingHook.resume = resume;
         }
       }
     })();
@@ -734,16 +817,18 @@ function default_loader(path, parent, src_loader, opts, spec) {
     // there is already a load pending for this module.
     // If we detect a cycle, we return the (incomplete)
     // state of the requested module to avoid deadlock.
-    var p = parent;
+    __js var p = parent;
     // We deliberately only traverse up to toplevel-1; there
     // are legitimate usecases in conductance where the *url* .../foo.sjs
     // loads the *module* .../foo.sjs.
     // In practice this means that in rare cases a cycle might only
     // be detected on the second loop.
-    while (p.loaded_by) {
-      if (path === p.id)
-        return descriptor.exports;
-      p = p.loaded_by;
+    if(descriptor) {
+      while (p.loaded_by) {
+        if (path === p.id)
+          return descriptor.exports;
+        __js p = p.loaded_by;
+      }
     }
 
     // wait for load to complete:
@@ -763,7 +848,7 @@ function default_loader(path, parent, src_loader, opts, spec) {
     }
   }
 
-  if (!descriptor.required_by[parent.id])
+  __js if (!descriptor.required_by[parent.id])
     descriptor.required_by[parent.id] = 1;
   else
     ++descriptor.required_by[parent.id];
@@ -772,8 +857,8 @@ function default_loader(path, parent, src_loader, opts, spec) {
 }
 
 __js function default_resolver(spec) {
-  // append extension if it doesn't have one
-  if (!spec.ext) spec.path += "." + spec.type;
+  // append extension if it doesn't have one and it is not a directory
+  if (!spec.ext && spec.path.charAt(spec.path.length-1) !== '/') spec.path += "." + spec.type;
 };
 
 
@@ -789,8 +874,8 @@ function http_src_loader(path) {
 // XXX the github API is now x-domain capable; at some point, when we
 // drop support for older browsers, we can get rid of jsonp here and
 // load via http.json
-var github_api = "https://api.github.com/";
-var github_opts = {cbfield:"callback"};
+__js var github_api = "https://api.github.com/";
+__js var github_opts = {cbfield:"callback"};
 function github_src_loader(path) {
   var user, repo, tag;
   try {
@@ -825,20 +910,20 @@ function resolve(module, require_obj, parent, opts) {
 
   var hubs = exports.require.hubs;
   // apply global aliases
-  var resolveSpec = resolveHubs(path, hubs, require_obj, parent, opts);
+  var resolveSpec = resolveHubs(path, hubs, require_obj, parent, opts || {});
 
   // make sure we have an absolute url with '.' & '..' collapsed:
-  resolveSpec.path = exports.canonicalizeURL(resolveSpec.path, parent.id);
+  __js resolveSpec.path = exports.normalizeURL(resolveSpec.path, parent.id);
 
   // resolveSpec.ext is the explicit extension given (could be anything)
   // resolveSpec.type is the type of the file (which is a guess if `.ext` is undefined), and is always a key in require.extensions
-  var ext, extMatch = /.+\.([^\.\/]+)$/.exec(resolveSpec.path);
-  if (extMatch) {
+  __js var ext, extMatch = /.+\.([^\.\/]+)$/.exec(resolveSpec.path);
+  __js if (extMatch) {
     ext = extMatch[1].toLowerCase();
     resolveSpec.ext = ext;
     if(!exports.require.extensions[ext]) ext = null;
   }
-  resolveSpec.type = ext || 'sjs';
+  __js resolveSpec.type = ext || 'sjs';
 
   resolveSpec.resolve(resolveSpec, parent);
 
@@ -898,7 +983,7 @@ function resolve(module, require_obj, parent, opts) {
       }
     }
 
-  }
+  } // __js
   return resolveSpec;
 }
 
@@ -920,9 +1005,6 @@ function requireInner(module, require_obj, parent, opts) {
 
   // now perform the load:
   module = resolveSpec.loader(resolveSpec.path, parent, resolveSpec.src, opts, resolveSpec);
-  if (opts.copyTo) {
-    exports.extendObject(opts.copyTo, module);
-  }
   //console.log("require(#{resolveSpec.path}) = #{(new Date())-start} ms");
   return module;
 }
@@ -993,8 +1075,7 @@ function requireInnerMultiple(modules, require_obj, parent, opts) {
   }
 
   // kick off the load:
-  inner(0, modules.length);
-
+  if (modules.length !== 0) inner(0, modules.length);
   return rv;
 }
 

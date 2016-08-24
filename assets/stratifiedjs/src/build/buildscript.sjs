@@ -1,6 +1,6 @@
 // SJS build tool
 /*
- 
+
   A dependency-driven, parallel buildscript for building the SJS distribution.
   Like SCons, but simpler, smaller, concurrent (== faster).
 
@@ -9,7 +9,6 @@
 var fs = require('sjs:nodejs/fs');
 var { extend } = require('sjs:object');
 var { each, transform, join } = require('sjs:sequence');
-var util = require('util');
 var sys = require('sjs:sys');
 var url = require('sjs:url');
 
@@ -42,8 +41,12 @@ function build_deps() {
                                                   "modules/std.sjs",
                                                   "modules/dashdash.sjs",
                                                   "modules/xbrowser/html2canvas.sjs",
+                                                  "modules/xbrowser/filesaver.sjs",
+                                                  "modules/moment.sjs",
+                                                  "modules/moment-timezone.sjs",
                                                   "modules/test/diff.sjs",
                                                   "tmp/version_stamp",
+                                                  "modules/compile/ast.js",
                                                   "modules/compile/deps.js",
                                                   "modules/compile/sjs.sjs",
                                                   "modules/compile/minify.sjs",
@@ -62,11 +65,19 @@ function build_deps() {
 
   var jsHeader = "src/headers/__js.txt", jsFooter = "src/footers/__js.txt", compileFooter = "src/footers/compiler-main.sjs";
   var compilerSources = function(js) {
-    return [jsHeader, js, jsFooter, compileFooter];
+    return [
+    jsHeader,
+    js,
+    jsFooter,
+    compileFooter];
   }
 
   CPP("tmp/c1jsmin.js", "-DC1_KERNEL_JSMIN",
       ["src/c1/c1.js.in", "src/c1/kernel-jsmin.js.in"]);
+
+  CPP("modules/compile/ast.js", "-DC1_KERNEL_AST",
+      ["src/c1/c1.js.in", "src/c1/kernel-ast.js.in"]);
+
   // stringifier (used by STRINGIFY):
   CPP("tmp/c1jsstr.js", "-DC1_KERNEL_JSMIN -DSTRINGIFY",
       ["src/c1/c1.js.in", "src/c1/kernel-jsmin.js.in"]);
@@ -94,20 +105,20 @@ function build_deps() {
 
   // client-side:
   CPP("tmp/vm1client.js", "-DCLIENTSIDE", ["src/vm1/vm1.js.in"]);
-  MINIFY("tmp/vm1client.js.min", "tmp/vm1client.js", 
-         { pre: "var __oni_rt={};(function(exports){", 
+  MINIFY("tmp/vm1client.js.min", "tmp/vm1client.js",
+         { pre: "var __oni_rt={};(function(exports){",
            post: "exports.modules={};exports.modsrc={};})(__oni_rt);" });
 
   // client-side AOT
   CPP("tmp/vm1client-aot.js", "-DCLIENTSIDE -DNOEVAL", ["src/vm1/vm1.js.in"]);
-  MINIFY("tmp/vm1client-aot.js.min", "tmp/vm1client-aot.js", 
-         { pre: "var __oni_rt={};(function(exports){", 
+  MINIFY("tmp/vm1client-aot.js.min", "tmp/vm1client-aot.js",
+         { pre: "var __oni_rt={};(function(exports){",
            post: "exports.modules={};exports.modsrc={};})(__oni_rt);" });
-  
+
   // nodejs-based:
   CPP("tmp/vm1node.js", "-DNODEJS", ["src/vm1/vm1.js.in"]);
-  MINIFY("tmp/vm1node.js.min", "tmp/vm1node.js", 
-         { pre: "global.__oni_rt={};(function(exports){", 
+  MINIFY("tmp/vm1node.js.min", "tmp/vm1node.js",
+         { pre: "global.__oni_rt={};(function(exports){",
            post: "exports.modules={};exports.modsrc={};})(__oni_rt);" });
 
   //----------------------------------------------------------------------
@@ -121,7 +132,7 @@ function build_deps() {
 
   STRINGIFY("tmp/apollo-sys-common.sjs.min", "tmp/apollo-sys-common.sjs",
             { pre: "__oni_rt.modsrc['builtin:apollo-sys-common.sjs']=", post: ";" });
-  
+
   // xbrowser hostenv-specific part:
   STRINGIFY("tmp/apollo-sys-xbrowser.sjs.min", "src/sys/apollo-sys-xbrowser.sjs",
             { pre: "__oni_rt.modsrc['builtin:apollo-sys-xbrowser.sjs']=", post: ";" });
@@ -144,21 +155,21 @@ function build_deps() {
   // bootstrap code
 
   // xbrowser shim code:
-  MINIFY("tmp/apollo-jsshim-xbrowser.js.min", 
+  MINIFY("tmp/apollo-jsshim-xbrowser.js.min",
          "src/bootstrap/apollo-jsshim-xbrowser.js");
 
   // common part:
-  MINIFY("tmp/apollo-bootstrap-common.js.min", 
+  MINIFY("tmp/apollo-bootstrap-common.js.min",
          "src/bootstrap/apollo-bootstrap-common.js");
 
   // xbrowser hostenv-specific part:
-  MINIFY("tmp/apollo-bootstrap-xbrowser.js.min", 
+  MINIFY("tmp/apollo-bootstrap-xbrowser.js.min",
          "src/bootstrap/apollo-bootstrap-xbrowser.js");
 
   // nodejs hostenv-specific part:
-  MINIFY("tmp/apollo-bootstrap-nodejs.js.min", 
+  MINIFY("tmp/apollo-bootstrap-nodejs.js.min",
          "src/bootstrap/apollo-bootstrap-nodejs.js");
-  
+
 
   //----------------------------------------------------------------------
   // apollo lib
@@ -168,24 +179,24 @@ function build_deps() {
         ["src/headers/oni-apollo.js.txt",
          "tmp/vm1client.js.min",
          "tmp/c1.js.min",
-         "tmp/apollo-sys-common.sjs.min",
-         "tmp/apollo-sys-xbrowser.sjs.min",
+//         "tmp/apollo-sys-common.sjs.min",
+//         "tmp/apollo-sys-xbrowser.sjs.min",
          "tmp/apollo-jsshim-xbrowser.js.min",
-         "tmp/apollo-bootstrap-common.js.min",
-         "tmp/apollo-bootstrap-xbrowser.js.min",
+         "tmp/apollo-sys-xbrowser-aot.js",
+//         "tmp/apollo-bootstrap-common.js.min",
+//         "tmp/apollo-bootstrap-xbrowser.js.min",
          ]);
 
   // precompiled xbrowser version
   CONCAT("stratified-aot.js",
         ["src/headers/oni-apollo.js.txt",
          "tmp/vm1client-aot.js.min",
-         "tmp/c1.js.min",
          "tmp/apollo-jsshim-xbrowser.js.min",
          "tmp/apollo-sys-xbrowser-aot.js",
          ]);
 
   // nodejs version:
-  BUILD("stratified-node.js", 
+  BUILD("stratified-node.js",
         ["cat $0 $1 $2 $3 $4 $5 $6 > $TARGET",
          replacements_from_config
         ],
@@ -209,9 +220,9 @@ function build_deps() {
          replacements_from_config
         ],
         ["src/deps/numeric/src/apollo-module-header.txt",
-         "src/deps/numeric/src/numeric.js", 
+         "src/deps/numeric/src/numeric.js",
          "src/deps/numeric/src/seedrandom.js",
-         "src/deps/numeric/src/quadprog.js", 
+         "src/deps/numeric/src/quadprog.js",
          "src/deps/numeric/src/svd.js",
          "src/deps/numeric/src/apollo-module-footer.txt"]
        );
@@ -268,20 +279,51 @@ function build_deps() {
          "src/deps/dashdash/apollo-module-footer.txt"]
        );
 
-  // html2canvas assigns to window.html2canvas, so
+  // html2canvas uses window.html2canvas all over the shop, so
   // we replace that with `exports._render`.
   // apollo-module-footer supplies the stratified `render` function
   BUILD("tmp/html2canvas.js",
         ["sed -E -e 's/window\\.html2canvas/exports._render/' $0 > $TARGET",
           replacements_from_config
         ],
-        ["src/deps/html2canvas/build/html2canvas.js"]
+        ["src/deps/html2canvas/dist/html2canvas.js"]
        );
   CONCAT("modules/xbrowser/html2canvas.sjs",
         ["src/deps/html2canvas/apollo-module-header.txt",
          "tmp/html2canvas.js",
          "src/deps/html2canvas/apollo-module-footer.txt",
         ]);
+
+  // filesaver
+  BUILD("modules/xbrowser/filesaver.sjs",
+        ["cat $0 $1 $2 > $TARGET",
+         replacements_from_config
+        ],
+        ["src/deps/FileSaver.js/apollo-module-header.txt",
+         "src/deps/FileSaver.js/FileSaver.min.js",
+         "src/deps/FileSaver.js/apollo-module-footer.txt"
+        ]);
+
+  // moment
+  BUILD("modules/moment.sjs",
+        ["cat $0 $1 $2 > $TARGET",
+         replacements_from_config
+        ],
+        ["src/deps/moment/apollo-module-header.txt",
+         "src/deps/moment/min/moment.min.js",
+         "src/deps/moment/apollo-module-footer.txt"
+        ]);
+
+  // moment-timezone
+  BUILD("modules/moment-timezone.sjs",
+        ["cat $0 $1 $2 > $TARGET",
+         replacements_from_config
+        ],
+        ["src/deps/moment-timezone/apollo-module-header.txt",
+         "src/deps/moment-timezone/builds/moment-timezone-with-data.min.js",
+         "src/deps/moment-timezone/apollo-module-footer.txt"
+        ]);
+
 
   // std module
   BUILD("modules/std.sjs", function(dest) {
@@ -366,7 +408,7 @@ StratifiedJS standard library.");
   // helper to recursively read all files in given directory
   function walkdir(path, cb) {
     var files = fs.readdir(path);
-    files .. each { 
+    files .. each {
       |f|
       if (fs.isDirectory(path+"/"+f))
         walkdir(path+"/"+f, cb);
@@ -416,7 +458,7 @@ function replacements_from_config(target) {
                 .replace(/@version\s*.*/, '@version '+config.version)
                 .replace(/"version"\s*:\s*"[^"]*"/, '"version" : "'+config.npm.version+'"')
                 .replace(/"private"\s*:\s*[^,]*/, '"private" : '+config.npm['private']+'')
-                .replace(/StratifiedJS '[^']*' Standard Module Library/g, 
+                .replace(/StratifiedJS '[^']*' Standard Module Library/g,
                          "StratifiedJS '"+config.version+"' Standard Module Library");
 
   if (repl != src)
@@ -521,7 +563,7 @@ function BUILD(target, task, deps) {
   // builders are dependent on the buildscript itself:
   if (target !== "src/build/buildscript.sjs")
     deps.push("src/build/buildscript.sjs");
-  
+
   // We only want to execute the builder once and return the memoized
   // result on subsequent invocations. By utilizing a stratum and
   // waitforValue(), we can additionally ensure that these semantics
@@ -544,7 +586,7 @@ function PSEUDO(target) {
 
 
 //----------------------------------------------------------------------
-// implementation helpers: 
+// implementation helpers:
 
 function log(s) { process.stdout.write(s+"\n"); }
 
@@ -565,7 +607,7 @@ function _run_builder(target, task, deps) {
   if (deps.length) {
     require('sjs:cutil').waitforAll(
       function(dep) {
-        if (builders[dep]) 
+        if (builders[dep])
           builders[dep]();
         else
           if (!/^(src|tools)\//.test(dep)) // warn for missing builder if file is not in src/ or tools/
@@ -611,8 +653,8 @@ function _run_task(target, task, deps) {
     //log("* Executing shell command: '"+task+"'");
     require('sjs:nodejs/child-process').run('bash', ['-c', task], {stdio:'inherit'});
   }
-  else 
-    throw new Error("Unknown task type in builder '"+target+"'");    
+  else
+    throw new Error("Unknown task type in builder '"+target+"'");
 }
 
 // Build the given target:
@@ -620,7 +662,7 @@ function build_target(target) {
   // make sure we're in the right path:
   var sjs_home = require('path').dirname(sys.executable);
   process.chdir(sjs_home);
-  
+
   // make sure there's a tmp dir:
   if (!fs.isDirectory("tmp")) {
     log("Executing 'mkdir tmp'");
@@ -670,7 +712,7 @@ function process_args() {
 var targets = process_args();
 for(var i=0; i<targets.length; i++) {
   var target = targets[i];
-  util.puts("\nBuilding target: " + target);
+  log("\nBuilding target: " + target);
   build_target(target);
 }
 

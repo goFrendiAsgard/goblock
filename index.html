@@ -1,461 +1,475 @@
 <!DOCTYPE html>
 <html>
+
 <head>
     <meta charset="utf-8">
     <title>Goblock</title>
     <meta charset="utf-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <link rel="stylesheet" type="text/css" href="assets/bootstrap/css/bootstrap.min.css" />
-    <link rel="stylesheet" type="text/css" href="assets/alertifyjs/css/alertify.min.css" />
-    <link rel="stylesheet" type="text/css" href="assets/alertifyjs/css/themes/bootstrap.min.css" />
+    <link rel="stylesheet" type="text/css" href="assets/bootstrap-3.3.7/css/bootstrap.min.css" />
     <link rel="stylesheet" type="text/css" href="assets/goblock.css" />
 </head>
+
 <body>
-
-    <div class="row container col-md-12">
-
-        <!-- Header -->
-        <div id="__header" class="col-md-12">
-            <nav>
-                <ul id="__menuContainer" class="nav nav-pills pull-right">
-                    <li class="active" role="presentation"><a id="__homeMenu" class="__menu" href="#"><i class="glyphicon glyphicon-home"></i> Home</a></li>
-                    <li role="presentation"><a id="__lessonMenu" class="__menu" href="#"><i class="glyphicon glyphicon-book"></i> Lessons</a></li>
-                    <li role="presentation"><a id="__aboutMenu" class="__menu" href="#"><i class="glyphicon glyphicon-user"></i> About</a></li>
-                </ul>
-            </nav>
-            <h4 class="text-muted">
-                Goblock | Visual Programming For Newbie
-                <button id="__fullscreen" class="btn btn-xs btn-link"><i class="glyphicon glyphicon-fullscreen"></i></button>
-            </h4>
-        </div>
-        <!-- End of Header -->
-
-        <!-- Main Container -->
-        <div id="__mainContainer" class="col-md-12">
-
-            <div id="__lesson" class="col-md-7"></div>
-            <div id="__lessonResult" class="col-md-5"></div>
-
-            <div id="__leftPane" class="col-md-7">
-
-                <div id="__blockContainer">
-                    <legend>Block Workspace</legend>
-                    <div class="__btnDiv">
-                        <button id="__runCode" class="btn btn-primary">
-                            <i class="glyphicon glyphicon-play"></i> Run
-                        </button>
-                        <button id="__checkCode" class="btn btn-primary">
-                            <i class="glyphicon glyphicon-check"></i> Complete Exercise
-                        </button>
-                        <button id="__switchToXml" class="btn btn-default">
-                            <i class="glyphicon glyphicon-align-justify"></i> XML
-                        </button>
-                        <button id="__stretchCode" class="btn btn-primary">
-                            <i class="glyphicon glyphicon-arrow-right"></i> Stretch
-                        </button>
-                        <button id="__shrinkCode" class="btn btn-primary">
-                            <i class="glyphicon glyphicon-arrow-left"></i> Shrink
-                        </button>
-                        <button class="__clearCode btn btn-danger">
-                            <i class="glyphicon glyphicon-trash"></i> Clear
-                        </button>
-                    </div>
-                    <div id="__blocklyDiv"></div>
-                </div>
-
-                <div id="__xmlContainer">
-                    <legend>Xml</legend>
-                    <div class="__btnDiv">
-                        <button id="__synchronize" class="btn btn-primary">
-                            <i class="glyphicon glyphicon-retweet"></i> Synchronize
-                        </button>
-                        <button id="__switchToBlock" class="btn btn-default">
-                            <i class="glyphicon glyphicon-tasks"></i> Block
-                        </button>
-                        <button class="__clearCode btn btn-danger">
-                            <i class="glyphicon glyphicon-trash"></i> Clear
-                        </button>
-                    </div>
-                    <textarea id="__xml"></textarea>
-                </div>
-
+    <!-- The HTML components -->
+    <div class="col-md-12">
+        <div id="div-lesson-container" class="col-md-4">
+            <h3>Goblock</h3>
+            <h4>Visual Programming for Newbies</h4>
+            <hr>
+            <div id="div-lesson-control" class="col-md-12">
+                <select id="lesson-chapter" class="form-control"></select>
             </div>
-            <div id="__rightPane" class="col-md-5">
-
-
-
-                <legend>Output</legend>
-                <div id="__output" class="col-md-"></div>
-
-                <legend>Code</legend>
-                <div role="tabpanel">
-                    <!-- Nav tabs -->
-                    <ul class="nav nav-tabs" role="tablist">
-                        <li role="presentation" class="active"><a href="#__pythonContainer"role="tab" data-toggle="tab">Python</a></li>
-                        <li role="presentation"><a href="#__jsContainer" aria-controls="profile" role="tab" data-toggle="tab">Javascript</a></li>
-                    </ul>
-
-                    <!-- Tab panes -->
-                    <div class="tab-content">
-                        <div role="tabpanel" class="tab-pane active" id="__pythonContainer">
-                            <pre id="__pythonCode"></pre>
-                        </div>
-                        <div role="tabpanel" class="tab-pane" id="__jsContainer">
-                            <pre id="__jsCode"></pre>
-                        </div>
-                    </div>
-                </div>
-
+            <div id="div-lesson" class="col-md-12">
+                <!-- Lesson will be loaded here -->
             </div>
-
         </div>
-        <!-- End of Main Container -->
-
-        <!-- Lesson Container -->
-        <div id="__lessonContainer" class="col-md-12"></div>
-        <!-- End of Lesson Container -->
-
-        <!-- About Container -->
-        <div id="__aboutContainer" class="col-md-12"></div>
-        <!-- End of About Container -->
-
+        <div class="col-md-8">
+            <div id="div-control" class="col-md-12">
+                <!-- The control -->
+                <div class="form-inline">
+                    <button id="btn-run" class="btn btn-default">
+                        <i class="glyphicon glyphicon-play"></i> Run
+                    </button>
+                    <button id="btn-step" class="btn btn-default">
+                        <i class="glyphicon glyphicon-share-alt"></i> Step
+                    </button>
+                    <button id="btn-evaluate" class="btn btn-primary">
+                        <i class="glyphicon glyphicon-sunglasses"></i> Evaluate
+                    </button>
+                    <button id="btn-save" class="btn btn-default">
+                        <i class="glyphicon glyphicon-floppy-disk"></i> Save
+                    </button>
+                    <button id="btn-load" class="btn btn-default">
+                        <i class="glyphicon glyphicon-open"></i> Load
+                    </button>
+                    <select id="language" class="form-control">
+                        <option value="JavaScript">JavaScript</option>
+                        <option value="Python">Python</option>
+                        <option value="PHP">PHP</option>
+                        <option value="Lua">Lua</option>
+                        <option value="Dart">Dart</option>
+                    </select>
+                </div>
+            </div>
+            <div id="div-workplace" class="col-md-12">
+                <!-- The blocks will be loaded here -->
+            </div>
+            <div id="div-output" class="col-md-6">
+                <!-- The output of the blocks -->
+            </div>
+            <div id="div-source-code" class="col-md-6">
+                <!-- The source code of the block -->
+            </div>
+            <footer id="footer" class="pull-right">2016 &copy; Go Frendi Gunawan (gofrendiasgard@gmail.com)</footer>
+        </div>
     </div>
 
-    <footer class="row container col-md-12">
-        <p id="__footer" class="pull-right">
-            Go Frendi Gunawan (gofrendiasgard@gmail.com) &copy; 2014
-        </p>
-    </footer>
+    <!-- Alert -->
+    <div id="div-alert" class="modal">
+        <div class="modal-dialog" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <button type="button" class="close close-alert" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+                    <h4 class="modal-title">Alert</h4>
+                </div>
+                <div id="div-alert-message" class="modal-body">
+                    <!-- Alert message should be here -->
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-default close-alert" data-dismiss="modal">Close</button>
+                </div>
+            </div><!-- /.modal-content -->
+        </div><!-- /.modal-dialog -->
+    </div><!-- /.modal -->
 
-    <script type="text/javascript" src="assets/jquery/jquery-1.11.1.min.js"></script>
-    <script type="text/javascript" src="assets/jquery/jquery-migrate-1.2.1.min.js"></script>
+    <!-- Prompt -->
+    <div id="div-prompt" class="modal">
+        <div class="modal-dialog" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <button type="button" class="close close-prompt" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+                    <h4 class="modal-title">Prompt</h4>
+                </div>
+                <div class="modal-body">
+                    <div id="div-prompt-message">
+                        <!-- Prompt message should be here -->
+                    </div>
+                    <div id="div-textarea-prompt-container">
+                        <textarea id="textarea-prompt" class="form-control" placeholder="Your textarea"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-default close-prompt" data-dismiss="modal">Ok</button>
+                </div>
+            </div><!-- /.modal-content -->
+        </div><!-- /.modal-dialog -->
+    </div><!-- /.modal -->
+
+    <!-- Confirm -->
+    <div id="div-confirm" class="modal">
+        <div class="modal-dialog" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <button type="button" class="close close-confirm-cancel" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+                    <h4 class="modal-title">Confirm</h4>
+                </div>
+                <div class="modal-body">
+                    <div id="div-confirm-message">
+                        <!-- Confirm message should be here -->
+                    </div>
+                    <input id="input-confirm" type="hidden" value="0" />
+                </div>
+                <div class="modal-footer">
+                    <button id="btn-confirm-ok" type="button" class="btn btn-default close-confirm-oke" data-dismiss="modal">Ok</button>
+                    <button id="btn-confirm-cancel" type="button" class="btn btn-default close-confirm-cancel" data-dismiss="modal">Cancel</button>
+                </div>
+            </div><!-- /.modal-content -->
+        </div><!-- /.modal-dialog -->
+    </div><!-- /.modal -->
+
+
+    <!-- The XML -->
+    <xml id="toolbox" style="display: none">
+        <category id="catValues" colour="300" name="Basic Values">
+            <block type="text"></block>
+            <block type="logic_boolean"></block>
+            <block type="math_number"></block>
+            <block type="math_constant"></block>
+        </category>
+        <category id="catVariables" colour="330" custom="VARIABLE" name="Variables"></category>
+        <category id="catInputOutput" colour="160" name="Input/Output">
+            <block type="text_print">
+                <value name="TEXT">
+                    <shadow type="text">
+                        <field name="TEXT">abc</field>
+                    </shadow>
+                </value>
+            </block>
+            <block type="text_prompt"></block>
+        </category>
+        <sep></sep>
+        <category id="catLogic" colour="210" name="Logic">
+            <block type="controls_if"></block>
+            <block type="logic_compare"></block>
+            <block type="logic_operation"></block>
+            <block type="logic_negate"></block>
+            <block type="logic_boolean"></block>
+            <block type="logic_null"></block>
+            <block type="logic_ternary"></block>
+        </category>
+        <category id="catLoops" colour="120" name="Loops">
+            <block type="controls_repeat_ext">
+                <value name="TIMES">
+                    <shadow type="math_number">
+                        <field name="NUM">10</field>
+                    </shadow>
+                </value>
+            </block>
+            <block type="controls_whileUntil"></block>
+            <block type="controls_for">
+                <value name="FROM">
+                    <shadow type="math_number">
+                        <field name="NUM">1</field>
+                    </shadow>
+                </value>
+                <value name="TO">
+                    <shadow type="math_number">
+                        <field name="NUM">10</field>
+                    </shadow>
+                </value>
+                <value name="BY">
+                    <shadow type="math_number">
+                        <field name="NUM">1</field>
+                    </shadow>
+                </value>
+            </block>
+            <block type="controls_forEach"></block>
+            <block type="controls_flow_statements"></block>
+        </category>
+        <category id="catMath" colour="230" name="Math">
+            <block type="math_number"></block>
+            <block type="math_arithmetic">
+                <value name="A">
+                    <shadow type="math_number">
+                        <field name="NUM">1</field>
+                    </shadow>
+                </value>
+                <value name="B">
+                    <shadow type="math_number">
+                        <field name="NUM">1</field>
+                    </shadow>
+                </value>
+            </block>
+            <block type="math_single">
+                <value name="NUM">
+                    <shadow type="math_number">
+                        <field name="NUM">9</field>
+                    </shadow>
+                </value>
+            </block>
+            <block type="math_trig">
+                <value name="NUM">
+                    <shadow type="math_number">
+                        <field name="NUM">45</field>
+                    </shadow>
+                </value>
+            </block>
+            <block type="math_constant"></block>
+            <block type="math_number_property">
+                <value name="NUMBER_TO_CHECK">
+                    <shadow type="math_number">
+                        <field name="NUM">0</field>
+                    </shadow>
+                </value>
+            </block>
+            <block type="math_change">
+                <value name="DELTA">
+                    <shadow type="math_number">
+                        <field name="NUM">1</field>
+                    </shadow>
+                </value>
+            </block>
+            <block type="math_round">
+                <value name="NUM">
+                    <shadow type="math_number">
+                        <field name="NUM">3.1</field>
+                    </shadow>
+                </value>
+            </block>
+            <block type="math_on_list"></block>
+            <block type="math_modulo">
+                <value name="DIVIDEND">
+                    <shadow type="math_number">
+                        <field name="NUM">64</field>
+                    </shadow>
+                </value>
+                <value name="DIVISOR">
+                    <shadow type="math_number">
+                        <field name="NUM">10</field>
+                    </shadow>
+                </value>
+            </block>
+            <block type="math_constrain">
+                <value name="VALUE">
+                    <shadow type="math_number">
+                        <field name="NUM">50</field>
+                    </shadow>
+                </value>
+                <value name="LOW">
+                    <shadow type="math_number">
+                        <field name="NUM">1</field>
+                    </shadow>
+                </value>
+                <value name="HIGH">
+                    <shadow type="math_number">
+                        <field name="NUM">100</field>
+                    </shadow>
+                </value>
+            </block>
+            <block type="math_random_int">
+                <value name="FROM">
+                    <shadow type="math_number">
+                        <field name="NUM">1</field>
+                    </shadow>
+                </value>
+                <value name="TO">
+                    <shadow type="math_number">
+                        <field name="NUM">100</field>
+                    </shadow>
+                </value>
+            </block>
+            <block type="math_random_float"></block>
+        </category>
+        <category id="catText" colour="160" name="Text">
+            <block type="text"></block>
+            <block type="text_join"></block>
+            <block type="text_append">
+                <value name="TEXT">
+                    <shadow type="text"></shadow>
+                </value>
+            </block>
+            <block type="text_length">
+                <value name="VALUE">
+                    <shadow type="text">
+                        <field name="TEXT">abc</field>
+                    </shadow>
+                </value>
+            </block>
+            <block type="text_isEmpty">
+                <value name="VALUE">
+                    <shadow type="text">
+                        <field name="TEXT"></field>
+                    </shadow>
+                </value>
+            </block>
+            <block type="text_indexOf">
+                <value name="VALUE">
+                    <block type="variables_get">
+                        <field name="VAR">text</field>
+                    </block>
+                </value>
+                <value name="FIND">
+                    <shadow type="text">
+                        <field name="TEXT">abc</field>
+                    </shadow>
+                </value>
+            </block>
+            <block type="text_charAt">
+                <value name="VALUE">
+                    <block type="variables_get">
+                        <field name="VAR">text</field>
+                    </block>
+                </value>
+            </block>
+            <block type="text_getSubstring">
+                <value name="STRING">
+                    <block type="variables_get">
+                        <field name="VAR">text</field>
+                    </block>
+                </value>
+            </block>
+            <block type="text_changeCase">
+                <value name="TEXT">
+                    <shadow type="text">
+                        <field name="TEXT">abc</field>
+                    </shadow>
+                </value>
+            </block>
+            <block type="text_trim">
+                <value name="TEXT">
+                    <shadow type="text">
+                        <field name="TEXT">abc</field>
+                    </shadow>
+                </value>
+            </block>
+            <block type="text_print">
+                <value name="TEXT">
+                    <shadow type="text">
+                        <field name="TEXT">abc</field>
+                    </shadow>
+                </value>
+            </block>
+            <block type="text_prompt_ext">
+                <value name="TEXT">
+                    <shadow type="text">
+                        <field name="TEXT">abc</field>
+                    </shadow>
+                </value>
+            </block>
+        </category>
+        <category id="catLists" colour="260" name="Lists">
+            <block type="lists_create_with">
+                <mutation items="0"></mutation>
+            </block>
+            <block type="lists_create_with"></block>
+            <block type="lists_repeat">
+                <value name="NUM">
+                    <shadow type="math_number">
+                        <field name="NUM">5</field>
+                    </shadow>
+                </value>
+            </block>
+            <block type="lists_length"></block>
+            <block type="lists_isEmpty"></block>
+            <block type="lists_indexOf">
+                <value name="VALUE">
+                    <block type="variables_get">
+                        <field name="VAR">list</field>
+                    </block>
+                </value>
+            </block>
+            <block type="lists_getIndex">
+                <value name="VALUE">
+                    <block type="variables_get">
+                        <field name="VAR">list</field>
+                    </block>
+                </value>
+            </block>
+            <block type="lists_setIndex">
+                <value name="LIST">
+                    <block type="variables_get">
+                        <field name="VAR">list</field>
+                    </block>
+                </value>
+            </block>
+            <block type="lists_getSublist">
+                <value name="LIST">
+                    <block type="variables_get">
+                        <field name="VAR">list</field>
+                    </block>
+                </value>
+            </block>
+            <block type="lists_split">
+                <value name="DELIM">
+                    <shadow type="text">
+                        <field name="TEXT">,</field>
+                    </shadow>
+                </value>
+            </block>
+            <block type="lists_sort"></block>
+        </category>
+        <category id="catColour" colour="20" name="Color">
+            <block type="colour_picker"></block>
+            <block type="colour_random"></block>
+            <block type="colour_rgb">
+                <value name="RED">
+                    <shadow type="math_number">
+                        <field name="NUM">100</field>
+                    </shadow>
+                </value>
+                <value name="GREEN">
+                    <shadow type="math_number">
+                        <field name="NUM">50</field>
+                    </shadow>
+                </value>
+                <value name="BLUE">
+                    <shadow type="math_number">
+                        <field name="NUM">0</field>
+                    </shadow>
+                </value>
+            </block>
+            <block type="colour_blend">
+                <value name="COLOUR1">
+                    <shadow type="colour_picker">
+                        <field name="COLOUR">#ff0000</field>
+                    </shadow>
+                </value>
+                <value name="COLOUR2">
+                    <shadow type="colour_picker">
+                        <field name="COLOUR">#3333ff</field>
+                    </shadow>
+                </value>
+                <value name="RATIO">
+                    <shadow type="math_number">
+                        <field name="NUM">0.5</field>
+                    </shadow>
+                </value>
+            </block>
+        </category>
+        <category id="catFunctions" colour="290" custom="PROCEDURE" name="Functions"></category>
+    </xml>
+    <!-- The script -->
+    <script type="text/javascript" src="assets/jquery-3.1.0.min.js"></script>
     <script type="text/javascript" src="assets/jquery-fullscreen-plugin/jquery.fullscreen-min.js"></script>
-    <script type="text/javascript" src="assets/bootstrap/js/bootstrap.min.js"></script>
+    <script type="text/javascript" src="assets/bootstrap-3.3.7/js/bootstrap.min.js"></script>
     <script type="text/javascript" src="assets/blockly/blockly_compressed.js"></script>
+    <script type="text/javascript" src="assets/modal_support_patch.js"></script>
     <script type="text/javascript" src="assets/blockly/blocks_compressed.js"></script>
     <script type="text/javascript" src="assets/blockly/javascript_compressed.js"></script>
     <script type="text/javascript" src="assets/blockly/python_compressed.js"></script>
+    <script type="text/javascript" src="assets/blockly/lua_compressed.js"></script>
+    <script type="text/javascript" src="assets/blockly/php_compressed.js"></script>
+    <script type="text/javascript" src="assets/blockly/dart_compressed.js"></script>
     <script type="text/javascript" src="assets/blockly/msg/js/en.js"></script>
-    <script type="text/javascript" src="assets/alertifyjs/alertify.min.js"></script>
-    <script type="text/javascript" src="assets/stratifiedjs/stratified.js"></script>
-    <script type="text/javascript" src="assets/goblock.js"></script>
-    <script type="text/javascript" src="lessons.js"></script>
-
-    <script id="__asyncFunc" type="text/sjs">
-        // STATE VARIABLE
-        var __promptClicked     = true;
-        var __interactionTime   = 0;
-        var __lastIsOutput      = false;
-
-        function __inDialogBubble(message){
-            return '<div class="__inDialogBubble">'+__stripHtml(message)+'</div>';
-        }
-        function __outDialogBubble(message){
-            return '<div id="__lastOutputDialog" class="__outDialogBubble">'+__stripHtml(message)+'</div>';
-        }
-
-        function __outputAlert(message) {
-            $('#__lastOutputDialog').append('<br />'+__stripHtml(message));
-            if(!__lastIsOutput){
-                $('#__output').append(__outDialogBubble(message));
-                __lastIsOutput = true;
-            }
-        }
-
-        function __waitPrompt(){
-            while(!__promptClicked){
-                hold(500);
-                __interactionTime += 500;
-            }
-        }
-
-        function __outputPrompt(message){
-            __waitPrompt();
-            __promptClicked = false
-            var input = '';
-            alertify.prompt(
-                'Input',
-                message,
-                '',
-                function(evt,val){input = val; __promptClicked = true},
-                function(){input = ''; __promptClicked = true}
-            ).set('closable',false);
-
-            __waitPrompt();
-
-            if(message != ''){
-                __outputAlert(message);
-            }
-            // user dialog
-            $('#__output').append(__inDialogBubble(input));
-            // last dialog is not output dialog anymore
-            __lastIsOutput = false;
-            $('#__lastOutputDialog').removeAttr('id');
-            return input;
-        }
+    <script type="text/javascript" src="assets/js-interpreter/acorn_interpreter.js"></script>
+    <script>
+        var window_alert = window.alert;
+        var window_prompt = window.prompt;
+        var window_confirm = window.confirm;
     </script>
-
-    <script type="text/sjs">
-        var __sys = require("assets/stratifiedjs/modules/sys.sjs");
-        var __lessonIndex = -1;
-
-        $.ajax({url:'partials/toolbox.xml', success: function(toolbox){
-            // initialize blockly
-            toolbox = Blockly.Xml.domToText(toolbox);
-            Blockly.inject(document.getElementById('__blocklyDiv'),
-            {
-                toolbox: toolbox,
-                media: './assets/blockly/media/',
-            });
-
-            // on change
-            Blockly.addChangeListener(function() {
-                // Generate JavaScript code and display it.
-                Blockly.Python.INFINITE_LOOP_TRAP = null;
-                var code = Blockly.Python.workspaceToCode();
-                $('#__pythonCode').html(__stripHtml(code));
-                Blockly.JavaScript.INFINITE_LOOP_TRAP = null;
-                var code = Blockly.JavaScript.workspaceToCode();
-                $('#__jsCode').html(__stripHtml(code));
-
-                var __xml = Blockly.Xml.workspaceToDom(Blockly.mainWorkspace);
-                $('#__xml').html(Blockly.Xml.domToPrettyText(__xml));
-                $('#__output').fadeTo('slow',0.5);
-            });
-
-            $.ajax({url:'partials/startblock.xml', success: function(startblock){
-                startblock = Blockly.Xml.domToText(startblock);
-                __loadXml(startblock);
-            }}); // end of ajax startblock
-
-        }}); // end of ajax toolbox
-
-        // EVENTS
-
-        $('#__runCode').click(__runCode);
-
-        $('#__synchronize').click(function(){
-            __showBlockContainer();
-            __loadXml($('#__xml').val());
-        });
-
-        $('.__lessonLink').live('click', function(event){
-            event.preventDefault();
-            __lessonIndex = $(this).attr('index');
-            var lesson = __LESSONS[__lessonIndex];
-            var title = lesson.title;
-            // load lesson
-            $.ajax({
-                url    : lesson.lesson,
-                cache  : false,
-                success: function(response){
-                    $('#__lesson').html('<legend>Lesson '+(parseInt(__lessonIndex)+1)+' : '+title+'</legend>'+response);
-                    $('#__checkCode').show();
-                    $('#__lessonResult').html('');
-                }
-            });
-            // show container
-            __showMainContainer();
-            // load startblock
-            $.ajax({url:lesson.startblock, cache: false, success: function(startblock){
-                startblock = Blockly.Xml.domToText(startblock);
-                __loadXml(startblock);
-                // back to zero
-                $('body').animate({
-                    scrollTop: 0,
-                }, 'slow');
-            }});
-        });
-
-        $('#__checkCode').click(__checkCode);
-
-
-        // FUNCTIONS
-
-        function __loadXml(xml){
-            __clearCode();
-            xml = Blockly.Xml.textToDom(xml);
-            Blockly.Xml.domToWorkspace(Blockly.mainWorkspace, xml);
-            if(__lessonIndex>-1){
-                __checkCode(true);
-            }
-            __runCode();
-        }
-
-        function __getTimeStamp(){
-            var d = new Date();
-            return d.getTime();
-        }
-
-        function __checkCase(input, target_list, multi_target){
-            __multi_target = multi_target == undefined? false: multi_target;
-            // Generate JavaScript code and run it.
-            window.LoopTrap = 1000;
-            Blockly.JavaScript.INFINITE_LOOP_TRAP =
-                    'if (--window.LoopTrap == 0) throw "Infinite loop.";\n';
-
-            var __arrOutput        = new Array();
-            var __arrInput         = input;
-            var __target_list      = target_list;
-            var __arrInputIndex    = 0;
-
-            // code
-            var code = Blockly.JavaScript.workspaceToCode();
-            // add prefix to code
-            prefix  = 'function __in(message){result = __arrInput[__arrInputIndex]; __arrInputIndex++; return result;}'
-            prefix += 'function __out(data){__arrOutput.push(data);}';
-            code    = prefix + code;
-
-            try {
-                // do replacement
-                code = code.split("window.alert(").join("__out(");
-                code = code.split("window.prompt(").join("__in(");
-                // run the code
-                eval(prefix + code);
-                if(!__multi_target){
-                    if(__arrOutput.equals(__target_list)){
-                        return [true, __arrOutput, ''];
-                    }else{
-                        return [false, __arrOutput, ''];
-                    }
-                }else{
-                    var i=0;
-                    for(i=0; i<__target_list.length; i++){
-                        target = __target_list[i];
-                        if(target.equals(__arrOutput)){
-                            return [true, __arrOutput, ''];
-                        }
-                    }
-                    return [false, __arrOutput, ''];
-                }
-            } catch (e) {
-                console.log(e);
-                return [false, __arrOutput, e];
-            }
-        }
-
-        function __checkCode(firsttime){
-
-            var test_list    = __LESSONS[__lessonIndex].test;
-            var multi_target = __LESSONS[__lessonIndex].multitarget;
-            var title        = __LESSONS[__lessonIndex].title;
-
-            var html = '<table class="table table-striped">';
-            html += '<thead>';
-            if(firsttime===true){
-                html += '<tr><th>Input</th><th>Target</th></tr>'
-            }else{
-                html += '<tr><th>Input</th><th>Target</th><th>Your Output</th><th>Match</th></tr>';
-            }
-            html += '</thead><tbody>';
-            var all_match = true;
-            for(i=0; i<test_list.length; i++){
-
-                // get input and target
-                var test   = test_list[i];
-                var input  = test[0];
-                var target = test[1];
-
-                // check code
-                var result = __checkCase(input, target, multi_target);
-                var match  = result[0];
-                var output = result[1];
-                var error  = result[2];
-                all_match = all_match && match;
-
-                // put html
-                if(multi_target){
-                    var rowspan = target.length;
-                    html += '<tr>';
-                    html += '<td rowspan="'+rowspan+'">' + input.join('<br />') + '</td>';
-                    html += '<td>' + target[0].join('<br />') + '</td>';
-                    if(firsttime!==true){
-                        html += '<td rowspan="'+rowspan+'">' + output.join('<br />') + (error == ''? '' : '<br />' + error) + '</td>';
-                        html += '<td rowspan="'+rowspan+'">' + (match?
-                            '<span class="label label-success">Match</span>' :
-                            '<span class="label label-danger">Unmatch</span>') + '</td>';
-                    }
-                    html += '</tr>';
-                    for(j=1; j<target.length; j++){
-                        html += '<tr>';
-                        html += '<td>' + target[j].join('<br />') + '</td>';
-                        html += '</tr>';
-                    }
-                }else{
-                    html += '<tr>';
-                    html += '<td>' + input.join('<br />') + '</td>';
-                    html += '<td>' + target.join('<br />') + '</td>';
-                    if(firsttime!==true){
-                        html += '<td>' + output.join('<br />') + (error == ''? '' : '<br />' + error) + '</td>';
-                        html += '<td>' + (match?
-                            '<span class="label label-success">Match</span>' :
-                            '<span class="label label-danger">Unmatch</span>') + '</td>';
-                    }
-                    html += '</tr>';
-                }
-            }
-            html += '</tbody></table>';
-            if(firsttime!==true){
-                if(all_match){
-                    html = '<div class="alert alert-success"><b>Correct</b> You have pass this lesson</div>' + html;
-                    storage = __getStorage();
-                    passed = storage.passed;
-                    passed.push(title);
-                    storage.passed = passed;
-                    __setStorage(storage);
-                    __loadLesson();
-                }else{
-                    html = '<div class="alert alert-danger"><b>Wrong</b> Try again</div>' + html;
-                }
-            }
-            html = '<legend>Exercise</legend>' + html;
-            $('#__lessonResult').html(html);
-            // scroll to lessonResult
-            $('body').animate({
-                scrollTop: $("#__lessonResult").offset().top - 120,
-            }, 'slow');
-        }
-
-        function __runCode() {
-            $('#__output').html('');
-            // Generate JavaScript code and run it.
-            window.LoopTrap = 1000;
-            Blockly.JavaScript.INFINITE_LOOP_TRAP =
-                    'if (--window.LoopTrap == 0) throw "Infinite loop.";\n';
-
-            // prefix code
-            var prefix = $('#__asyncFunc').html();
-
-            // code
-            var code = Blockly.JavaScript.workspaceToCode();
-            try {
-                // do replacement
-                code = code.split("window.alert(").join("__outputAlert(");
-                code = code.split("window.prompt(").join("__outputPrompt(");
-                code = code.split(";\n").join(";\n__waitPrompt();");
-                // run the code
-                __start   = __getTimeStamp();
-                __sys.eval(prefix + code);
-                __end     = __getTimeStamp();
-                __elapsedTime = __end - __start;
-                __processTime = __elapsedTime - __interactionTime;
-                // print time report
-                $('#__output').append('<div id="__runtimeReport"></div>');
-                timeReport = '<b>Process Time:</b> '+__processTime+' ms, <b>Interaction Time:</b> '+__interactionTime+' ms';
-                $('#__runtimeReport').html('<b>SUCCESS</b><br />' + timeReport);
-            } catch (e) {
-                $('#__output').append('<div id="__runtimeReport"></div>');
-                $('#__runtimeReport').html('<b>ERROR</b><br />' + e);
-            }
-            $('#__output').fadeTo('slow',1);
-            // scroll to output
-            $('body').animate({
-                scrollTop: $("#__output").offset().top - 120,
-            }, 'slow');
-        }
-
-    </script>
+    <script type="text/javascript" src="lessons/lesson.js"></script>
+    <script type="text/javascript" src="assets/stratifiedjs/stratified.js" main="assets/goblock"></script>
 
 </body>
-</html>

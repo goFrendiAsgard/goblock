@@ -11,6 +11,12 @@ var Url = require('sjs:url');
 
 var dataRoot = './fixtures';
 
+test.beforeAll {||
+  // These shouldn't actually be set, but if they are (by accident)
+  // it can mask real issues
+  ;['exports', 'module'] .. each {|prop| delete global[prop] };
+
+}
 test.beforeEach {||
   require.modules .. ownKeys .. toArray() .. each {|id|
     if(id .. startsWith(Url.normalize('./fixtures', module.id))) {
@@ -18,7 +24,6 @@ test.beforeEach {||
     }
   }
 }
-
 
 testEq('force extension/sjs', "a=1&b=2", function() {
   return Url.buildQuery({a:1},{b:2});
@@ -90,12 +95,6 @@ context("server-side") {||
     result .. assert.eq({stdout: '42\n', stderr: ''});
   }
 
-  test('export to "this" (when requiring a nodeJS module)') {|s|
-    var script = 'require("nodejs:testmodule", {copyTo: this}); console.log(foo(1));';
-    var result = run_with_env(['-e', script], {NODE_PATH: dataPath});
-    result .. assert.eq({stdout: '42\n', stderr: ''});
-  }
-
   test('require.resolve() on valid nodejs modules') {||
     // at least one of these will be installed (either it's a dev environment or a self-install bundle)
     var packages = [
@@ -156,10 +155,6 @@ test('require.resolve() on sjs modules') {||
   assert.ok(sjsRoot);
   require.resolve('sjs:test/suite').path .. assert.eq(Url.normalize(sjsRoot + 'test/suite.sjs', module.id));
 }
-
-testEq('export to "this"', 42, function() {
-  return require(dataRoot + '/parent').export_to_this;
-}).ignoreLeaks('child1_function1');
 
 testEq('utf8 characters in modules: U+00E9', 233, function() {
   var data = require(dataRoot + '/utf8').test1();
@@ -271,3 +266,8 @@ context('hubs.addDefault()') {||
     require.hubs.length .. assert.eq(s.hublen);
   }
 }
+
+testEq('empty array', {}, function() {
+  return require([]);
+});
+

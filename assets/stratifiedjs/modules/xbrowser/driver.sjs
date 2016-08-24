@@ -45,8 +45,8 @@
      [Selenium]: http://docs.seleniumhq.org/
 */
 
-var {get, extend, propertyPairs, ownPropertyPairs} = require('sjs:object');
-var {isDOMNode} = require('sjs:xbrowser/dom');
+var {get, extend, ownPropertyPairs, allPropertyPairs} = require('sjs:object');
+var {isDOMNode, findNode} = require('sjs:xbrowser/dom');
 var logging = require('sjs:logging');
 var {each, toArray} = require('sjs:sequence');
 var {AssertionError} = require('sjs:assert');
@@ -65,8 +65,13 @@ var fns = {};
 */
 var DriverProto = Object.create(fns);
 
+/**
+  @function Driver.mixInto
+  @param {Object} [dest]
+  @summary Mix all properties of `this` into `dest`
+*/
 DriverProto.mixInto = function(ctx) {
-	propertyPairs(this) .. each{|[k, v]|
+	allPropertyPairs(this) .. each{|[k, v]|
 		if (k === 'mixInto') continue;
 		ctx[k] = v;
 	}
@@ -113,11 +118,6 @@ DriverProto.window = -> this.frame.contentWindow;
   @summary Close the iframe
 */
 DriverProto.close = -> document.body.removeChild(this.frame);
-/**
-  @function Driver.__finally__
-  @summary Alias for [::Driver::close]
-*/
-DriverProto.__finally__ = DriverProto.close;
 /**
   @function Driver.isLoaded
   @summary Return whether the frame is loaded
@@ -186,7 +186,10 @@ DriverProto.reload = function(wait) {
 DriverProto.click = function(elem) {
 	var doc = elem.ownerDocument;
 	var currentHref = doc.location.href;
-	var propagate = elem .. exports.trigger('click');
+	var propagate = true;
+	;['mousedown', 'click', 'mouseup'] .. each {|evt|
+		if(!fns.trigger(elem, evt)) propagate = false;
+	}
 	if (!propagate) return;
 
 	switch(elem.tagName.toLowerCase()) {
@@ -206,6 +209,14 @@ DriverProto.click = function(elem) {
 				case 'radio':
 					elem .. exports.trigger('change');
 					break;
+			}
+			break;
+		case 'button':
+			if(elem.getAttribute('type') === 'submit') {
+				var form = findNode('form', elem);
+				if(form) {
+					form .. exports.trigger('submit');
+				}
 			}
 			break;
 	}
@@ -232,12 +243,17 @@ exports.Driver = function(url) {
 /**
   @function Driver.enter
   @param {DOMElement} [elem]
-  @param {String} [text]
-  @summary Enter text into an element (typically an <input>
+  @param {String|Boolean} [value]
+  @summary Enter a value into an element (typically an <input>, <checkbox>, etc)
 */
 fns.enter = function(elem, value) {
-	elem.value = value;
-	elem .. fns.trigger('input');
+	var typ = elem.getAttribute('type');
+	if(typ === 'checkbox') {
+		elem.checked = Boolean(value);
+	} else {
+		elem.value = value;
+		elem .. fns.trigger('input');
+	}
 	elem .. fns.trigger('change');
 };
 
@@ -272,7 +288,7 @@ fns.trigger = function(elem, name, attrs) {
 				evt = document.createEvent('KeyboardEvent');
 				if (evt.initKeyEvent) {
 					// present on firefox.
-					// chrome has a but that prevent KeyboardEvents from working, but
+					// chrome has a bug that prevent KeyboardEvents from working, but
 					// *does* work with HTMLEvents (so we just let it fall through)
 					evt.initKeyEvent(name, true, true,
 						null, false, false, false, false,
@@ -413,10 +429,20 @@ fns.hasClass = (elem, cls) -> elem.classList.contains(cls);
   @param {optional Number} [timeout] Timeout (seconds)
   @param {optional Number} [interval] Interval (milliseconds)
   @summary Keep calling `fn` until it completes without throwing an exception
+  @desc
+
+    Note: `desc` can be omitted - if the second argument is a Number, it will be interpreted
+    as the `timeout` argument.
 */
 var DEFAULT_TIMEOUT = 2; // seconds
 var DEFAULT_INTERVAL = 100; // ms
 fns.waitforSuccess = function(fn, desc, timeout, interval) {
+	if(typeof(desc) === 'number') {
+		// desc not provided; shift up the timeout & interval
+		interval = timeout;
+		timeout = desc;
+		desc = undefined;
+	}
 	timeout = timeout || DEFAULT_TIMEOUT;
 	interval = interval || DEFAULT_INTERVAL;
 	var lastError;
@@ -445,8 +471,18 @@ fns.waitforSuccess = function(fn, desc, timeout, interval) {
   @param {optional Number} [timeout] Timeout (seconds)
   @param {optional Number} [interval] Interval (milliseconds)
   @summary Keep calling `fn` until it returns a truthy value
+  @desc
+
+    Note: `desc` can be omitted - if the second argument is a Number, it will be interpreted
+    as the `timeout` argument.
 */
 fns.waitforCondition = function(fn, desc, timeout, interval) {
+	if(typeof(desc) === 'number') {
+		// desc not provided; shift up the timeout & interval
+		interval = timeout;
+		timeout = desc;
+		desc = undefined;
+	}
 	timeout = timeout || DEFAULT_TIMEOUT;
 	interval = interval || DEFAULT_INTERVAL;
 	waitfor {
@@ -520,7 +556,7 @@ fns.elems = function(container, selector, predicate) {
   @param {optional Object} [subject=../suite::test]
   @param {optional Function} [getDriver] Function to return the current driver
   @return {Array}
-  @summary Add before & after hooks to set up basic diver functionality per-test
+  @summary Add before & after hooks to set up basic driver functionality per-test
   @desc
     These hooks ensure that [::Driver::waitUntilLoaded] and [::Driver::interceptLogging]
     are called at the start of each test, and that [::Driver::removeLogIntercept] is called
@@ -541,7 +577,7 @@ exports.addTestHooks = function(t, getDriver) {
 		try {
 			getDriver(s).removeLogIntercept();
 		} catch(e) {
-			logging.warn(String(e));
+			logging.warn("Can't remove log intercept: #{e}");
 		}
 	}
 	return this;
@@ -549,4 +585,5 @@ exports.addTestHooks = function(t, getDriver) {
 
 
 exports .. extend(fns);
+
 exports.mixInto = (subject) -> subject .. extend(fns);

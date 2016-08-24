@@ -43,8 +43,10 @@ var modules = [
 
 if (hostenv === 'nodejs') {
   modules = modules.concat([
-    'sjs:nodejs/stream',
+    {id:'sjs:nodejs/stream', name:'stream'},
+    {id:'sjs:nodejs/stream', include:['pump']},
     {id:'sjs:sys', include: ['argv', 'eval']},
+    'sjs:bytes',
     {id:'nodejs:path', name: 'path'},
     {id:'sjs:nodejs/fs', name: 'fs'},
     {id:'sjs:nodejs/child-process', name: 'childProcess'},

@@ -12,10 +12,9 @@ var sys = require('builtin:apollo-sys');
 var IE9 = suite.isIE() && suite.ieVersion() < 10;
 var expected404Status = 404;
 
-var requiresConductance = t -> t.skipIf(suite.isBrowser && document.location.host == 'code.onilabs.com', "requires conductance server");
+var {requiresConductance} = require('./helper');
 
 context("request") {||
-
   testEq('request(["data/returnQuery.template", {a:1,b:2}])', "a=1&b=2", function() {
     return http.request([getHttpURL("data/returnQuery.template"), {a:1,b:2}]);
   }).skip("requires template filter");
@@ -36,6 +35,23 @@ context("request") {||
     assert.raises({filter: e -> e.status === expected404Status},
       -> http.request(getHttpURL("no_such_url")));
   }
+
+  context("redirect") {||
+    test("bails out on infinite redirect") {||
+      var response = http.request(getHttpURL("/http/redirect?infinite=1"), {max_redirects:10, throwing: false, response:'full'});
+      @info(response);
+      // browser infinite redirect returns generic `0` error code
+      response.status .. @assert.eq(@isBrowser ? 0 : 302);
+    }
+
+    test("persists settings") {||
+      var dest = getHttpURL("/http/ok");
+      var response = http.request(getHttpURL("/http/redirect?dest="+encodeURIComponent(dest)), {response:'full'});
+      @info(response);
+      response.status .. @assert.eq(200); // make sure we got a "full" response, not the default "string"
+    }
+
+  } .. requiresConductance();
 
   @context("error response data") {||
     @test('for standard response') {||
@@ -170,14 +186,13 @@ context("full return objects") {||
 }
 
 context("raw return objects") {||
+  @stream = require('sjs:nodejs/stream');
+
   test('returns an unconsumed response stream', function() {
     var response = http.request("http://code.onilabs.com/sjs/unstable/modules/http.sjs", { response: 'raw' });
     assert.eq(response.headers['content-type'], 'text/plain');
-    var data = "";
-    var chunk;
-    while(chunk = sys.readStream(response)) {
-      data += chunk;
-    }
+    var data = response .. @stream.readAll();
     assert.ok(data.length > 1024);
   });
+
 }.serverOnly();

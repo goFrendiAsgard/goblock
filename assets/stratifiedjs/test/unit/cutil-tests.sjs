@@ -1,3 +1,4 @@
+@ = require('sjs:test/std');
 var {test, context, assert} = require('sjs:test/suite');
 var testEq = require('../lib/testUtil').test;
 var cutil = require("sjs:cutil");
@@ -503,7 +504,7 @@ context('breaking') {||
       'block finish']);
   };
 
-  test('when block itself throws an error') {||
+  test('error in setup') {||
     var err = new Error("error thrown by `breaking` block");
     assert.raises({message: err.message}) {||
       cutil.breaking {|brk|
@@ -512,7 +513,26 @@ context('breaking') {||
     };
   };
 
-  test('throwing an error') {||
+  test('error in teardown') {||
+    var err = new Error("error thrown in teardown");
+    var value = 'value';
+    var transaction = function(block) {
+      block(value);
+      hold(0);
+      throw err;
+    }
+
+    var ok = false;
+    assert.raises({message: err.message}) {||
+      var ctx = cutil.breaking(transaction);
+      ctx.value .. assert.eq(value);
+      ok = true;
+      ctx.resume();
+    };
+    ok .. assert.ok();
+  };
+
+  test('resume(error)') {||
     var events = [];
     var context = function(block) {
       events.push('tx init');
@@ -532,4 +552,97 @@ context('breaking') {||
     block.resume(new Error('err'));
     events .. assert.eq(['tx init', 'yielded', 'err', 'tx finish']);
   };
+
+  test('block retracted') {||
+    var events = [];
+    events.push = (function(o) {
+      return function(e) {
+        @info("Event: #{e}");
+        return o.apply(this,arguments);
+      }
+    })(events.push);
+
+    var context = function(block) {
+      events.push('init');
+      try {
+        waitfor {
+          block('yielded');
+        } or {
+          hold(100);
+          events.push('retracting');
+        }
+      } finally {
+        events.push('finally');
+      }
+    };
+
+    var block = cutil.breaking(context);
+    events.push(block.value);
+    waitfor {
+      hold(400);
+      events.push('timed out');
+    } or {
+      block.wait();
+      events.push('retracted');
+    } or {
+      block.wait();
+      events.push('retracted');
+    }
+    block.resume();
+
+    hold(10);
+    block.wait();
+
+    events .. assert.eq(['init', 'yielded', 'retracting', 'finally', 'retracted']);
+  }
+
+  test('error thrown from block body') {||
+    var events = [];
+    events.push = (function(o) {
+      return function(e) {
+        @info("Event: #{e}");
+        return o.apply(this,arguments);
+      }
+    })(events.push);
+
+    var err = @Condition();
+
+    var context = function(block) {
+      events.push('init');
+      waitfor {
+        var e = err.wait();
+        events.push('throwing');
+        throw e;
+      } or {
+        try {
+          return block();
+        } retract {
+          events.push('retract block');
+        }
+      }
+    };
+
+    var msg = "expected error"
+    var block = cutil.breaking(context);
+    @assert.raises({message: msg}, function() {
+      try {
+        waitfor {
+          events.push('setting error');
+          err.set(new Error(msg));
+          hold(0);
+          events.push('set error');
+        } or {
+          block.wait();
+          collapse;
+          events.push('collapsed');
+        }
+      } finally {
+        events.push('resuming');
+        block.resume();
+      }
+    });
+
+    events .. assert.eq(['init', 'setting error', 'throwing', 'retract block', 'collapsed', 'resuming']);
+  }
+
 }

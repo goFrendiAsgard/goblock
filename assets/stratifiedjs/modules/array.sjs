@@ -33,6 +33,7 @@
    @module  array
    @summary Functions for working with arrays
    @home    sjs:array
+   @eslint  { "rules": { "no-labels": 0 } }
 */
 
 var { Stream } = require('./sequence');
@@ -45,7 +46,7 @@ var { isArrayLike, flatten } = require('builtin:apollo-sys');
    @param    {anything} [testObj] Object to test.
    @return   {Boolean}
 */
-exports.isArrayLike = isArrayLike;
+__js exports.isArrayLike = isArrayLike;
 
 /**
    @function remove
@@ -74,10 +75,10 @@ exports.remove = remove;
      * Throws an exception is the array is empty
 */
 function cycle(arr) {
-  if (arr.length == 0) throw new Error('Cannot cycle an empty array');
+  __js if (arr.length == 0) throw new Error('Cannot cycle an empty array');
   return Stream(function(r) { var idx = 0; while (1) { r(arr[idx]); ++idx; idx%=arr.length; } });
 }
-exports.cycle = cycle;
+__js exports.cycle = cycle;
 
 /**
   @function flatten
@@ -93,7 +94,7 @@ exports.cycle = cycle;
          var b = flatten(a);
          // b is now [1,2,3,4,5,6,7,8,9,10]
 */
-exports.flatten = flatten;
+__js exports.flatten = flatten;
 
 /**
   @function union
@@ -136,7 +137,7 @@ __js function union(a, b) {
   }
   return rv;
 }
-exports.union = union;
+__js exports.union = union;
 
 /**
   @function difference
@@ -153,7 +154,7 @@ __js function difference(a, b) {
   }
   return rv;
 }
-exports.difference = difference;
+__js exports.difference = difference;
 
 /**
   @function haveCommonElements
@@ -193,7 +194,7 @@ __js exports.haveCommonElements = function(a, b) {
     one array ends before a differing element is found, it is considered
     less than the longer array.
 */
-var cmp = exports.cmp = function cmp(a,b) {
+__js var cmp = exports.cmp = function cmp(a,b) {
   var i=0;
   var ai, bi;
   var al = a.length;

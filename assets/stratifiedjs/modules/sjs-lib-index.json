@@ -68,6 +68,9 @@
             },
             "require.resolve": {
               "type": "function"
+            },
+            "require.url": {
+              "type": "function"
             }
           },
           "summary": "Globally-available functions and objects"
@@ -98,9 +101,6 @@
         "syntax": {
           "type": "module",
           "children": {
-            "?": {
-              "type": "syntax"
-            },
             "@altns": {
               "type": "syntax"
             },
@@ -108,6 +108,9 @@
               "type": "syntax"
             },
             "arrow-function": {
+              "type": "syntax"
+            },
+            "binary-conditional": {
               "type": "syntax"
             },
             "blocklambda": {
@@ -120,6 +123,9 @@
               "type": "syntax"
             },
             "destructure": {
+              "type": "syntax"
+            },
+            "double-colon": {
               "type": "syntax"
             },
             "double-dot": {
@@ -135,9 +141,6 @@
               "type": "syntax"
             },
             "try-retract": {
-              "type": "syntax"
-            },
-            "using": {
               "type": "syntax"
             },
             "waitfor-and": {
@@ -282,19 +285,40 @@
       },
       "summary": "Create SJS code bundles"
     },
+    "bytes": {
+      "type": "module",
+      "children": {
+        "Bytes": {
+          "type": "class",
+          "children": {}
+        },
+        "isArrayBuffer": {
+          "type": "function"
+        },
+        "isBuffer": {
+          "type": "function"
+        },
+        "isBytes": {
+          "type": "function"
+        },
+        "isUint8Array": {
+          "type": "function"
+        },
+        "toArrayBuffer": {
+          "type": "function"
+        },
+        "toBuffer": {
+          "type": "function"
+        },
+        "toUint8Array": {
+          "type": "function"
+        }
+      },
+      "summary": "Type checking and conversions for binary types."
+    },
     "collection/": {
       "type": "lib",
       "children": {
-        "btree": {
-          "type": "module",
-          "children": {
-            "BTree": {
-              "type": "class",
-              "children": {}
-            }
-          },
-          "summary": "Functions for creating and manipulating B-trees"
-        },
         "dictionary": {
           "type": "module",
           "children": {
@@ -325,6 +349,190 @@
             }
           },
           "summary": "Functions for manipulating dictionary data structures (JavaScript objects, hash tables, binary search trees, etc.)"
+        },
+        "immutable": {
+          "type": "module",
+          "children": {
+            "Dict": {
+              "type": "class",
+              "children": {
+                "Dict": {
+                  "type": "ctor"
+                },
+                "get": {
+                  "type": "function"
+                },
+                "has": {
+                  "type": "function"
+                },
+                "isEmpty": {
+                  "type": "function"
+                },
+                "modify": {
+                  "type": "function"
+                },
+                "remove": {
+                  "type": "function"
+                },
+                "set": {
+                  "type": "function"
+                }
+              }
+            },
+            "List": {
+              "type": "class",
+              "children": {
+                "List": {
+                  "type": "ctor"
+                },
+                "concat": {
+                  "type": "function"
+                },
+                "get": {
+                  "type": "function"
+                },
+                "has": {
+                  "type": "function"
+                },
+                "insert": {
+                  "type": "function"
+                },
+                "isEmpty": {
+                  "type": "function"
+                },
+                "modify": {
+                  "type": "function"
+                },
+                "remove": {
+                  "type": "function"
+                },
+                "size": {
+                  "type": "function"
+                },
+                "slice": {
+                  "type": "function"
+                }
+              }
+            },
+            "Queue": {
+              "type": "class",
+              "children": {
+                "Queue": {
+                  "type": "ctor"
+                },
+                "concat": {
+                  "type": "function"
+                },
+                "isEmpty": {
+                  "type": "function"
+                },
+                "peek": {
+                  "type": "function"
+                },
+                "pop": {
+                  "type": "function"
+                },
+                "push": {
+                  "type": "function"
+                },
+                "size": {
+                  "type": "function"
+                }
+              }
+            },
+            "Set": {
+              "type": "class",
+              "children": {
+                "Set": {
+                  "type": "ctor"
+                },
+                "add": {
+                  "type": "function"
+                },
+                "disjoint": {
+                  "type": "function"
+                },
+                "has": {
+                  "type": "function"
+                },
+                "intersect": {
+                  "type": "function"
+                },
+                "isEmpty": {
+                  "type": "function"
+                },
+                "remove": {
+                  "type": "function"
+                },
+                "subtract": {
+                  "type": "function"
+                },
+                "union": {
+                  "type": "function"
+                }
+              }
+            },
+            "SortedDict": {
+              "type": "function"
+            },
+            "SortedSet": {
+              "type": "function"
+            },
+            "Stack": {
+              "type": "class",
+              "children": {
+                "Stack": {
+                  "type": "ctor"
+                },
+                "concat": {
+                  "type": "function"
+                },
+                "isEmpty": {
+                  "type": "function"
+                },
+                "peek": {
+                  "type": "function"
+                },
+                "pop": {
+                  "type": "function"
+                },
+                "push": {
+                  "type": "function"
+                },
+                "size": {
+                  "type": "function"
+                }
+              }
+            },
+            "equal": {
+              "type": "function"
+            },
+            "isDict": {
+              "type": "function"
+            },
+            "isList": {
+              "type": "function"
+            },
+            "isQueue": {
+              "type": "function"
+            },
+            "isSet": {
+              "type": "function"
+            },
+            "isSortedDict": {
+              "type": "function"
+            },
+            "isSortedSet": {
+              "type": "function"
+            },
+            "isStack": {
+              "type": "function"
+            },
+            "toJS": {
+              "type": "function"
+            }
+          },
+          "summary": "Various immutable data structures, including dictionaries, lists, sets, queues, and stacks"
         },
         "list": {
           "type": "module",
@@ -544,6 +752,20 @@
           "type": "class",
           "children": {}
         },
+        "SuspendedContext": {
+          "type": "class",
+          "children": {
+            "resume": {
+              "type": "function"
+            },
+            "value": {
+              "type": "variable"
+            },
+            "wait": {
+              "type": "function"
+            }
+          }
+        },
         "breaking": {
           "type": "function"
         },
@@ -582,6 +804,17 @@
     "debug": {
       "type": "module",
       "children": {
+        "Stopwatch": {
+          "type": "class",
+          "children": {
+            "Stopwatch": {
+              "type": "ctor"
+            },
+            "snapshot": {
+              "type": "function"
+            }
+          }
+        },
         "inspect": {
           "type": "function"
         },
@@ -815,6 +1048,16 @@
       },
       "summary": "Markdown to Html Converter (tracking the [marked library](https://github.com/chjj/marked))"
     },
+    "moment-timezone": {
+      "type": "module",
+      "children": {},
+      "summary": "Timezone support for sjs:moment"
+    },
+    "moment": {
+      "type": "module",
+      "children": {},
+      "summary": "Parsing, validating, manipulating and displaying dates"
+    },
     "nodejs/": {
       "type": "lib",
       "children": {
@@ -940,6 +1183,18 @@
             }
           },
           "summary": "Stratified wrapper of [nodejs filesystem lib](http://nodejs.org/api/fs.html)"
+        },
+        "gzip": {
+          "type": "module",
+          "children": {
+            "compress": {
+              "type": "function"
+            },
+            "decompress": {
+              "type": "function"
+            }
+          },
+          "summary": "Gzip compression / decompression for SJS streams."
         },
         "http": {
           "type": "module",
@@ -1068,19 +1323,16 @@
             "end": {
               "type": "function"
             },
+            "isReadableStream": {
+              "type": "function"
+            },
             "lines": {
               "type": "function"
             },
             "pump": {
               "type": "function"
             },
-            "read": {
-              "type": "function"
-            },
             "readAll": {
-              "type": "function"
-            },
-            "write": {
               "type": "function"
             }
           },
@@ -1090,12 +1342,6 @@
           "type": "module",
           "children": {
             "extract": {
-              "type": "function"
-            },
-            "gunzip": {
-              "type": "function"
-            },
-            "gzip": {
               "type": "function"
             },
             "pack": {
@@ -1549,6 +1795,15 @@
         "Constructor": {
           "type": "function"
         },
+        "allKeys": {
+          "type": "function"
+        },
+        "allPropertyPairs": {
+          "type": "function"
+        },
+        "allValues": {
+          "type": "function"
+        },
         "clone": {
           "type": "function"
         },
@@ -1573,7 +1828,7 @@
         "hasOwn": {
           "type": "function"
         },
-        "keys": {
+        "mapValues": {
           "type": "function"
         },
         "merge": {
@@ -1594,16 +1849,10 @@
         "pairsToObject": {
           "type": "function"
         },
-        "propertyPairs": {
-          "type": "function"
-        },
         "setPath": {
           "type": "function"
         },
         "tap": {
-          "type": "function"
-        },
-        "values": {
           "type": "function"
         }
       },
@@ -1618,7 +1867,38 @@
         },
         "Observable": {
           "type": "class",
+          "children": {
+            "Observable": {
+              "type": "ctor"
+            }
+          }
+        },
+        "ObservableArray": {
+          "type": "class",
           "children": {}
+        },
+        "ObservableArrayVar": {
+          "type": "class",
+          "children": {
+            "ObservableArrayVar": {
+              "type": "ctor"
+            },
+            "get": {
+              "type": "function"
+            },
+            "insert": {
+              "type": "function"
+            },
+            "remove": {
+              "type": "function"
+            },
+            "set": {
+              "type": "function"
+            },
+            "stream": {
+              "type": "variable"
+            }
+          }
         },
         "ObservableVar": {
           "type": "class",
@@ -1640,10 +1920,19 @@
         "changes": {
           "type": "function"
         },
+        "constantObservable": {
+          "type": "function"
+        },
         "current": {
           "type": "function"
         },
+        "eventStreamToObservable": {
+          "type": "function"
+        },
         "isConflictError": {
+          "type": "function"
+        },
+        "isObservable": {
           "type": "function"
         },
         "isObservableVar": {
@@ -1651,9 +1940,24 @@
         },
         "observe": {
           "type": "function"
+        },
+        "reconstitute": {
+          "type": "function"
+        },
+        "synchronize": {
+          "type": "function"
         }
       },
       "summary": "Constructs for manipulating streams backed by time-varying values"
+    },
+    "pool": {
+      "type": "module",
+      "children": {
+        "sharedContext": {
+          "type": "function"
+        }
+      },
+      "summary": "Utilities for shared resources"
     },
     "quasi": {
       "type": "module",
@@ -1679,7 +1983,7 @@
           "type": "function"
         }
       },
-      "summary": "Functions for working with quasis"
+      "summary": "Functions for working with quasis (see also [sjs:#language/syntax::quasi-quote])"
     },
     "regexp": {
       "type": "module",
@@ -1699,6 +2003,17 @@
     "sequence": {
       "type": "module",
       "children": {
+        "BatchedStream": {
+          "type": "class",
+          "children": {
+            "BatchedStream": {
+              "type": "ctor"
+            }
+          }
+        },
+        "PACK_OMIT": {
+          "type": "variable"
+        },
         "Sequence": {
           "type": "class",
           "children": {}
@@ -1730,16 +2045,25 @@
         "at": {
           "type": "function"
         },
+        "batchN": {
+          "type": "function"
+        },
         "buffer": {
           "type": "function"
         },
         "combine": {
           "type": "function"
         },
+        "combineSort": {
+          "type": "function"
+        },
         "concat": {
           "type": "function"
         },
         "consume": {
+          "type": "function"
+        },
+        "consumeMultiple": {
           "type": "function"
         },
         "count": {
@@ -1793,6 +2117,15 @@
         "intersperse": {
           "type": "function"
         },
+        "intersperse_n_1": {
+          "type": "function"
+        },
+        "isBatchedStream": {
+          "type": "function"
+        },
+        "isConcreteSequence": {
+          "type": "function"
+        },
         "isSequence": {
           "type": "function"
         },
@@ -1806,6 +2139,9 @@
           "type": "function"
         },
         "map": {
+          "type": "function"
+        },
+        "map.filter": {
           "type": "function"
         },
         "map.par": {
@@ -1823,6 +2159,12 @@
         "partition": {
           "type": "function"
         },
+        "product": {
+          "type": "function"
+        },
+        "project": {
+          "type": "function"
+        },
         "reduce": {
           "type": "function"
         },
@@ -1830,6 +2172,9 @@
           "type": "function"
         },
         "reverse": {
+          "type": "function"
+        },
+        "scan": {
           "type": "function"
         },
         "skip": {
@@ -1863,6 +2208,9 @@
           "type": "function"
         },
         "transform": {
+          "type": "function"
+        },
+        "transform.filter": {
           "type": "function"
         },
         "transform.par": {
@@ -1908,6 +2256,9 @@
               "type": "function"
             },
             "has": {
+              "type": "function"
+            },
+            "hasCached": {
               "type": "function"
             },
             "lazy": {
@@ -2102,6 +2453,10 @@
     "string": {
       "type": "module",
       "children": {
+        "Octets": {
+          "type": "class",
+          "children": {}
+        },
         "arrayBufferToOctets": {
           "type": "function"
         },
@@ -2115,6 +2470,12 @@
           "type": "function"
         },
         "contains": {
+          "type": "function"
+        },
+        "decode": {
+          "type": "function"
+        },
+        "encode": {
           "type": "function"
         },
         "endsWith": {
@@ -2141,6 +2502,9 @@
         "padRight": {
           "type": "function"
         },
+        "prefixLines": {
+          "type": "function"
+        },
         "repeat": {
           "type": "function"
         },
@@ -2159,6 +2523,9 @@
         "startsWith": {
           "type": "function"
         },
+        "stringToUtf8": {
+          "type": "function"
+        },
         "strip": {
           "type": "function"
         },
@@ -2168,10 +2535,7 @@
         "unindent": {
           "type": "function"
         },
-        "utf16ToUtf8": {
-          "type": "function"
-        },
-        "utf8ToUtf16": {
+        "utf8ToString": {
           "type": "function"
         }
       },
@@ -2183,11 +2547,17 @@
         "argv": {
           "type": "function"
         },
+        "clearDynVar": {
+          "type": "function"
+        },
         "eval": {
           "type": "function"
         },
         "executable": {
           "type": "variable"
+        },
+        "getDynVar": {
+          "type": "function"
         },
         "getGlobal": {
           "type": "function"
@@ -2195,8 +2565,14 @@
         "hostenv": {
           "type": "variable"
         },
+        "setDynVar": {
+          "type": "function"
+        },
         "version": {
           "type": "variable"
+        },
+        "withDynVarContext": {
+          "type": "function"
         }
       },
       "summary": "SJS runtime utilities"
@@ -2374,8 +2750,14 @@
             "isBrowser": {
               "type": "variable"
             },
+            "isServer": {
+              "type": "variable"
+            },
             "isWindows": {
               "type": "variable"
+            },
+            "skipTest": {
+              "type": "function"
             },
             "test": {
               "type": "function"
@@ -2402,12 +2784,13 @@
       "type": "module",
       "children": {
         "Interface": {
-          "type": "class",
-          "children": {
-            "Interface": {
-              "type": "ctor"
-            }
-          }
+          "type": "function"
+        },
+        "Token": {
+          "type": "function"
+        },
+        "hasInterface": {
+          "type": "function"
         },
         "is": {
           "type": "function"
@@ -2445,6 +2828,12 @@
         "buildQuery": {
           "type": "function"
         },
+        "canonicalize": {
+          "type": "function"
+        },
+        "coerceToPath": {
+          "type": "function"
+        },
         "coerceToURL": {
           "type": "function"
         },
@@ -2478,42 +2867,10 @@
         "console": {
           "type": "module",
           "children": {
-            "Console": {
-              "type": "class",
-              "children": {
-                "__finally__": {
-                  "type": "function"
-                },
-                "clear": {
-                  "type": "function"
-                },
-                "error": {
-                  "type": "function"
-                },
-                "exec": {
-                  "type": "function"
-                },
-                "expand": {
-                  "type": "function"
-                },
-                "focus": {
-                  "type": "function"
-                },
-                "log": {
-                  "type": "function"
-                },
-                "shut": {
-                  "type": "function"
-                },
-                "shutdown": {
-                  "type": "function"
-                },
-                "warn": {
-                  "type": "function"
-                }
-              }
+            "Console.focus": {
+              "type": "function"
             },
-            "console": {
+            "Console.shutdown": {
               "type": "function"
             },
             "log": {
@@ -2552,6 +2909,15 @@
               "type": "function"
             },
             "isDOMNode": {
+              "type": "function"
+            },
+            "locationHash": {
+              "type": "function"
+            },
+            "matchesSelector": {
+              "type": "function"
+            },
+            "pageOffsetTo": {
               "type": "function"
             },
             "pageX": {
@@ -2595,9 +2961,6 @@
               "children": {
                 "Driver": {
                   "type": "ctor"
-                },
-                "__finally__": {
-                  "type": "function"
                 },
                 "assertHidden": {
                   "type": "function"
@@ -2644,6 +3007,9 @@
                 "isVisible": {
                   "type": "function"
                 },
+                "mixInto": {
+                  "type": "function"
+                },
                 "navigate": {
                   "type": "function"
                 },
@@ -2681,6 +3047,15 @@
             }
           },
           "summary": "Iframe web driver"
+        },
+        "filesaver": {
+          "type": "module",
+          "children": {
+            "saveAs": {
+              "type": "function"
+            }
+          },
+          "summary": "Blob saveAs() functionality"
         },
         "html2canvas": {
           "type": "module",

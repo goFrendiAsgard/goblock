@@ -50,8 +50,10 @@ var modules = [
 
 if (hostenv === 'nodejs') {
   modules = modules.concat([
-    'sjs:nodejs/stream',
+    {id:'sjs:nodejs/stream', name:'stream'},
+    {id:'sjs:nodejs/stream', include:['pump']},
     {id:'sjs:sys', include: ['argv', 'eval']},
+    'sjs:bytes',
     {id:'nodejs:path', name: 'path'},
     {id:'sjs:nodejs/fs', name: 'fs'},
     {id:'sjs:nodejs/child-process', name: 'childProcess'},
@@ -85,6 +87,7 @@ module.exports = require(modules);
    - **logging**: (module [sjs:logging](#sjs%3Alogging))
    - **path**: (module [nodejs:path](http://nodejs.org/api/path.html))
    - **regexp**: (module [sjs:regexp](#sjs%3Aregexp))
+   - **stream**: (module [sjs:nodejs/stream](#sjs%3Anodejs%2Fstream))
    - **sys**: (module [sjs:sys](#sjs%3Asys))
    - **url**: (module [sjs:url](#sjs%3Aurl))
   
@@ -98,6 +101,18 @@ module.exports = require(modules);
    - **isArrayLike**: (function [sjs:array::isArrayLike])
    - **remove**: (function [sjs:array::remove])
    - **union**: (function [sjs:array::union])
+  
+  
+  ### Symbols from the [sjs:bytes](#sjs%3Abytes) module:
+  *(when in the nodejs environment)*
+  
+   - **isArrayBuffer**: (function [sjs:bytes::isArrayBuffer])
+   - **isBuffer**: (function [sjs:bytes::isBuffer])
+   - **isBytes**: (function [sjs:bytes::isBytes])
+   - **isUint8Array**: (function [sjs:bytes::isUint8Array])
+   - **toArrayBuffer**: (function [sjs:bytes::toArrayBuffer])
+   - **toBuffer**: (function [sjs:bytes::toBuffer])
+   - **toUint8Array**: (function [sjs:bytes::toUint8Array])
   
   
   ### Symbols from the [sjs:compare](#sjs%3Acompare) module:
@@ -123,6 +138,7 @@ module.exports = require(modules);
   
    - **inspect**: (function [sjs:debug::inspect])
    - **prompt**: (function [sjs:debug::prompt])
+   - **Stopwatch**: (class [sjs:debug::Stopwatch])
   
   
   ### Symbols from the [sjs:event](#sjs%3Aevent) module:
@@ -145,21 +161,14 @@ module.exports = require(modules);
   ### Symbols from the [sjs:nodejs/stream](#sjs%3Anodejs%2Fstream) module:
   *(when in the nodejs environment)*
   
-   - **contents**: (function [sjs:nodejs/stream::contents])
-   - **DelimitedReader**: (class [sjs:nodejs/stream::DelimitedReader])
-   - **end**: (function [sjs:nodejs/stream::end])
-   - **lines**: (function [sjs:nodejs/stream::lines])
    - **pump**: (function [sjs:nodejs/stream::pump])
-   - **read**: (function [sjs:nodejs/stream::read])
-   - **ReadableStream**: (class [sjs:nodejs/stream::ReadableStream])
-   - **readAll**: (function [sjs:nodejs/stream::readAll])
-   - **WritableStream**: (class [sjs:nodejs/stream::WritableStream])
-   - **WritableStringStream**: (class [sjs:nodejs/stream::WritableStringStream])
-   - **write**: (function [sjs:nodejs/stream::write])
   
   
   ### Symbols from the [sjs:object](#sjs%3Aobject) module:
   
+   - **allKeys**: (function [sjs:object::allKeys])
+   - **allPropertyPairs**: (function [sjs:object::allPropertyPairs])
+   - **allValues**: (function [sjs:object::allValues])
    - **clone**: (function [sjs:object::clone])
    - **construct**: (function [sjs:object::construct])
    - **Constructor**: (function [sjs:object::Constructor])
@@ -169,27 +178,32 @@ module.exports = require(modules);
    - **getPath**: (function [sjs:object::getPath])
    - **has**: (function [sjs:object::has])
    - **hasOwn**: (function [sjs:object::hasOwn])
-   - **keys**: (function [sjs:object::keys])
+   - **mapValues**: (function [sjs:object::mapValues])
    - **merge**: (function [sjs:object::merge])
    - **override**: (function [sjs:object::override])
    - **ownKeys**: (function [sjs:object::ownKeys])
    - **ownPropertyPairs**: (function [sjs:object::ownPropertyPairs])
    - **ownValues**: (function [sjs:object::ownValues])
    - **pairsToObject**: (function [sjs:object::pairsToObject])
-   - **propertyPairs**: (function [sjs:object::propertyPairs])
    - **setPath**: (function [sjs:object::setPath])
    - **tap**: (function [sjs:object::tap])
-   - **values**: (function [sjs:object::values])
   
   
   ### Symbols from the [sjs:observable](#sjs%3Aobservable) module:
   
    - **changes**: (function [sjs:observable::changes])
+   - **constantObservable**: (function [sjs:observable::constantObservable])
    - **current**: (function [sjs:observable::current])
+   - **eventStreamToObservable**: (function [sjs:observable::eventStreamToObservable])
    - **isConflictError**: (function [sjs:observable::isConflictError])
+   - **isObservable**: (function [sjs:observable::isObservable])
    - **isObservableVar**: (function [sjs:observable::isObservableVar])
+   - **Observable**: (class [sjs:observable::Observable])
+   - **ObservableArrayVar**: (class [sjs:observable::ObservableArrayVar])
    - **ObservableVar**: (class [sjs:observable::ObservableVar])
    - **observe**: (function [sjs:observable::observe])
+   - **reconstitute**: (function [sjs:observable::reconstitute])
+   - **synchronize**: (function [sjs:observable::synchronize])
   
   
   ### Symbols from the [sjs:quasi](#sjs%3Aquasi) module:
@@ -208,10 +222,14 @@ module.exports = require(modules);
    - **any**: (function [sjs:sequence::any])
    - **any.par**: (function [sjs:sequence::any.par])
    - **at**: (function [sjs:sequence::at])
+   - **BatchedStream**: (class [sjs:sequence::BatchedStream])
+   - **batchN**: (function [sjs:sequence::batchN])
    - **buffer**: (function [sjs:sequence::buffer])
    - **combine**: (function [sjs:sequence::combine])
+   - **combineSort**: (function [sjs:sequence::combineSort])
    - **concat**: (function [sjs:sequence::concat])
    - **consume**: (function [sjs:sequence::consume])
+   - **consumeMultiple**: (function [sjs:sequence::consumeMultiple])
    - **count**: (function [sjs:sequence::count])
    - **dedupe**: (function [sjs:sequence::dedupe])
    - **each**: (function [sjs:sequence::each])
@@ -229,19 +247,27 @@ module.exports = require(modules);
    - **indexed**: (function [sjs:sequence::indexed])
    - **integers**: (function [sjs:sequence::integers])
    - **intersperse**: (function [sjs:sequence::intersperse])
+   - **intersperse_n_1**: (function [sjs:sequence::intersperse_n_1])
+   - **isBatchedStream**: (function [sjs:sequence::isBatchedStream])
+   - **isConcreteSequence**: (function [sjs:sequence::isConcreteSequence])
    - **isSequence**: (function [sjs:sequence::isSequence])
    - **isStream**: (function [sjs:sequence::isStream])
    - **join**: (function [sjs:sequence::join])
    - **last**: (function [sjs:sequence::last])
    - **map**: (function [sjs:sequence::map])
+   - **map.filter**: (function [sjs:sequence::map.filter])
    - **map.par**: (function [sjs:sequence::map.par])
    - **mirror**: (function [sjs:sequence::mirror])
    - **monitor**: (function [sjs:sequence::monitor])
    - **pack**: (function [sjs:sequence::pack])
+   - **PACK_OMIT**: (variable [sjs:sequence::PACK_OMIT])
    - **partition**: (function [sjs:sequence::partition])
+   - **product**: (function [sjs:sequence::product])
+   - **project**: (function [sjs:sequence::project])
    - **reduce**: (function [sjs:sequence::reduce])
    - **reduce1**: (function [sjs:sequence::reduce1])
    - **reverse**: (function [sjs:sequence::reverse])
+   - **scan**: (function [sjs:sequence::scan])
    - **skip**: (function [sjs:sequence::skip])
    - **skipWhile**: (function [sjs:sequence::skipWhile])
    - **slice**: (function [sjs:sequence::slice])
@@ -254,6 +280,7 @@ module.exports = require(modules);
    - **toArray**: (function [sjs:sequence::toArray])
    - **toStream**: (function [sjs:sequence::toStream])
    - **transform**: (function [sjs:sequence::transform])
+   - **transform.filter**: (function [sjs:sequence::transform.filter])
    - **transform.par**: (function [sjs:sequence::transform.par])
    - **transform.par.unordered**: (function [sjs:sequence::transform.par.unordered])
    - **unique**: (function [sjs:sequence::unique])
@@ -270,6 +297,8 @@ module.exports = require(modules);
    - **base64ToOctets**: (function [sjs:string::base64ToOctets])
    - **capitalize**: (function [sjs:string::capitalize])
    - **contains**: (function [sjs:string::contains])
+   - **decode**: (function [sjs:string::decode])
+   - **encode**: (function [sjs:string::encode])
    - **endsWith**: (function [sjs:string::endsWith])
    - **isString**: (function [sjs:string::isString])
    - **lstrip**: (function [sjs:string::lstrip])
@@ -278,23 +307,24 @@ module.exports = require(modules);
    - **padBoth**: (function [sjs:string::padBoth])
    - **padLeft**: (function [sjs:string::padLeft])
    - **padRight**: (function [sjs:string::padRight])
+   - **prefixLines**: (function [sjs:string::prefixLines])
    - **repeat**: (function [sjs:string::repeat])
    - **rsplit**: (function [sjs:string::rsplit])
    - **rstrip**: (function [sjs:string::rstrip])
    - **sanitize**: (function [sjs:string::sanitize])
    - **split**: (function [sjs:string::split])
    - **startsWith**: (function [sjs:string::startsWith])
+   - **stringToUtf8**: (function [sjs:string::stringToUtf8])
    - **strip**: (function [sjs:string::strip])
    - **supplant**: (function [sjs:string::supplant])
    - **unindent**: (function [sjs:string::unindent])
-   - **utf16ToUtf8**: (function [sjs:string::utf16ToUtf8])
-   - **utf8ToUtf16**: (function [sjs:string::utf8ToUtf16])
+   - **utf8ToString**: (function [sjs:string::utf8ToString])
   
   
   ### Symbols from the [sjs:sys](#sjs%3Asys) module:
   
-   - **eval**: (function [sjs:sys::eval])
    - **argv**: (function [sjs:sys::argv])
+   - **eval**: (function [sjs:sys::eval])
   
   
   ### Symbols from the [sjs:xbrowser/dom](#sjs%3Axbrowser%2Fdom) module:

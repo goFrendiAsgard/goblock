@@ -95,7 +95,7 @@
       // now @url is defined, in addition to the
       // sequence symbols like @map and @each
 
-  ### Protecting aganist accidental mutation
+  ### Protecting against accidental mutation
 
   Keen readers will note that if we assign the [sequence::] module to `@`:
 
@@ -140,6 +140,9 @@
   stratum at the point of `next code`. Only the first call to `resume`
   will have an effect (and only if the suspended waitfor has not been
   cancelled). Subsequent calls to `resume()` will be ignored.
+
+  A call to `resume()` will immediately begin executing `next_code`. 
+  When `next_code` finishes or suspends, the code after the `resume()` will be executed.
   
   Example: In a web browser we can use `waitfor()` with `window.setTimeout`
   to make a 'pause' function (similar to `hold(t)`):
@@ -394,10 +397,10 @@
   Instead of just converting each embedded value to a string (as string interpolation does), using quasis allows the logging module to be smarter about how values are presented. Specifically, it will pass any non-string values through `debug.inspect`:
 
       var name = { first: "john", last: "smith" };
-      logging.print("New user: #{name}");
-      // prints: New user: [Object object]
-      logging.print(`New user: ${name}`);
-      // prints: New user: { first: "john", last: "smith" }
+      logging.info("New user: #{name}");
+      // prints: INFO: New user: [Object object]
+      logging.info(`New user: ${name}`);
+      // prints: INFO: New user: { first: "john", last: "smith" }
 
   The [sjs:quasi::] module provides functions for dealing with quasi-quote objects at runtime.
 
@@ -413,7 +416,7 @@
 
 
 @syntax double-dot
-@summary Function chaining operator
+@summary Postfix function chaining operator
 @desc
 
   *created for SJS; although we later discovered [elixir](http://elixir-lang.org/)'s `|>` pipe operator was created independently with the same functionality*
@@ -576,6 +579,140 @@
     
   This provides a similar syntax to the builtin `for(var key in obj) { ... }` but it ignores inherited properties, and is implemented with normal functions - you can use this syntax to implement your own control-flow mechanisms.
 
+@syntax double-colon
+@summary Prefix function chaining operator
+@desc
+
+   Similar to how the [::double-dot] operator allows you to chain function calls by _postfixing_ a function application to an expression, the double-colon operator allows you to _prefix_ a function `foo` to be applied to an expression which will be passed as first argument to `foo`:
+
+       function foo(x,y,z) { ... }
+
+       // normal function call syntax:
+       foo('a', 'b', 'c');
+
+       // equivalent double-dot postfix syntax:
+       'a' .. foo('b', 'c');
+
+       // equivalent double-colon prefix syntax:
+       foo('b', 'c') :: 'a';
+
+   The double-colon operator associates to the right:
+
+       function bar(x,y,z) { ... }
+
+       // normal function call syntax:
+       foo(bar('a', 'b', 'c'), 'd', 'e');
+
+       // equivalent double-dot syntax:
+       'a' .. bar('b', 'c') .. foo('d', 'e');
+
+       // equivalent double-colon syntax:
+       foo('d', 'e') :: bar('b', 'c') :: 'a'
+
+   Just as for the [::double-dot] operator, function call parenthesis can be
+   omitted (which will only make sense for functions that take a single argument):
+
+       function foo(x) { ... }
+       function bar(x) { ... }
+
+       // normal function call syntax:
+       foo(bar('a'));
+
+       // equivalent double-dot syntax:
+       'a' .. bar .. foo;
+
+       // equivalent double-colon syntax:
+       foo :: bar :: 'a'
+
+   Mixed double-colon and double-dot expressions have somewhat counter-intuitive semantics: While the double-dot operator binds stronger than the double-colon operator, if there is a chain `f .. g .. h` of double-dot calls on the left of a double-colon expression `f .. g .. h :: a`, the right side `a` will be passed as first argument to `f`:
+
+       function f(x) { ... }
+       function g(x) { ... }
+       function h(x) { ... }
+
+       f .. g .. h :: a;
+
+       // is equivalent to:
+      
+       f(a) .. g .. h;
+ 
+       // or, in normal syntax:
+ 
+       h(g(f(a)));
+
+   The semantics of mixed double-colon and double-dot expressions imply that the left-most expression in a double-dot chain on the left side of a double-colon expression must be a function (or function call) expression:
+
+       // invalid: a string is not a function
+       'a' .. f :: a;
+
+  ### Uses
+
+  There are two important use cases where double-colon syntax can make code easier to
+  construct and maintain.
+
+  Firstly, the syntax lends itself to wrapping/annotating functions:
+
+       var {rateLimit} = require('sjs:function');
+
+       var pollServer = rateLimit(10) :: function() { ... }
+
+       // equivalent to:
+
+       var pollServer = (function() { ... }) .. rateLimit(10);
+
+       // or:
+
+       var pollServer = rateLimit(function() { ... }, 10);
+
+  Here the latter two forms are especially unsatisfactory if the function definition
+  stretches over many lines.
+
+  Secondly, double-colon syntax is convenient for constructing tree datastructures, such
+  as e.g. HTML in conductance's [mho:surface/html::] module:
+
+       @ = require(['mho:std', 'mho:html'])
+
+       var my_form = 
+          @Div .. @Class('form') ::
+            [
+               @H1 :: 'Enter your name',
+               @Div .. @Class('input-field') ::
+                 [
+                    @B :: 'First Name', 
+                    @Input()
+                 ],
+               @Div .. @Class('input-field') ::
+                 [
+                    @B :: 'Last Name',
+                    @Input()
+                 ]
+            ];
+               
+       // equivalent to:
+
+       var my_form = 
+          @Div(
+            [
+              @H1('Enter your name'),
+              @Div(
+                [
+                  @B('First Name'),
+                  @Input()
+                ]
+              ) .. @Class('input-field'),
+              @Div(
+                [
+                  @B('First Name'),
+                  @Input()
+                ]
+              ) .. @Class('input-field')
+            ]
+          ) .. @Class('form');
+       
+  Note how this example leverages the somewhat counter-intuitive mixed double-colon/double-dot syntax described above.
+             
+
+
 @syntax arrow-function
 @summary Shorthand function syntax
 @desc
@@ -605,40 +742,6 @@
 
   **Note:** The body of an arrow function needs to be an *expression*. Multiple expressions can be chained together using parentheses and the comma operator, e.g. `a -> (console.log(a), a+1)`, but you cannot put *statements* (such as `for(...) {...}`) into an arrow function. If you need statements, you should use the regular `function() {...}` syntax. 
 
-
-@syntax using
-@summary Factoring out try/finally
-@desc
-
-  **Note:** The `using` keyword is currently under review. It might change semantics or be removed in future versions of StratifiedJS.
-
-
-  Similar to Python's `with` statement
-  ([PEP-0343](http://www.python.org/dev/peps/pep-0343/)), SJS has a `using`
-  statement for factoring out standard uses of `try/finally`:
-
-      using (context_manager) {
-        ... some code ...
-      }
-
-  This code executes the code block `some code`. When `some code` is
-  exited (either normally, by exception or by cancellation),
-  `context_manager.__finally__()` will be called, if this function exists.
-
-
-  I.e. the above code is equivalent to something like:
-
-
-      try {
-        ... some code ...
-      }
-      finally { 
-        if (context_manager && 
-            typeof context_manager.__finally__ == "function")
-          context_manager.__finally__();
-      }
-
-
 @syntax calling-javascript
 @summary Interfacing with plain Javascript code
 @desc
@@ -665,29 +768,52 @@
 @summary Embed javascript code
 @desc
   You can embed plain javascript code inside SJS using the `__js` block
-  syntax:
+  and expression syntax:
 
+      // block syntax
       __js {
         exports.foo = function() {
           // ...
         }
       }
 
+      // expression syntax:
+      [3,2,1].sort(__js (x,y) -> x-y)
+
+
   This is primarily used for low-level optimisations, similar
-  to how `asm` blocks are used in C code. The code inside a `__js`
-  block will be reproduced as-is into the compiled JS, so it won't
-  have any access to SJS language features. But it will
-  also avoid any overhead imposed by the SJS runtime.
+  to how `asm` blocks are used in C code. 
 
   Because `__js` blocks are limited in the same way as [::calling-javascript],
   you should use them only when you have determined the code will still
   function correctly without SJS features, and that the frequency of its
   use makes the speed improvement worth the reduced debuggability.
 
-@syntax ?
-@summary Binary version of the ternary operator
+  It is advisable to wrap only complete functions as `__js`. If you wrap code inside
+  an sjs function, note that some control flow features (most notably 
+  `return` and `throw`) will not work as expected from inside the `__js` code.
+
+  ### SJS features supported in __js code
+
+  The code inside a `__js`
+  block will be reproduced as-is into the compiled JS, so it only has access to some of  SJS's 'language sugaring' features. But it will
+  also avoid any overhead imposed by the SJS runtime.
+
+  The following SJS features *are* supported in __js:
+
+  * [::arrow-function]
+  * [::string-interpolation]
+  * [::binary-conditional]
+  * [::double-dot]
+  * [::double-colon]
+  * [::quasi-quote], provided the SJS runtime is present
+  * [::destructure], but only in function argument lists
+  * [::blocklambda], but no `return` or `break` statements are allowed in the blocklambda body
+
+@syntax binary-conditional
+@summary Binary version of the ternary conditional operator `?:`
 @desc
-  The ternary operator in JavaScript takes the form `x ? y : z`:
+  The ternary conditional operator in JavaScript takes the form `x ? y : z`:
 
       var val = x ? y : z;
       

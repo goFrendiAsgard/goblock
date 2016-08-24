@@ -20,14 +20,17 @@ module.exports = function(config) {
 
     proxies: {
       // http tests rely on dynamic behaviour (served by conductance)
-      '/http': 'http://localhost:7071/http'
+      '/http': 'http://localhost:7071/http',
+
+      // bundle-tests rely on conductance bundle functionality
+      '/test/integration/fixtures': 'http://localhost:7071/test/integration/fixtures'
     },
 
     exclude: [],
 
     // test results reporter to use
     // possible values: 'dots', 'progress', 'junit', 'growl', 'coverage'
-    reporters: ['progress'],
+    reporters: ['quiet'],
 
     // web server port
     port: 9876,
@@ -59,9 +62,11 @@ module.exports = function(config) {
     plugins: [
       'karma-chrome-launcher'
       ,'karma-firefox-launcher'
+      ,'karma-ie-launcher'
       ,'karma-script-launcher'
       ,'karma-phantomjs-launcher'
       ,'karma-sjs-adapter'
+      ,'karma-quiet-reporter'
     ],
   });
 };

@@ -3,9 +3,141 @@ var test = testUtil.test;
 @ = require('sjs:test/std');
 
 @context() {||
-  var s = require("sjs:nodejs/stream");
+  var s = @stream = require("sjs:nodejs/stream");
+
+  @context("contents") {||
+    @test("returns a stream of buffers") {||
+      @fs.withReadStream(module.id .. @url.toPath) {|stream|
+        var contents = s.contents(stream);
+        contents .. @isStream .. @assert.ok();
+        contents .. @first .. Buffer.isBuffer .. @assert.ok();
+      }
+    }
+
+    @test("returns a stream of strings if encoding is given") {||
+      @fs.withReadStream(module.id .. @url.toPath) {|stream|
+        var contents = s.contents(stream, 'utf-8');
+        contents .. @isStream .. @assert.ok();
+        contents .. @first .. @isString .. @assert.ok();
+      }
+    }
+
+    function testRetractWhileReading(src) {
+      var retracted = false;
+      waitfor {
+        try {
+          src .. s.contents .. @each {|chunk|
+            console.log("CHUNK #{chunk.length}");
+          };
+          throw new Error("End of stream reached before retraction");
+        } retract {
+          retracted = true;
+        }
+      } or {
+        hold(0);
+      }
+      retracted .. @assert.eq(true, "expected read to be retracted");
+    };
+
+    @test("retraction while reading stdin") {||
+      testRetractWhileReading(process.stdin);
+    }.skip("BUG - see https://github.com/joyent/node/issues/17204");
+
+    @test("retraction while reading fs.ReadableStream") {||
+      @fs.withReadStream(module.id .. @url.toPath) {|stream|
+        testRetractWhileReading(stream);
+      }
+    }
+  }
+
+  @context("pump") {||
+    @test.beforeEach {|s|
+      s.dest = @stream.WritableStringStream();
+    }
+
+    @test("accepts a nodejs stream") {|s|
+      @stream.ReadableStringStream('data', 'ascii') .. @stream.pump(s.dest);
+      s.dest.data .. @assert.eq("data");
+    }
+
+    @test("allows data transformation (deprecated API)") {|s|
+      @stream.ReadableStringStream('data', 'ascii') .. @stream.pump(s.dest, d -> d.toUpperCase());
+      s.dest.data .. @assert.eq("DATA");
+    }
+
+    @test("accepts a sequence::Stream") {|s|
+      ["one", "two", "three"] .. @toStream .. @stream.pump(s.dest);
+      s.dest.contents() .. @assert.eq("onetwothree");
+    }
+
+    @test("accepts an array") {|s|
+      ["one", "two", "three"] .. @stream.pump(s.dest);
+      s.dest.contents() .. @assert.eq("onetwothree");
+    }
+
+    @test("accepts a buffer") {||
+      var dest = new @stream.WritableStream();
+      new Buffer("onetwothree") .. @stream.pump(dest);
+      dest.contents() .. @assert.eq(new Buffer("onetwothree"));
+    }
+
+    @test("accepts a string") {|s|
+      "onetwothree" .. @stream.pump(s.dest);
+      s.dest.contents() .. @assert.eq("onetwothree");
+    }
+
+    @context("pumping a large, buffering duplex stream") {||
+      var { BufferingStream } = require('./buffering_stream.js');
+      var build = function(size) {
+        var b = new Buffer(size);
+        b.fill("x");
+        return b.toString('ascii');
+      };
+
+      var result = [];
+      var expectedSize = 1024;
+
+      var input = build(expectedSize);
+
+      @test("ReadableStream.pipe()") {||
+        // This test is a canary - if it fails, it probably means that our
+        // BufferingStream implementation is wrong, rather than the stream module.
+        require('sjs:nodejs/tempfile').TemporaryFile {|f|
+          var output = f.writeStream();
+          var s = new BufferingStream();
+          s.pipe(output);
+          input .. @toArray .. @each {|chunk|
+            if(!s.write(chunk)) {
+              s .. @wait('drain');
+            }
+          }
+          s.end();
+          output .. @wait('finish');
+          @fs.readFile(f.path, 'ascii').length .. @assert.eq(input.length);
+        }
+      }
+
+      @test("@stream.pump()") {||
+        var duplex = new BufferingStream();
+        waitfor {
+          input .. @toStream .. @stream.pump(duplex);
+        } and {
+          duplex .. @stream.contents .. @each {|chunk|
+            result.push(chunk);
+          }
+        }
+        var totalSize = result.reduce(function(size, chunk) { return size + chunk.length; }, 0);
+        totalSize .. @assert.eq(expectedSize);
+      }
+    }//.skip("BROKEN");
+  }
 
   // ReadableStringStream:
+  test("ReadableStringStream is a readable stream", true, function() {
+    var stream = new s.ReadableStringStream("data");
+    return stream .. @stream.isReadableStream();
+  });
+
   test("ReadableStringStream emits data", "data", function() {
     var stream = new s.ReadableStringStream("data");
     var data = '';
@@ -45,14 +177,6 @@ var test = testUtil.test;
       stream.end('[end]');
     }
     return stream.data;
-  });
-
-  test("pump", "DATA", function() {
-    var src = new s.ReadableStringStream('data', 'ascii');
-    src.pause();
-    var dest = new s.WritableStringStream();
-    s.pump(src, dest, d -> d.toUpperCase());
-    return dest.data;
   });
 
   ;[true, false] .. @each {|byteMode|
@@ -95,7 +219,18 @@ var test = testUtil.test;
       };
 
       rv.read = function() {
-        return getChunk();
+        var rv = getChunk();
+        var self = this;
+        if(rv == null) {
+          if(!ended) {
+            ended = true;
+            spawn(function() {
+              hold(0);
+              self.emit('end');
+            }());
+          }
+        }
+        return rv;
       };
 
       return rv;

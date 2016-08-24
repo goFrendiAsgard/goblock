@@ -14,10 +14,14 @@
   "bin": { "sjs": "sjs" },
   "devDependencies": {
     "karma-sjs-adapter": "~0.2.2",
+    "karma-quiet-reporter": "*",
     "karma-chrome-launcher": "*",
     "karma-firefox-launcher": "*",
     "karma-phantomjs-launcher": "*",
-    "karma-script-launcher": "*"
+    "karma-ie-launcher": "*",
+    "karma-script-launcher": "*",
+    "eslint": "git://github.com/gfxmonk/eslint.git#da9f557b0857c4a4325d324ffe903bdb9a4262a4",
+    "espree":"~1.10.0"
   },
   "engines": {
     "node": ">=0.10.0"
@@ -26,9 +30,9 @@
     "test": "./sjs test/run.html"
   },
   "dependencies": {
-    "fstream": "^1.0.2",
+    "fstream": "^1.0.3",
     "mkdirp": "^0.5.0",
     "rimraf": "^2.2.8",
-    "tar": "^1.0.2"
+    "tar": "^2.0.0"
   }
 }

@@ -77,6 +77,11 @@ var { each, filter } = require('../sequence');
   @summary whether the suite is being run in a browser
 */
 var isBrowser = exports.isBrowser = sys.hostenv == "xbrowser";
+/**
+  @variable isServer
+  @summary whether the suite is being run in nodejs (i.e `!isBrowser`)
+*/
+var isServer = exports.isServer = !isBrowser;
 
 /**
   @variable isWindows
@@ -103,6 +108,42 @@ exports._withRunner = function(runner, fn) {
     if (_runner != runner) throw new Error("runner changed during test collection");
     _runner = null;
   }
+}
+
+var skip_sn = exports._skip_sn = {};
+exports._isSkip = e -> e.is_skip === skip_sn;
+
+/**
+  @function skipTest
+  @param {optional String} [reason] Reason for skipping test
+  @summary Abort the currently executing test, marking it as `skipped`
+  @desc
+    This is similar to the [::Test::skip] method, except it
+    happens during the test body.
+
+    These two examples are _almost_ equivalent:
+
+        test("some function", function() {
+          // test body
+        }).skipIf(someCondition());
+
+        test("some function", function() {
+          if(someCondition()) skipTest();
+          // test body
+        });
+
+    The difference is that in the first case, `someCondition()` is evaluated
+    when the module is loaded. In the second case, `someCondition()` is not
+    evaluated until the test is actually running.
+    
+    This is an important distinction for some conditions which can't easily be
+    checked up front but can be checked during the test's execution.
+*/
+exports.skipTest = function(reason) {
+  var e = new Error("Test skipped: #{reason}");
+  e.reason = reason;
+  e.is_skip = skip_sn;
+  throw e;
 }
 
 /**
@@ -359,9 +400,11 @@ var Context = context.Cls = function(desc, body, module_name) {
 }
 addMetaFunctions(Context);
 
-Context.prototype.withHooks = function(defaultTimeout, fn) {
+Context.prototype.initState = function() {
   this.state = this.parent ? Object.create(this.parent.state) : {};
+};
 
+Context.prototype.withHooks = function(defaultTimeout, fn) {
   try {
     this._withTimeout(defaultTimeout, "beforeAll hooks") {||
       runHooks(this.hooks.before.all, this.state);
@@ -390,6 +433,7 @@ Context.prototype.addChild = function(child) {
 }
 
 Context.prototype.collect = function() {
+  this.initState();
   if (this._collected) {
     logging.verbose("Ignoring double-collection: #{this.fullDescription()}");
     return;

@@ -1,0 +1,32 @@
+# http://www.appveyor.com/docs/appveyor-yml
+environment:
+  nodejs_version: "0.10"
+  NPM: "npm.cmd"
+
+  matrix:
+    - t: unit
+    - t: integration
+
+    # - t: unit
+    #   BROWSERS: IE
+
+    # - t: integration
+    #   BROWSERS: IE
+
+build: off
+
+test_script:
+  - cmd: python tools/bin/sjs-tests --show-failed
+
+matrix:
+  allow_failures:
+    - t: integration
+    - BROWSERS: IE
+
+branches:
+  # build only master and release braches
+  only:
+    - master
+    - /^\d+(\.\d+)+$/
+
+version: "{build}"

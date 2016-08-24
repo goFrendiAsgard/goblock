@@ -410,19 +410,26 @@ Runner.prototype.run = function(reporter) {
       if (test.shouldSkip()) {
         results._skip(result, test.skipReason);
       } else {
-        test.run(defaultTimeout);
-
-        extraGlobals = getGlobals(initGlobals);
-        checkGlobals(test, extraGlobals);
-        results._pass(result);
+        try {
+          test.run(defaultTimeout);
+          extraGlobals = getGlobals(initGlobals);
+          checkGlobals(test, extraGlobals);
+          results._pass(result);
+        } catch(e) {
+          if(e .. suite._isSkip()) {
+            results._skip(result, e.reason);
+          } else {
+            throw e;
+          }
+        }
       }
     } catch (e) {
       results._fail(result, e);
-      if (opts.bail) BAIL = true;
     } finally {
       if (extraGlobals == null) extraGlobals = getGlobals(initGlobals);
       deleteGlobals(extraGlobals);
     }
+    if (opts.bail && results.failed) BAIL = true;
     report('testEnd', result);
     if (suite.isBrowser) hold(0); // don't lock up the browser's UI thread
   };
@@ -459,7 +466,7 @@ Runner.prototype.run = function(reporter) {
   // ----------------------------
   // run the tests
   report('suiteBegin', results);
-  using(logging.logContext({level: this.opts.logLevel})) {
+  logging.logContext({level: this.opts.logLevel}) { ||
     var unusedFilters = this.opts.testFilter.unusedFilters();
     if (unusedFilters.length > 0) {
       throw new UsageError("Some filters didn't match anything: #{unusedFilters .. join(", ")}");
@@ -1161,7 +1168,14 @@ var karma;
   }
   var onUncaught = function(handler) {
     if (suite.isBrowser) {
-      window.onerror = handler;
+      window.onerror = function(msg, url, lineno, column, err) {
+        if (err && err instanceof Error) {
+          handler(err);
+        } else {
+          // wrap lame message-only event into an Error object
+          handler(new Error(msg));
+        }
+      };
     } else {
       process.on('uncaughtException', handler);
     }

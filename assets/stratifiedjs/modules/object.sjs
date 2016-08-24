@@ -217,21 +217,21 @@ __js  exports.setPath = function(subject, path, value) {
   @return {Boolean}
   @summary Return whether the given object has a non-inherited property named `prop`.
 */
-exports.has = function(subject, key) { return hasProperty.call(subject, key); }
-exports.hasOwn = function(subject, key) { return hasOwnProperty.call(subject, key); }
+__js exports.has = function(subject, key) { return hasProperty.call(subject, key); }
+__js exports.hasOwn = function(subject, key) { return hasOwnProperty.call(subject, key); }
 
 /**
-   @function keys
+   @function allKeys
    @param {Object} [obj]
    @return {sequence::Stream}
    @summary  Returns a [sequence::Stream] of the names of `obj`'s enumerable properties, including those defined on `obj`'s prototype chain.
    @desc     
       See also [::ownKeys].
 */
-function keys(obj) {  
+function allKeys(obj) {  
   return Stream(function(r) { for (var p in obj) r(p) });
 }
-exports.keys = keys;
+exports.allKeys = exports.keys = allKeys;
 
 /**
    @function ownKeys
@@ -243,21 +243,21 @@ exports.keys = keys;
        Note that you can also use the ECMA-263/5 function `Object.keys` - 
        on older JS engines StratifiedJS adds a shim to emulate this function. 
 
-       See also [::keys].
+       See also [::allKeys].
 */
 var ownKeys = exports.ownKeys = Object.keys;
 
 /**
-  @function values
+  @function allValues
   @param    {Object} [obj]
   @return   {sequence::Stream}
   @summary  Returns a [sequence::Stream] of the values of `obj`'s enumerable properties,
             including those defined on `obj`'s prototype chain.
 */
-function values(obj) {
-  return keys(obj) .. transform(k => obj[k]);
+function allValues(obj) {
+  return allKeys(obj) .. transform(k -> obj[k]);
 }
-exports.values = values;
+exports.allValues = exports.values = allValues;
 
 /**
   @function ownValues
@@ -267,21 +267,21 @@ exports.values = values;
             excluding those defined on `obj`'s prototype chain.
 */
 function ownValues(obj) {
-  return ownKeys(obj) .. transform(k => obj[k]);
+  return ownKeys(obj) .. transform(k -> obj[k]);
 }
 exports.ownValues = ownValues;
 
 /**
-  @function propertyPairs
+  @function allPropertyPairs
   @param    {Object} [obj]
   @return   {sequence::Stream}
   @summary  Returns a [sequence::Stream] `[key1,val1], [key2,val2], ...` of `obj`'s 
             enumerable properties, including those defined on `obj`'s prototype chain.
 */
-function propertyPairs(obj) {
-  return keys(obj) .. transform(k => [k,obj[k]]);
+function allPropertyPairs(obj) {
+  return allKeys(obj) .. transform(k -> [k,obj[k]]);
 }
-exports.propertyPairs = propertyPairs;
+exports.allPropertyPairs = exports.propertyPairs = allPropertyPairs;
 
 /**
   @function ownPropertyPairs
@@ -291,7 +291,7 @@ exports.propertyPairs = propertyPairs;
             enumerable properties, excluding those defined on `obj`'s prototype chain.
 */
 function ownPropertyPairs(obj) {
-  return ownKeys(obj) .. transform(k => [k,obj[k]]);
+  return ownKeys(obj) .. transform(k -> [k,obj[k]]);
 }
 exports.ownPropertyPairs = ownPropertyPairs;
 
@@ -303,8 +303,8 @@ exports.ownPropertyPairs = ownPropertyPairs;
    @summary Create an object from a [sequence::Stream] `[key1,val1],[key2,val2],...` of property pairs
 */
 function pairsToObject(sequence, prototype) {
-  if (prototype === undefined) prototype = Object.prototype;
-  var rv = Object.create(prototype);
+  __js if (prototype === undefined) prototype = Object.prototype;
+  __js var rv = Object.create(prototype);
   sequence .. each {
     |prop|
     rv[prop[0]] = prop[1];
@@ -336,6 +336,7 @@ exports.extend = extendObject;
         appear in the argument list. I.e. properties appearing later will override
         properties appearing in objects to the left.
       * `source` can be a multiple object arguments, or a single Array argument.
+      * null or undefined source objects will be ignored.
 */
 exports.merge = mergeObjects;
 
@@ -407,9 +408,22 @@ __js exports.override = function(/*dest, source...*/) {
   return dest;
 };
 
+/**
+   @function mapValues
+   @summary Create an object `{key1: f(val1), key2: f(val2), ... }` from a source object `{key1: val1, key2: val2, ...}`
+   @param {Object} [obj] Source object
+   @param {Function} [f] Transformation function
+   @return {Object}
+   @desc
+      Source properties are determined by [::ownPropertyPairs], i.e. properties on `obj`'s prototype chain are
+      excluded.
+
+*/
+exports.mapValues = (obj, f) -> obj .. ownPropertyPairs .. transform([k,v] -> [k,f(v)]) .. pairsToObject;
 
 /**
    @function construct
+   @deprecated Under review
    @param {Object} [proto] Prototype to inherit from
    @param {Arguments} [arguments] Arguments to pass to `_init`
    @return {Object} The newly-constructed object
@@ -423,13 +437,14 @@ __js exports.override = function(/*dest, source...*/) {
           return rv;
 */
 exports.construct = function(proto, args) {
-  var rv = Object.create(proto);
+  __js var rv = Object.create(proto);
   if (rv._init) rv._init.apply(rv, args);
   return rv;
 };
 
 /**
    @function Constructor
+   @deprecated Under review
    @param {Object} [proto] Prototype to inherit from
    @return {Object} An object constructor
    @summary Create a constructor function for the given prototype.

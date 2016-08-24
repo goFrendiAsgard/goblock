@@ -184,7 +184,7 @@ function getTopReqParent_hostenv() {
 */
 function resolveSchemelessURL_hostenv(url_string, req_obj, parent) {
   if (/^\.\.?\//.test(url_string))
-    return exports.canonicalizeURL(url_string, parent.id);
+    return exports.normalizeURL(url_string, parent.id);
   else if (!isWindows && /^\//.test(url_string))
     // We *could* allow this, but it would break whenever URL semantics != path semantics
     // (e.g windows).
@@ -194,12 +194,20 @@ function resolveSchemelessURL_hostenv(url_string, req_obj, parent) {
 }
 
 
-// reads data from a stream; returns null if the stream has ended;
-// throws if there is an error
-var readStream = exports.readStream = function readStream(stream, size) {
-  if(stream.readable === false) return null;
-  var data = stream.read(size);
-  if(data !== null) return data;
+// reads data from a stream, as an array of Strings / Buffers
+// (whatever the stream gives). Throws if there is an error.
+// If a second `fn` argument is passed, calls that with each chunk
+// (iterating instead of eagerly reading in the entire data)
+var streamContents = exports.streamContents = function (stream, fn) {
+  var rv;
+  var chunk;
+  var ended = false;
+  var emitting = false;
+  if(!fn) {
+    rv = [];
+    fn = rv.push.bind(rv);
+  }
+  if(stream.readable === false) return rv;
 
   waitfor {
     waitfor (var exception) {
@@ -210,20 +218,33 @@ var readStream = exports.readStream = function readStream(stream, size) {
       stream.removeListener('error', resume);
       stream.removeListener('end', resume);
     }
-    if (exception) throw exception;
-    return null;
-  }
-  or {
-    waitfor () {
-      stream.on('readable', resume);
+    if(exception) throw exception;
+    if(emitting) {
+      // if we see `end` while the other branch is emitting, don't retract it.
+      // Just set `ended`, and the other branch will break out once it's done emitting.
+      ended = true;
+      hold();
     }
-    finally {
-      stream.removeListener('readable', resume);
+  } or {
+    while(!ended) {
+      __js chunk = stream.read();
+      if(chunk === null) {
+        // wait for chunk
+        waitfor () {
+          stream.on('readable', resume);
+        }
+        finally {
+          stream.removeListener('readable', resume);
+        }
+        __js chunk = stream.read();
+        if(chunk === null) break;
+      }
+      emitting = true;
+      fn(chunk);
+      emitting = false;
     }
-    // XXX If two readers are watching for `data`, this could
-    // signal EOF prematurely. Don't use two readers.
-    return stream.read(size);
   }
+  return rv;
 }
 
 /**
@@ -231,65 +252,72 @@ var readStream = exports.readStream = function readStream(stream, size) {
    @summary See [sjs:http::request] for docs
 */
 function request_hostenv(url, settings) {
-  var opts = exports.mergeObjects({
-                                     method : "GET",
-                                     // query : undefined
-                                     // body : undefined,
-                                     headers : {},
-                                     // username : undefined
-                                     // password : undefined
-                                     // response : 'string',
-                                     throwing : true,
-                                     max_redirects : 5
-                                     // agent : undefined
-                                     // ca : undefined
-                                  },
-                                  settings);
-  
-  // extract & remove options that are meant for me (not http.request)
-  var pop = function(k) {
-    var rv = opts[k];
-    delete opts[k];
-    return rv;
-  };
-  var responseMode = pop('response') || 'string';
-  var body = pop('body');
-  var throwing = pop('throwing');
-  var max_redirects = pop('max_redirects');
-  var username = pop('username');
-  var password = pop('password');
-  var query = pop('query');
+  __js {
+    var opts = exports.mergeObjects(
+      {
+        method : "GET",
+        // query : undefined
+        // body : undefined,
+        headers : {},
+        // username : undefined
+        // password : undefined
+        // response : 'string',
+        throwing : true,
+        max_redirects : 5
+        // agent : undefined
+        // ca : undefined
+      },
+      settings);
+    
+    // extract & remove options that are meant for me (not http.request)
+    var pop = function(k) {
+      var rv = opts[k];
+      delete opts[k];
+      return rv;
+    };
+    var responseMode = pop('response') || 'string';
+    var body = pop('body');
+    var throwing = pop('throwing');
+    var max_redirects = pop('max_redirects');
+    var username = pop('username');
+    var password = pop('password');
+    var query = pop('query');
+    
+    var url_string = exports.constructURL(url, query);
 
-  var url_string = exports.constructURL(url, opts.query);
-  //console.log('req '+url_string);
-  // XXX ok, it sucks that we have to take this URL apart again :-/
-  var url = exports.parseURL(url_string);
-  var protocol = url.protocol;
+
+    // XXX ok, it sucks that we have to take this URL apart again :-/
+    var url = exports.parseURL(url_string);
+    var protocol = url.protocol;
+
+    opts.host = url.host;
+    opts.port = url.port || (protocol === 'https' ? 443 : 80);
+    opts.path = url.relative || '/';
+    
+    if (!opts.headers['Host'])
+      opts.headers.Host = url.authority;
+    
+    if (!opts.headers['User-Agent'])
+      opts.headers['User-Agent'] = "Oni Labs StratifiedJS engine"; //XXX should have a version here
+    
+    if (body && !opts.headers['Transfer-Encoding']) {
+      // opts.headers['Transfer-Encoding'] = 'chunked';
+      // Some APIs (github, here's looking at you) don't accept chunked encoding, 
+      // so for maximum compatibility we determine the content length:
+      body = new Buffer(body);
+      opts.headers['Content-Length'] = body.length;
+    }
+    else {
+      opts.headers['Content-Length'] = 0;
+    }
+    if (username != null && password != null)
+      opts.auth = username + ":" + password;
+    
+  } /* __js */
+  
   if(!(protocol === 'http' || protocol === 'https')) {
     throw new Error('Unsupported protocol: ' + protocol);
   }
-  opts.host = url.host;
-  opts.port = url.port || (protocol === 'https' ? 443 : 80);
-  opts.path = url.relative || '/';
-
-  if (!opts.headers['Host'])
-    opts.headers.Host = url.authority;
-
-  if (!opts.headers['User-Agent'])
-    opts.headers['User-Agent'] = "Oni Labs StratifiedJS engine"; //XXX should have a version here
-
-  if (body && !opts.headers['Transfer-Encoding']) {
-    // opts.headers['Transfer-Encoding'] = 'chunked';
-    // Some APIs (github, here's looking at you) don't accept chunked encoding, 
-    // so for maximum compatibility we determine the content length:
-    body = new Buffer(body);
-    opts.headers['Content-Length'] = body.length;
-  }
-  else {
-    opts.headers['Content-Length'] = 0;
-  }
-  if (username != null && password != null)
-    opts.auth = username + ":" + password;
 
   var request = __oni_rt.nodejs_require(protocol).request(opts);
   request.end(body);
@@ -351,14 +379,17 @@ function request_hostenv(url, settings) {
     switch (response.statusCode) {
     case 300: case 301: case 302: case 303: case 307:
       if (max_redirects > 0) {
-        //console.log('redirect to ' + response.headers['location']);
-        opts.headers.host = null;
-        --max_redirects;
-        // we use canonicalizeURL here, because some sites
+        response.socket.end(); // otherwise we fill up the active request pool and deadlock
+        opts = exports.mergeObjects(settings, {
+          headers: exports.mergeObjects(settings, { host: null }),
+          max_redirects: max_redirects-1,
+        });
+        //console.log('redirect to ' + response.headers['location'] + ', with opts', opts);
+        // we use normalizeURL here, because some sites
         // (e.g. dailymotion) use a relative url in the Location
         // header (which is forbidden according to RFC1945)
         return request_hostenv(
-          exports.canonicalizeURL(response.headers['location'],url_string), 
+          exports.normalizeURL(response.headers['location'],url_string),
           opts);
       }
       // else fall through
@@ -373,11 +404,7 @@ function request_hostenv(url, settings) {
         err.response = response;
         // XXX support for returning streambuffer
         response.setEncoding('utf8');
-        response.data = "";
-        var data;
-        while (data = readStream(response)) {
-          response.data += data;
-        }
+        response.data = streamContents(response).join('');
         err.data = response.data;
         throw err;
       } else if (responseMode === 'string') {
@@ -394,12 +421,8 @@ function request_hostenv(url, settings) {
   }
   else if (responseMode === 'arraybuffer') {
     
-    var buf = new Buffer(0);
-    var data;
-    while (data = readStream(response)) {
-      buf = Buffer.concat([buf, data]);
-      // XXX should we have some limit on the size here?
-    }
+    // XXX should we have some limit on the size here?
+    var buf = Buffer.concat(streamContents(response));
 
     // see http://stackoverflow.com/questions/8609289/convert-a-binary-nodejs-buffer-to-javascript-arraybuffer
     __js {
@@ -419,12 +442,7 @@ function request_hostenv(url, settings) {
   else {
     // responseMode === 'string' || responseMode === 'full'
     response.setEncoding('utf8');
-    response.data = "";
-    var data;
-    while (data = readStream(response)) {
-      response.data += data;
-      // XXX should we have some limit on the size here?
-    }
+    response.data = streamContents(response).join('');
     
     if (responseMode === 'string')
       return response.data;
@@ -524,6 +542,31 @@ function getHubs_hostenv() {
   ];
 }
 
+var js_loader = function(src, descriptor) {
+  var nodejs_version = process.versions.node.split('.').map(x -> parseInt(x, 10));
+  var vm = __oni_rt.nodejs_require("vm");
+  js_loader = (nodejs_version[0] === 0 && nodejs_version[1] <= 10)
+    ? function(src, descriptor) {
+        // old api (pre 0.12) - wrap global object and then extend it:
+        var ctx = vm.createContext(global);
+        ctx.module = descriptor;
+        ctx.exports = descriptor.exports;
+        ctx.require = descriptor.require;
+        vm.runInContext(src, ctx, "module " + descriptor.id);
+      }
+    : function(src, descriptor) {
+        // new api (since 0.12) - create new global object and then wrap it:
+        var ctx = Object.create(global);
+        ctx.module = descriptor;
+        ctx.exports = descriptor.exports;
+        ctx.require = descriptor.require;
+        var vm = __oni_rt.nodejs_require("vm");
+        ctx = vm.createContext(ctx);
+        vm.runInContext(src, ctx, "module " + descriptor.id);
+      };
+  return js_loader(src, descriptor);
+};
+
 function getExtensions_hostenv() {
   return {
     // normal sjs modules
@@ -536,14 +579,8 @@ function getExtensions_hostenv() {
     'mho': default_compiler,
 
     // plain non-sjs js modules (note: for 'nodejs' scheme we bypass this)
-    'js': function(src, descriptor) {
-      var vm = __oni_rt.nodejs_require("vm");
-      var sandbox = vm.createContext(global);
-      sandbox.module = descriptor;
-      sandbox.exports = descriptor.exports;
-      sandbox.require = descriptor.require;
-      vm.runInNewContext(src, sandbox, "module " + descriptor.id);
-    },
+    'js': js_loader,
+
     'html': html_sjs_extractor
   };
 }

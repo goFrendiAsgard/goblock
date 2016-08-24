@@ -35,7 +35,7 @@
   @home      sjs:nodejs/stream
   @hostenv   nodejs
   @desc
-    ### Backwards compatility warning:
+    ### Warning: Backwards compatility
 
     The nodejs stream API changed significantly in nodejs 0.10. The pre-0.10 API
     is not supported by StratifiedJS.
@@ -46,40 +46,56 @@
         var Readable = require('nodejs:stream').Readable;
         var newStream = new Readable().wrap(oldStream);
 
-    ----
 */
 
-if (require('builtin:apollo-sys').hostenv != 'nodejs')
+var sys = require('builtin:apollo-sys');
+if (sys.hostenv != 'nodejs')
   throw new Error('The nodejs/stream module only runs in a nodejs environment');
 
 var nodeVersion = process.versions.node.split('.');
-@ = require(['../sequence', '../object', '../event']);
+@ = require(['../sequence', '../object', '../array', '../event', '../cutil', '../string', '../bytes']);
 @assert = require('../assert');
 
 /**
-  @function read
-  @summary  Read a single piece of data from `stream`.
-  @param    {Stream} [stream] the stream to read from
-  @param    {optional Number} [length] the maximum number of bytes to read
-  @return   {String|Buffer}
+  @function isReadableStream
+  @param    {Object} [stream]
+  @return   {Boolean}
+  @summary  Test whether `stream` is a readable nodejs stream
   @desc
-    This function calls `stream.read()`.
+    This function returns true if the given object inherits from either:
 
-    If no data is currently available, it waits for the
-    `readable` event on the stream, and then returns one
-    piece of data.
+     - nodejs:net::Socket
+     - nodejs:stream::ReadableStream
 
-    Returns `null` when the stream has ended and there is no
-    more data.
-
-    If stream emits `error`, the error is thrown.
+    There may be objects which implement the readable stream interface
+    but which do not inherit from any of these prototypes,
+    in which case this test will return `false`.
 */
-// implementation in apollo-sys-nodejs.sjs
-exports.read = require('builtin:apollo-sys').readStream;
+var readableStreamProto = require('nodejs:stream').Readable.prototype;
+var socketProto = require('nodejs:net').Socket.prototype;
+var fsReadStreamProto = require('nodejs:fs').ReadStream.prototype;
+__js {
+  exports.isReadableStream = s -> readableStreamProto.isPrototypeOf(s)
+    || socketProto.isPrototypeOf(s)
+    || fsReadStreamProto.isPrototypeOf(s)
+  ;
+}
+
+// reads a chunk, but the parent must be listening for `end` / `error`
+exports._read = function readStream(stream, size) {
+  var chunk = stream.read(size);
+  if(chunk === null) {
+    // wait for chunk
+    stream .. @wait(['readable']);
+    chunk = stream.read(size);
+  }
+  return chunk
+}
 
 /**
+
   @function readAll
-  @summary  Read and return the entire contents of `stream` as a single string.
+  @summary  Read and return the entire contents of `stream` as a single buffer or string.
   @param    {Stream} [stream] the stream to read from
   @param    {optional String} [encoding]
   @return   {String|Buffer}
@@ -87,13 +103,11 @@ exports.read = require('builtin:apollo-sys').readStream;
     Repeatedly calls `read` until the stream ends. This function
     should not be used on infinite or large streams, as it will buffer the
     entire contents in memory.
+
+    Consider using [::contents], which can often be just as convenient.
 */
 exports.readAll = function(stream, encoding) {
-  var result = [];
-  var data;
-  while((data = exports.read(stream, encoding)) !== null) {
-    result.push(data);
-  }
+  var result = sys.streamContents(stream);
   if(encoding || (result.length > 0 && !Buffer.isBuffer(result[0]))) {
     return result.join('');
   }
@@ -101,46 +115,69 @@ exports.readAll = function(stream, encoding) {
 };
 
 
-/**
-  @function write
-  @summary  Write data to the `dest` stream.
-  @param    {Stream} [dest] the stream to write to
-  @param    {String|Buffer} [data] the data to write
-  @param    {optional String} [encoding] the encoding, if `data` is a string
-  @desc
-    If the data cannot be written immediately, this function
-    will wait for a `drain` event on the `dest` stream before
-    returning.
-
-    Any additional arguments (after `data`) are passed through
-    to the underlying `write` function.
-*/
-exports.write = function(dest, data/*, ...*/) {
+// warning: parent must listen for errors, _write doesn't do that
+var _write = exports._write = function(dest, data /*, ... */) {
   var wrote = dest.write.apply(dest, Array.prototype.slice.call(arguments, 1));
   if(!wrote) {
-    waitfor {
-      dest .. @wait('drain');
-    } or {
-      throw dest .. @wait('error');
-    }
+    dest .. @wait('drain');
   }
 };
 
 /**
   @function contents
   @summary  Return a [sequence::Stream] of chunks of data from a nodejs stream
-  @param    {Stream} [dest] the stream to read from
-  @return   {sequence::Stream} A sequence of data chunks
+  @param    {Stream} [stream] the stream to read from
+  @param    {optional String} [encoding]
+  @return   {sequence::Stream} A sequence of data chunks (String or Buffer)
   @desc
+    The return value will be a sequence of Strings if `encoding` is provided,
+    otherwise the elements will be whatever data type the underlying stream
+    emits.
+
     The returned stream will end only when the underlying nodejs stream
     ends (or emits an error).
+
+    **Note:** if `stream` is a [./child-process::] `stdout` or `stderr` stream,
+    this function will eagerly read all data as it arrives and buffer it in memory,
+    rather than only reading new data when needed. This is the only way to ensure
+    data is not lost due to [a bug in nodejs](https://github.com/joyent/node/issues/6595).
 */
-exports.contents = function(stream) {
+exports.contents = function(stream, encoding) {
+  if(encoding) stream.setEncoding(encoding);
+
+  // certain streams (e.g child stdout) cannot be safely
+  // read on-demand - they drop data when nobody is watching.
+  // In that case, we have no choice but to buffer in memory
+  // and hope the stream gets drained quickly enough to keep
+  // memory usage reasonable.
+  if(stream.__oni_must_read_immediately) {
+    var buf = [];
+    var eof = false;
+    var error = null;
+    var check = @Emitter();
+    stream.on('data', function(d) {
+      buf.push(d);
+      check.emit();
+    });
+    stream.on('error', function(e) {
+      error = e;
+      check.emit();
+    });
+    stream.on('end', function(e) {
+      eof = true;
+      check.emit();
+    });
+    return @Stream(function(emit) {
+      while(true) {
+        while(buf.length > 0) emit(buf.shift());
+        if (error) throw error;
+        if (eof) return;
+        check .. @wait();
+      }
+    });
+  }
   return @Stream(function(emit) {
-    var data;
-    while((data = exports.read(stream)) !== null) {
-      emit(data);
-    }
+    sys.streamContents(stream, emit);
   });
 }
 
@@ -153,9 +190,19 @@ exports.contents = function(stream) {
   @desc
     This function ends the stream. It waits for the stream to actually
     be done before returning.
+
+    Typically [::pump] will end the stream for you.
 */
+var _end = function(dest) {
+  waitfor {
+    dest .. @wait(['close','finish']);
+  } and {
+    dest.end();
+  }
+};
+
 exports.end = function(dest, data, encoding) {
-  // XXX we'd like to use dest.end(data, encoding, resume)
+  // we might like to use dest.end(data, encoding, resume)
   // but even core nodejs core disregard that and hang
   // the process (e.g https://github.com/joyent/node/issues/8759)
   if (data) {
@@ -164,11 +211,7 @@ exports.end = function(dest, data, encoding) {
   waitfor {
     throw dest .. @wait('error');
   } or {
-    waitfor {
-      dest .. @wait(['close','finish']);
-    } and {
-      dest.end();
-    }
+    _end(dest);
   }
 }
 
@@ -176,35 +219,53 @@ exports.end = function(dest, data, encoding) {
 /**
   @function pump
   @summary  Keep writing data from `src` into `dest` until `src` ends.
-  @param    {Stream|sequence::Stream} [src] the source stream
+  @param    {Stream|String|bytes::Bytes|sequence::Sequence} [src] the source data
   @param    {String} [dest] the destination stream
-  @param    {optional Function} [fn] the processing function
+  @param    {optional Settings} [opts]
+  @setting  {Boolean} [end=true] end `dest` after writing
   @return   {Stream} `dest`
   @desc
+    If passed a single String or [bytes::Bytes], the data will be
+    written as a single chunk. Otherwise, `src` will be
+    iterated and written to `dest` as capacity allows.
+
     This function will not return until the `src` stream has ended,
-    although it will not send `end` to `dest`.
+    and all data has been written to `dest`.
 
-    If `fn` is provided, each piece of data will be passed through
-    it in turn. e.g. to produce an uppercase version of a stream:
-
-        stream.pump(src, dest, function(data) { return data.toUpperCase(); })
-
-    This function returns `dest`, to support the common idiom of:
-
-        source .. @stream.pump(dest) .. @stream.end();
+    If the `end` option is not `false`, this function will also call [::end] on `dest`.
 */
-exports.pump = function(src, dest, fn) {
-  var data;
-  var iter = function(data) {
-    if(fn) data = fn(data);
-    exports.write(dest, data);
-  }
-  if(@isStream(src)) {
-    src .. @each(iter);
+exports.pump = function(src, dest, fn_or_opts) {
+  var fn, opts;
+  if (typeof(fn_or_opts) === 'function') {
+    fn = fn_or_opts;
+    opts = null;
   } else {
-    while((data = exports.read(src)) !== null) {
-      iter(data);
+    fn = null;
+    opts = fn_or_opts;
+  }
+  opts = opts || {};
+  var end = opts.end !== false;
+
+  waitfor {
+    throw dest .. @wait('error');
+  } or {
+    if (@isString(src)) {
+      _write(dest, src);
+    } else if (@isBytes(src)) {
+      _write(dest, src .. @toBuffer);
+    } else {
+      // if it's not already a sequence, it should be a stream
+      // which doesn't inherit from ReadableStream. Force it:
+      if (!(@isSequence(src))) src = exports.contents(src);
+
+      // old API, allowed a transform function
+      if(fn) src = src .. @transform(fn);
+
+      src .. @each {|data|
+        _write(dest, @isString(data) ? data : data .. @toBuffer);
+      }
     }
+    if(end) _end(dest);
   }
   return dest;
 };
@@ -341,19 +402,26 @@ exports.WritableStringStream = function(enc) {
   @function DelimitedReader.read
   @summary Read the next available data from the underlying stream
   @desc
-    This does the same thing as calling [::read] on the underlying stream,
-    except that it may return buffered data which was read (but not rerurned) by
-    a previous call to [::DelimitedReader::readUntil].
+    This returns a single chunk from the underlying stream.
+
+    It may either cause a read on the underlying stream, or return
+    buffered data which was read (but not rerurned) by a previous
+    call to [::DelimitedReader::readUntil].
 */
 var DelimitedReader = function(stream) {
   var pending = [];
+  var error = @Condition();
+  stream.on('error', function(e) { error.set(e); });
+  stream.on('end', function(e) { error.set(null); });
   var convertSentinel = null;
-  var ended = false;
   var _read = function() {
-    if (ended) return null;
-    var buf = exports.read(stream);
-    if (buf === null) ended = true;
-    return buf;
+    waitfor {
+      var err = error.wait();
+      if(err === null) return null;
+      throw err;
+    } or {
+      return exports._read(stream);
+    }
   };
 
   return {
@@ -435,8 +503,8 @@ exports.DelimitedReader = DelimitedReader;
 /**
   @function lines
   @param    {Stream} [stream] the stream to read from
+  @param    {optional String} [encoding]
   @param    {optional String} [sep="\n"]
-  @param    {optional String} [encoding="utf-8"]
   @return   {../sequence::Stream} A sequence of lines
   @summary  Return a [../sequence::Stream] of lines from a nodejs Stream
   @desc
@@ -457,7 +525,8 @@ exports.DelimitedReader = DelimitedReader;
     If stream has no encoding (i.e it returns Buffer objects),
     `sep` will be treated as an ASCII byte.
 */
-exports.lines = function(stream, sep, encoding) {
+//TODO: convert this to a stream function, possibly in sequence?
+exports.lines = function(stream, encoding, sep) {
   if (encoding) stream.setEncoding(encoding);
   var reader = DelimitedReader(stream);
   if(!sep) sep = '\n';

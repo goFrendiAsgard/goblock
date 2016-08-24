@@ -122,6 +122,13 @@ testEq("isStream()", true, function() {
   return !s.isStream([1,2,3,4]) && s.isStream([1,2,3,4] .. s.take(5));
 });
 
+@test("concrete sequences") {||
+  [ 1, 2, 3] .. s.isConcreteSequence .. @assert.ok;
+  "123" .. s.isConcreteSequence .. @assert.ok;
+  ([1,2,3] .. s.toStream()) .. s.isConcreteSequence .. @assert.notOk;
+};
+
+
 testEq("skip", "45", function() {
   var rv = '';
   [1,2,3,4,5] .. s.skip(3) .. s.each { |x| rv += x }
@@ -284,6 +291,17 @@ testEq('filter', {checked: [1,2,3], result: [1,3]}, function() {
   return {checked:checked, result:result};
 });
 
+test('transform.filter') {||
+  var rv = [1,2,3, 4, 5] .. s.transform.filter(x -> x % 2 == 0 ? x*2);
+  rv .. s.isStream() .. assert.ok();
+  rv .. s.toArray() .. assert.eq([4, 8]);
+};
+
+test('map.filter') {||
+  var rv = [1,2,3, 4, 5] .. s.map.filter(x -> x % 2 == 0 ? x*2);
+  rv .. assert.eq([4, 8]);
+};
+
 test('filter with no arguments') {||
   s.filter([1,true, 0, 3, null]) .. s.toArray() .. assert.eq([1, true, 3]);
 };
@@ -313,6 +331,20 @@ testEq('reduce1 on empty array', 'reduce1 on empty sequence', function() {
     return e.message;
   }
 });
+
+testEq('scan', [3, 6], function() {
+  return s.scan([1,2,3], function(accum, el) { return accum + el; }) .. s.toArray();
+});
+
+test('scan on empty or single-element array') {||
+  [] .. s.scan(x -> x) .. s.toArray .. @assert.eq([]);
+  [1] .. s.scan(x -> x) .. s.toArray .. @assert.eq([]);
+};
+
+test('all & any predicate is optional') {||
+  [true] .. s.all() .. assert.eq(true);
+  [false] .. s.any() .. assert.eq(false);
+}
 
 testEq('any.par returns early', {checked: [3, 2], result: true}, function() {
   var checked = [];
@@ -534,6 +566,10 @@ testEq('concat([[1,2],[3,4]])', [1,2,3,4], function () { return s.concat([[1,2],
 testEq('concat(Stream([1,2],[3,4]))', [1,2,3,4], function () { return s.concat(nonRepeatableSequence([[1,2], [3,4]])) .. toArray; });
 
 context('partition') {||
+  testEq('partition(integers(1,10) .. toArray, x->x%2)', [[1, 3, 5, 7, 9], [2, 4, 6, 8, 10]], function() {
+    return s.partition(s.integers(1, 10) .. s.toArray, x -> x%2);
+  });
+
   testEq('partition(integers(1,10), x->x%2)', [[1, 3, 5, 7, 9], [2, 4, 6, 8, 10]], function() {
     return s.partition(s.integers(1, 10), x -> x%2) .. s.map(s.toArray);
   });
@@ -631,6 +667,19 @@ context('zip') {||
   }
 }
 
+test('product') {||
+  s.product([1,2], [3,4,5], [6,7]) .. s.toArray .. assert.eq([
+    [1,3,6], [1,3,7], [1,4,6], [1,4,7], [1,5,6], [1,5,7],
+    [2,3,6], [2,3,7], [2,4,6], [2,4,7], [2,5,6], [2,5,7]
+  ]);
+
+  s.product([1]) .. s.toArray .. assert.eq([[1]]);
+
+  s.product([1,2], [3], [4]) .. s.toArray .. assert.eq([
+    [1,3,4], [2,3,4]
+  ]);
+
+}
 
 test('groupBy') {||
   [2,4,6,7,9,10] .. s.groupBy(even) .. s.toArray .. assert.eq([
@@ -689,20 +738,57 @@ context('unique') {||
 }
 
 context('slice') {||
-  var seq = [0,1,2,3,4,5];
+  var seq = ['0','1','2','3','4','5'];
+
   test('parity with array.slice()') {||
     // just brute force all interesting indexes for our input
     var indexes = [undefined, -7, -6, -5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5, 6, 7];
+
+
+    var flattenToString = arr -> arr .. s.map(String) .. s.join;
+    var conversions = [
+      ['toArray', s.toArray],
+      ['toStream', s.toStream],
+      ['flattenToString', flattenToString],
+      ['flattenToTypedArray',
+        arr -> new Uint8Array(arr .. @concat .. @map(ch -> ch.charCodeAt(0))),
+        String.fromCharCode
+      ],
+    ];
+
+    if(@isServer) {
+      conversions.push(['flattenToBuffer', arr -> new Buffer(arr .. flattenToString), String.fromCharCode]);
+    } else {
+      conversions.push(['toNodeList', function(arr) {
+        var parent = document.createElement('div');
+        arr .. s.each {|text|
+          var node = document.createElement('span');
+          node.appendChild(document.createTextNode(text));
+          parent.appendChild(node);
+        }
+        return parent.childNodes;
+      }, (node) -> node.textContent]);
+    }
+
     indexes .. s.each {|start|
       indexes .. s.each {|end|
         var args = [start];
         if (end !== undefined) args.push(end);
-
-        var desc = "seq .. slice(#{args.join(",")})";
-        var result = seq .. s.slice(start, end);
         var expected = seq.slice.apply(seq, args);
-        result .. toArray .. assert.eq(expected, desc);
-        result .. toArray .. assert.eq(expected, "(re-enumerate) #{desc}");
+
+        conversions .. s.each {|[method, convert, convertBack]|
+          var desc = "seq .. #{method} .. slice(#{args.join(",")})";
+          var input = seq .. convert();
+          var result = input .. s.slice(start, end);
+          if(convertBack) result = result .. s.map(convertBack);
+          result .. toArray .. assert.eq(expected, desc);
+          result .. toArray .. assert.eq(expected, "(re-enumerate) #{desc}");
+
+          // we may gain concreteness in some code paths, but we should never lose it:
+          if(input .. s.isConcreteSequence) {
+            s.isConcreteSequence(result) .. assert.ok("result lost concreteness in #{desc}");
+          }
+        }
       }
     }
   }
@@ -757,21 +843,31 @@ context('intersperse') {||
 
 }
 
+context('intersperse_n_1') {||
+  testEq('[1, 2, 3, 4, 5] .. intersperse_n_1(6, 7)', [1,6,2,6,3,6,4,7,5], function() {
+    return [1, 2, 3, 4, 5] .. s.intersperse_n_1(6, 7) .. s.toArray;
+  });
+
+  testEq('[1] .. intersperse_n_1(2, 3)', [1], function() {
+    return [1] .. s.intersperse_n_1(2, 3) .. s.toArray;
+  });
+
+  testEq('[] .. intersperse_n_1(1,2)', [], function() {
+    return [] .. s.intersperse_n_1(1,2) .. s.toArray;
+  });
+
+  testEq('[1,2] .. intersperse_n_1(3, 4)', [1,4,2], function() {
+    return [1,2] .. s.intersperse_n_1(3, 4) .. s.toArray;
+  });
+
+}
+
+
 context("iterable nodejs datatypes") {||
+  var stream = require('sjs:nodejs/stream');
   test("Buffer") {||
     new Buffer("12345") .. s.isSequence() .. assert.eq(true);
     new Buffer("12345") .. s.take(3) .. s.toArray .. assert.eq([49, 50, 51]);
-  }
-
-  test("Stream") {||
-    var contents = '';
-    var myPath = module.id .. @url.toPath();
-    var stream = @fs.fileContents(myPath, 'utf-8');
-    stream .. s.isSequence() .. assert.eq(true);
-    stream .. @each {|chunk|
-      contents += chunk;
-    }
-    contents.slice(0, 50) .. @assert.eq(@fs.readFile(myPath, 'utf-8').slice(0, 50));
   }
 }.serverOnly();
 
@@ -949,6 +1045,43 @@ context("join") {||
       ]) .. s.join(new Buffer('||')) .. assert.eq(new Buffer('abc||def', 'ascii'));
     }
   }.skipIf(@isBrowser || process.versions.node.split('.') .. @map(i -> parseInt(i, 10)) .. @cmp([0, 8]) < 0, "nodejs 0.6 lacks Buffer.concat")
+
+  context("on TypedArrays") {||
+    test("with no separator") {||
+      nonRepeatableSequence([
+        new Uint8Array([1, 2, 3]),
+        new Uint8Array([4, 5, 6]),
+      ]) .. s.join() .. assert.eq(new Uint8Array([1,2,3,4,5,6]));
+    }
+
+    test("with a TypedArray separator") {||
+      nonRepeatableSequence([
+        new Uint8Array([1, 2, 3]),
+        new Uint8Array([4, 5, 6]),
+      ]) .. s.join(new Uint8Array([100,100])) .. assert.eq(new Uint8Array([1,2,3,100,100,4,5,6]));
+
+      nonRepeatableSequence([
+        new Uint8Array([1, 2, 3]),
+        new Uint8Array([4, 5, 6]),
+      ]) .. s.join([100,100]) .. assert.eq(new Uint8Array([1,2,3,100,100,4,5,6]));
+    }
+  }
+
+  context("on Arrays") {||
+    test("with no separator") {||
+      nonRepeatableSequence([
+        [1, 2, 3],
+        [4, 5, 6],
+      ]) .. s.join() .. assert.eq([1,2,3,4,5,6]);
+    }
+
+    test("with an Array separator") {||
+      nonRepeatableSequence([
+        [1, 2, 3],
+        [4, 5, 6],
+      ]) .. s.join([100,100]) .. assert.eq([1,2,3,100,100,4,5,6]);
+    }
+  }
 }
 
 test("hasElem") {||
@@ -1014,6 +1147,17 @@ testEq('each.track', "5", function() {
   return rv;
 });
 
+testEq('each.track break', '12b', function() {
+  var rv = "";
+  [1,2,3,4] .. s.each.track {
+    |x|
+    if (x === 3) break;
+    rv += x;
+  }
+  rv += 'b';
+  return rv;
+});
+
 context("pack") {||
   test("with count") {||
     [1,2,3,4,5] .. s.pack({count:2}) .. s.toArray .. assert.eq([[1,2],[3,4],[5]]);
@@ -1040,9 +1184,33 @@ context("pack") {||
   }
 
 
-  test("settings precedence") {||
-    // packing_func overrides count:
-    [1,2,3,4,5] .. s.pack({count: 3, packing_func:next -> [next(),next()], pad:'pad'}) .. s.toArray .. assert.eq([[1,2],[3,4],[5,'pad']]);
+  test("settings precedence 1") {||
+    // packing_func overrides count & interval:
+    [1,2,3,4,5] .. s.pack({count: 3, interval: 200, packing_func:next -> [next(),next()], pad:'pad'}) .. s.toArray .. assert.eq([[1,2],[3,4],[5,'pad']]);
+  }
+
+  test("settings precedence 2") {||
+    // count overrides interval:
+    [1,2,3,4,5] .. s.pack({count: 2, interval: 200}) .. s.toArray .. assert.eq([[1,2],[3,4],[5]]);
+  }
+
+  test("with interval") {||
+    [1,2,3,4,5] .. s.pack({interval: 100}) .. s.toArray .. assert.eq([[1,2,3,4,5]]);
+  }
+
+  test("with interval 2") {||
+    var source = s.Stream(function(r) { 
+      r(1);
+      hold(10);
+      r(2);
+      hold(10);
+      r(3);
+      hold(40);
+      r(4);
+      hold(10);
+      r(5);
+    });
+    source .. s.pack({interval:40}) .. s.toArray .. assert.eq([[1,2,3],[4,5]]);
   }
 
 }
@@ -1150,28 +1318,15 @@ context("mirror") {||
         s.log.push(i);
         break;
       }
-      // this itaration should wait for the previous iteration to be cleaned up before iterating
+      // this iteration should wait for the previous iteration to be cleaned up before iterating
       s.mirror .. @each {|i|
         s.log.push(i);
         break;
       }
 
-      // XXX we would prefer:
-      //s.log .. @assert.eq([
-      //  'start', 1, 'retract', 'retracted',
-      //  'start', 1, 'retract', 'retracted'
-      //]);
-
-      // but the current behaviour is:
       s.log .. @assert.eq([
-        'start', 1, 'retract',
-        'start', 1, 'retract',
-      ]);
-      s.log = [];
-      hold(30);
-      s.log .. @assert.eq([
-        'retracted',
-        'retracted',
+        'start', 1, 'retract', 'retracted',
+        'start', 1, 'retract', 'retracted'
       ]);
     }
   }
@@ -1279,5 +1434,157 @@ context("mirror") {||
     }
 
     log .. @assert.eq([1, 'ERROR: stream failed']);
+  }
+
+  test("immediate exceptions are propagated") {|s|
+    var log = [];
+    var stream = @Stream(function(emit) {
+      throw new Error("stream failed");
+    });
+
+    var s = stream .. @mirror();
+    try {
+      s .. @each {|item|
+        log.push(item);
+      }
+    } catch(e) {
+      log.push("ERROR: " + e.message);
+    }
+
+    log .. @assert.eq(['ERROR: stream failed']);
+  }
+
+
+  test("NaN edge case") {|s|
+    var stream = @Stream(function(emit) {
+      emit(NaN);
+      hold();
+    });
+    var s = stream .. @mirror();
+    var count = 0;
+    waitfor {
+      s .. @each { |x|
+        ++count;
+        hold(0);
+      }
+    }
+    or {
+      hold(100);
+    }
+    
+    count .. @assert.eq(1);
+  }
+  
+}
+
+context("batchN") {||
+  test("exact batching") {||
+    s.integers(1,100) .. s.batchN(10) .. s.count() .. assert.eq(100);
+  }
+
+  test("batching with remainder") {||
+    s.integers(1,102) .. s.batchN(10) .. s.count() .. assert.eq(102);
+  }
+
+  test("batching larger than sequence") {||
+    s.integers(1,102) .. s.batchN(1000) .. s.count() .. assert.eq(102);
+  }
+
+  test("double batching") {||
+    s.integers(1,102) .. s.batchN(10) .. s.batchN(10) .. s.count() .. assert.eq(102);
+  }
+}
+
+test("consume/retract edge case") {||
+  var producer = s.Stream(function(r) {
+    r('a');
+    hold(10);
+    r('b');
+  });
+
+  producer .. s.consume {
+    |next|
+    assert.eq(next(), 'a');
+    waitfor { next() } or { hold(0); } // retracted next()
+    hold(100); // give producer a chance to emit next item
+    assert.eq(next(), 'b');
+  }
+}
+
+test("consume exception propagation") {||
+  var producer = s.Stream(function(r) {
+    r('a');
+    hold(10);
+    throw 'b';
+  });
+
+  producer .. s.consume {
+    |next|
+    assert.eq(next(), 'a');
+    try {
+      next();
+      assert.fail('should not be reached')
+    }
+    catch(e) {
+      assert.eq(e, 'b');
+    }
+    // exception should repeat:
+    try {
+      next();
+      assert.fail('should not be reached')
+    }
+    catch(e) {
+      assert.eq(e, 'b');
+    }
+  }
+}
+
+test("consume exception propagation / retract edge case") {||
+  var producer = s.Stream(function(r) {
+    r('a');
+    hold(10);
+    throw 'b';
+  });
+
+  producer .. s.consume {
+    |next|
+    assert.eq(next(), 'a');
+    waitfor { next(); } or { hold(0); }
+    hold(100); // give producer a chance to emit next item
+    try {
+      next();
+      assert.fail('should not be reached')
+    }
+    catch(e) {
+      assert.eq(e, 'b');
+    }
+    // exception should repeat:
+    try {
+      next();
+      assert.fail('should not be reached')
+    }
+    catch(e) {
+      assert.eq(e, 'b');
+    }
+  }
+}
+
+test("consume eos / retract edge case") {||
+  var producer = s.Stream(function(r) {
+    r('a');
+    hold(10);
+  });
+
+  var eos = {};
+
+  producer .. s.consume(eos) {
+    |next|
+    assert.eq(next(), 'a');
+    waitfor { next() } or { hold(0); } // retracted next()
+    hold(100); // give producer a chance to get to eos
+    assert.eq(next(), eos);
+
+    // should be repeatable:
+    assert.eq(next(), eos);
   }
 }

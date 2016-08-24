@@ -1,6 +1,5 @@
 /*
  * StratifiedJS 'compile/doc' module
- * Utility functions and constructs for concurrent stratified programming
  *
  * Part of the Stratified JavaScript Standard Module Library
  * Version: '0.20.0-development'
@@ -50,7 +49,7 @@ var assert = require('../assert');
 var INDEX_BASENAME = 'sjs-lib-index';
 var INDEX_FILENAME = "#{INDEX_BASENAME}.txt";
 var OUTPUT_FILENAME = "#{INDEX_BASENAME}.json";
-var EXTS = {'sjs':true, 'api':true, 'app':true};
+var EXTS = {'sjs':true, 'api':true, 'app':true, 'gen':true};
 
 exports.compile = function(root, outputPath) {
   var info = exports.summarizeLib(root);
@@ -104,21 +103,26 @@ exports.summarizeLib = function(dir) {
 
   entries .. each {|ent|
     var path = Path.join(dir, ent);
-    if (fs.stat(path).isDirectory()) {
-      var lib = exports.summarizeLib(path);
-      if (lib) {
-        children[ent + '/'] = lib;
-      }
-    } else {
-      if (ent .. str.startsWith(INDEX_BASENAME + '.')) {
-        continue;
+    try {
+      if (fs.stat(path).isDirectory()) {
+        var lib = exports.summarizeLib(path);
+        if (lib) {
+          children[ent + '/'] = lib;
+        }
       } else {
-        var mod = exports.readModule(path);
-        if (mod) {
-          var [name, mod] = mod;
-          children[name] = summarizeModule(mod);
+        if (ent .. str.startsWith(INDEX_BASENAME + '.')) {
+          continue;
+        } else {
+          var mod = exports.readModule(path);
+          if (mod) {
+            var [name, mod] = mod;
+            children[name] = summarizeModule(mod);
+          }
         }
       }
+    }
+    catch (e) {
+      logging.info("Error processing #{ent} -> skipping");
     }
   }
 

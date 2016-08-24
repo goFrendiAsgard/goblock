@@ -60,3 +60,8 @@
   @docsoff
 */
 __js {
+
+// original lib requires nodejs:util, but only `print` is used (and it's deprecated now)
+var sys = {
+  print: s -> process.stdout.write(s)
+}

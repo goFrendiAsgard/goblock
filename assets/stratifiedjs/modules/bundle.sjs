@@ -106,6 +106,7 @@ var docutil = require('sjs:docutil');
 var assert = require('sjs:assert');
 var logging = require('sjs:logging');
 var { isArrayLike } = require('builtin:apollo-sys');
+@path = require('nodejs:path');
 
 var fst = pair -> pair[0];
 var snd = pair -> pair[1];
@@ -300,14 +301,19 @@ var relax = function(fn) {
 function generateBundle(deps, settings) {
   settings = sanitizeOpts(settings);
   var compile;
-  if (settings.compile) {
+  if (settings.compile) { 
     var compiler = require('./compile/sjs');
+    var stringifier = require('./compile/stringify');
     compile = function(src, path) {
-      var js = compiler.compile(src, {globalReturn:true, filename: "'#{path.replace(/\'/g,'\\\'')}'"});
-      return "function(#{require.extensions['sjs'].module_args.join(',')}) {
-        #{js}
-      }"
-    }
+      if (@path.extname(path) === '.js')
+        return stringifier.compile(src, {keeplines:true});
+      else {
+        var js = compiler.compile(src, {globalReturn:true, filename: "'#{path.replace(/\'/g,'\\\'')}'"});
+        return "function(#{require.extensions['sjs'].module_args.join(',')}) {
+          #{js}
+        }";
+      }
+    };
   } else {
     var stringifier = require('./compile/stringify');
     compile = (src, path) -> stringifier.compile(src, {keeplines: true});
@@ -383,6 +389,10 @@ function generateBundle(deps, settings) {
     if (!strict) addDep = relax(addDep);
 
     usedModules .. each(addDep);
+
+    // support for sjs script's 'wait-for-bundle' attribute; see apollo-sys-xbrowser.sjs:
+    write("if(typeof(__oni_rt_bundle_hook) === 'function') __oni_rt_bundle_hook();");
+
     write("})();");
   }
   return rv;
@@ -545,6 +555,19 @@ var toPairs = function(obj, splitter, name) {
   }
 };
 
+var TRAILING_SLASH_PATH = /[\\\/]$/;
+var TRAILING_SLASH_URL = /\/$/;
+var normalizeAliasSlashes = function(pair) {
+  var [url, path] = pair;
+  if(TRAILING_SLASH_URL.test(url) && !TRAILING_SLASH_PATH.test(path)) {
+    pair[1] += @path.sep;
+  } else if(!TRAILING_SLASH_URL.test(url) && TRAILING_SLASH_PATH.test(path)) {
+    pair[0] += '/';
+  }
+  return pair;
+};
+
+
 var InternalOptions = function() { };
 var sanitizeOpts = function(opts) {
   // sanitizes / canonicalizes opts.
@@ -562,8 +585,14 @@ var sanitizeOpts = function(opts) {
   rv.strict  = !opts.skipFailed;  // srtict should be true by default
 
   // convert resources & hubs to array pairs with expanded paths:
-  rv.resources = opts.resources .. toPairs(s -> s .. rsplit('=', 1), 'resources') .. map([path, alias] -> [alias, coerceToURL(path)]);
-  rv.hubs =      opts.hubs      .. toPairs(s -> s .. split('=', 1), 'hubs')  .. map([prefix, path] -> [prefix, coerceToURL(path)]);
+  rv.resources = opts.resources
+    .. toPairs(s -> s .. rsplit('=', 1), 'resources')
+    .. map([path, alias] -> [alias, coerceToURL(path)])
+    .. map(normalizeAliasSlashes);
+
+  rv.hubs = opts.hubs
+    .. toPairs(s -> s .. split('=', 1), 'hubs')
+    .. map([prefix, path] -> [prefix, coerceToURL(path)]);
 
   // expand ignore / exclude paths
   rv.exclude = (opts.exclude || []) .. map(coerceToURL) .. map(stringToPrefixRe);
@@ -598,8 +627,12 @@ exports.create = function(opts) {
     if (opts.output == '-') {
       write(process.stdout.fd);
     } else {
-      using (var output = fs.open(opts.output, 'w')) {
+      var output = fs.open(opts.output, 'w');
+      try {
         write(output);
+      }
+      finally {
+        fs.close(output);
       }
     }
     return deps;
@@ -691,8 +724,7 @@ exports.main = function(args) {
   var opts = parser.parse(args);
 
   var usage = function() {
-    var path = require('nodejs:path');
-    process.stderr.write("Usage: #{path.basename(process.argv[0])} #{process.argv[1]} [OPTIONS] [SOURCE [...]]\n\n");
+    process.stderr.write("Usage: #{@path.basename(process.argv[0])} #{process.argv[1]} [OPTIONS] [SOURCE [...]]\n\n");
     process.stderr.write(parser.help());
   };
 

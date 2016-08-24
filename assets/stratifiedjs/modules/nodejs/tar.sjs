@@ -36,46 +36,34 @@
     This module wraps the [tar](https://github.com/npm/node-tar) npm module.
 */
 
-var zlib = require('nodejs:zlib');
 var tar = require('nodejs:tar');
 var fstream = require('nodejs:fstream');
 @ = require(['../sequence', './stream', '../event']);
 @fs = require('./fs');
 var Readable = require('nodejs:stream').Readable;
 
-/**
-  @function gunzip
-  @summary  gzip (decompress) stream transformer
-  @param    {sequence::Stream} [src] compressed stream
-  @return   {sequence::Stream} decompressed stream
-*/
-exports.gunzip = function(stream) {
-  return @Stream(function(emit) {
-    var gunzipStream = zlib.createGunzip();
-    waitfor {
-      stream .. @pump(gunzipStream) .. @end;
-    } and {
-      gunzipStream .. @contents .. @each(emit);
-    }
-  });
-}
-
-/**
-  @function gzip
-  @summary  gzip (compress) stream transformer
-  @param    {sequence::Stream} [src] data stream
-  @return   {sequence::Stream} compressed stream
-*/
-exports.gzip = function(stream) {
-  return @Stream(function(emit) {
-    var gzipStream = zlib.createGzip();
-    waitfor {
-      stream .. @pump(gzipStream) .. @end;
-    } and {
-      gzipStream .. @contents .. @each(emit);
-    }
-  });
-}
+/*
+ * `tar` streams are weird - if you remove an error handler
+ * synchronously once it's been triggered, it re-emits the
+ * same error (which crashes the process). This code works around that.
+ *
+ * see: https://github.com/npm/node-tar/issues/47
+ */
+var swallowDummyError = function(stream) {
+  var handler = function(e) {
+    // the handler shouldn't actually be triggered, there just
+    // needs to be one attached.
+    console.error("WARN: unexpected double-error occurred: #{e}");
+  }
+  stream.addListener('error', handler);
+  hold(0);
+  stream.removeListener('error', handler);
+};
+var awaitErrorHack = function(stream) {
+  var rv = stream .. @wait('error');
+  swallowDummyError(stream);
+  return rv;
+};
 
 /**
   @function pack
@@ -89,19 +77,24 @@ exports.pack = function(dir, props) {
     var input = fstream.Reader(dir);
     var pack = tar.Pack(props);
     pack = new Readable().wrap(pack);
+    
     waitfor {
-      // NOTE: `input` is supposedly a stream, but:
-      // - it uses a custom API when you call .pipe()
-      // - stream.pump doesn't work on it, for unknown reasons
-      // - it doesn't catch errors, so any failure will be fatal
-      //   (see https://github.com/npm/fstream/issues/31)
-      input.pipe(pack);
-      input .. @wait('end');
-      // also, pack .. @end doesn't work, but that's OK
-      // because the below branch will always wait for its completion
-      pack.end();
-    } and {
-      pack .. @contents .. @each(emit);
+      throw input .. awaitErrorHack();
+    } or {
+      waitfor {
+        // NOTE: `input` is supposedly a stream, but:
+        // - it uses a custom API when you call .pipe()
+        // - stream.pump doesn't work on it, for unknown reasons
+        // - it doesn't catch errors, so any failure will be fatal
+        //   (see https://github.com/npm/fstream/issues/31)
+        input.pipe(pack);
+        input .. @wait('end');
+        // also, pack .. @end doesn't work, but that's OK
+        // because the below branch will always wait for its completion
+        pack.end();
+      } and {
+        pack .. @contents .. @each(emit);
+      }
     }
   });
 }
@@ -116,13 +109,10 @@ exports.pack = function(dir, props) {
 */
 exports.extract = function(stream, opts) {
   var tarStream = tar.Extract(opts);
-
-  // workaround for https://github.com/npm/node-tar/issues/47
-  var dummyHandler = function() {
-    hold(0);
-    tarStream.removeListener('error', dummyHandler);
+  try {
+    stream .. @pump(tarStream);
+  } catch(e) {
+    swallowDummyError(tarStream);
+    throw e;
   }
-  tarStream.on('error', dummyHandler);
-
-  stream .. @pump(tarStream) .. @end();
 };

@@ -1,13 +1,13 @@
 @ = require('sjs:std');
 exports.hasOutstandingChanges = function() {
-	var result = @childProcess.run('git', ['diff', '--shortstat'], {stdio: ['ignore', 'pipe', 'ignore']});
+	var result = @childProcess.run('git', ['diff', '--ignore-all-space'], {stdio: ['ignore', 'pipe', 'ignore']});
 	var output = result.stdout.trim();
 	//console.log('[[' + output + ']]');
 	return output !== "";
 };
 
 exports.dumpDiff = function() {
-	@childProcess.run('git', ['--no-pager', 'diff'], {stdio: 'inherit'});
+	@childProcess.run('git', ['--no-pager', 'diff', '--ignore-all-space'], {stdio: 'inherit'});
 };
 
 exports.assertNoChanges = function() {
