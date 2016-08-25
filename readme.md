@@ -16,4 +16,11 @@ A visual programming for newbies. Goblock is built on top of google blockly. Com
 
 Click [here](https://gofrendiasgard.github.io/goblock) for demo.
 
+Requirement
+-----------
 
+To run goblock, you need a web server.
+
+If you have Python installed, you can simply run `Python -m SimpleHTTPServer` in this directory.
+
+If you use windows, you can install xampp.

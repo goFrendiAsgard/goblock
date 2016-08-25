@@ -1,0 +1,78 @@
+<xml xmlns="http://www.w3.org/1999/xhtml">
+  <block type="variables_set" id="C0`m11~gpg64AIbWyG[H" x="13" y="11">
+    <field name="VAR">your_money</field>
+    <value name="VALUE">
+      <block type="text_prompt" id="~wew8-T%VW/3C4}eAzyH">
+        <mutation type="NUMBER"></mutation>
+        <field name="TYPE">NUMBER</field>
+        <field name="TEXT">Your money</field>
+      </block>
+    </value>
+    <next>
+      <block type="variables_set" id="Z,G5^@#9sChjF;oKm8=P">
+        <field name="VAR">friend_money</field>
+        <value name="VALUE">
+          <block type="text_prompt" id="EhQi~R8f61DZau+ohpgE">
+            <mutation type="NUMBER"></mutation>
+            <field name="TYPE">NUMBER</field>
+            <field name="TEXT">Your friend's money</field>
+          </block>
+        </value>
+        <next>
+          <block type="variables_set" id="D5K0w-6B;U8R6Ml40+3g">
+            <field name="VAR">total</field>
+            <value name="VALUE">
+              <block type="math_arithmetic" id="Hp#`2o{8cD_|U^J/8X~c">
+                <field name="OP">ADD</field>
+                <value name="A">
+                  <shadow type="math_number" id="VE8.Ap6q)P0:qQ(Vv:cq">
+                    <field name="NUM">4</field>
+                  </shadow>
+                  <block type="variables_get" id="^mbD5*P)[4^_c?Yv|cEZ">
+                    <field name="VAR">your_money</field>
+                  </block>
+                </value>
+                <value name="B">
+                  <shadow type="math_number" id="0w.}MjS}~Y]WczNs:SF.">
+                    <field name="NUM">4</field>
+                  </shadow>
+                  <block type="variables_get" id="Zk7,GXhu}mGl/Dm/|zun">
+                    <field name="VAR">friend_money</field>
+                  </block>
+                </value>
+              </block>
+            </value>
+            <next>
+              <block type="controls_if" id="N-`p]]fk?,Glr===rUV_">
+                <value name="IF0">
+                  <block type="logic_compare" id="Qw-W^._F@3@!.G?AD2Bz">
+                    <field name="OP">EQ</field>
+                    <value name="A">
+                      <block type="variables_get" id="|R28CuVwV9JeLnFVaf/6">
+                        <field name="VAR">your_money</field>
+                      </block>
+                    </value>
+                    <value name="B">
+                      <block type="variables_get" id="ey9K-Ui1cl/`~a9g[)^u">
+                        <field name="VAR">friend_money</field>
+                      </block>
+                    </value>
+                  </block>
+                </value>
+                <statement name="DO0">
+                  <block type="text_print" id="/vn+3|YQsGGtUg#`UQnu">
+                    <value name="TEXT">
+                      <shadow type="text" id="XQ{`}k4?_CB~91^ESC]?">
+                        <field name="TEXT">You both are equally rich. But, can you guys buy pizza?</field>
+                      </shadow>
+                    </value>
+                  </block>
+                </statement>
+              </block>
+            </next>
+          </block>
+        </next>
+      </block>
+    </next>
+  </block>
+</xml>

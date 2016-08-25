@@ -85,6 +85,7 @@ window.prompt = function(message, default_value, callback){
     set_wait();
     hold_while_wait();
     var result = $('textarea#textarea-prompt').val();
+    result = $.trim(result);
     if(callback){ // window.prompt is also called from outside sjs (e.g: when rename or make variables
         callback(result);
     }
@@ -192,31 +193,30 @@ function run_code(event, is_evaluation) {
                     evaluation_result = evaluator(current_test_case, OUTPUT_LIST);
                     success = success && evaluation_result.success;
                     if(!success){
-                        message = error_message + '<b>Output:</b> <div style="padding-left:10px">' + OUTPUT_LIST.join('<br />') + '</div><b>Message:</b> ' + evaluation_result.message;
+                        message = error_message + '<b>Output:</b> <div style="padding-left:10px">' + OUTPUT_LIST.join('<br />') + '</div><b>Message:</b> <div style="pading-left:10px">' + evaluation_result.message + '</div>';
                         break;
                     }
                 }catch(e){
                     success = false;
-                    message = error_message + '<b>Runtime error:</b> ' + e;
+                    message = error_message + '<b>Runtime error:</b> <div style="padding-left:10px">' + e + '</div>';
                     break;
                 }
             }
             SILENT_MODE = false;
         }
         if(success){ // evaluation succeed
-            next = window.confirm(message + '<br />Do you want to continue?');
+            next = window.confirm('<div class="alert alert-success"><b>Success:</b><div style="padding-left:10px;">' + message + '</div><b>Do you want to continue?</b></div>');
             if(next){ // user want to continue
                 if(LESSON_ID < LESSONS.length - 1){ // move to next lesson
                     LESSON_ID ++;
-                    $('#lesson-chapter option').removeAttr('selected');
-                    $('#lesson-chapter option[value="'+LESSON_ID+'"]').attr('selected','selected');
+                    $('#lesson-chapter').val(LESSON_ID);
                     load_lesson(LESSON_ID);
                 }else{ // no other lesson available
-                    window.alert('You have reach the end of the lesson. Congratulation and start to learn by yourself');
+                    window.alert('<div class="alert alert-success"><b>You have reach the end of the lesson.</b> Thank you for using goblock</div>');
                 }
             }
         }else{ // evaluation failed
-            window.alert('<div class="alert alert-danger"><b>Failed</b><br />' + message + '</div>');
+            window.alert('<div class="alert alert-danger"><b>Failed:</b><br />' + message + '</div>');
         }
     }
 }

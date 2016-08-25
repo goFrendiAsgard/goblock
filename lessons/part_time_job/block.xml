@@ -1,0 +1,68 @@
+<xml xmlns="http://www.w3.org/1999/xhtml">
+  <block type="variables_set" id="`Hd}2Tp;YFIyj5PHV3@C" x="11" y="-7">
+    <field name="VAR">salary</field>
+    <value name="VALUE">
+      <block type="math_number" id="ja5l!;Lb(WR+#guz!`W*">
+        <field name="NUM">0</field>
+      </block>
+    </value>
+    <next>
+      <block type="variables_set" id="OFj!8+}.ToRxT+/fZGr6">
+        <field name="VAR">work_again</field>
+        <value name="VALUE">
+          <block type="text" id="+QY#jP1d+%Tt}I3!e,%K">
+            <field name="TEXT">y</field>
+          </block>
+        </value>
+        <next>
+          <block type="controls_whileUntil" id="io3iqJU!OxOBe]K^Oy}D">
+            <field name="MODE">WHILE</field>
+            <value name="BOOL">
+              <block type="logic_compare" id="i?47Hn54L*NF{oF?_F%g">
+                <field name="OP">EQ</field>
+                <value name="A">
+                  <block type="variables_get" id="TRJ%)yHUVl|?RebuBFiQ">
+                    <field name="VAR">work_again</field>
+                  </block>
+                </value>
+                <value name="B">
+                  <block type="text" id="Z}kub-6u!YM)MNs4]@_z">
+                    <field name="TEXT">y</field>
+                  </block>
+                </value>
+              </block>
+            </value>
+            <statement name="DO">
+              <block type="text_print" id="rpv(Tm63`n}Dj,~I2M7R">
+                <value name="TEXT">
+                  <shadow type="text" id="s@0*e[4;tJc|X@X(*1C_">
+                    <field name="TEXT">I work, yet unpaid</field>
+                  </shadow>
+                </value>
+                <next>
+                  <block type="variables_set" id="oaAwP?R+5HBX=t!FRmiS">
+                    <field name="VAR">work_again</field>
+                    <value name="VALUE">
+                      <block type="text" id="BkR}V3^tYtM|:q.@DPr0">
+                        <field name="TEXT">n</field>
+                      </block>
+                    </value>
+                  </block>
+                </next>
+              </block>
+            </statement>
+            <next>
+              <block type="text_print" id="I,i9*~AE{zT;aFo22QAx">
+                <value name="TEXT">
+                  <shadow type="text" id="Fb.WH(]7Idz],Ieor%[9">
+                    <field name="TEXT">I'm tired</field>
+                  </shadow>
+                </value>
+              </block>
+            </next>
+          </block>
+        </next>
+      </block>
+    </next>
+  </block>
+</xml>

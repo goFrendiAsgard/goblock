@@ -1,0 +1,57 @@
+<xml xmlns="http://www.w3.org/1999/xhtml">
+  <block type="variables_set" id="6aNL0A3qsa~NKydd0k7l" x="19" y="24">
+    <field name="VAR">first_person</field>
+    <value name="VALUE">
+      <block type="text" id="k4_yGA`-8V@~B(qq]#[+">
+        <field name="TEXT">Marsha</field>
+      </block>
+    </value>
+    <next>
+      <block type="variables_set" id="x?#(EKknHZp3l8l!Q0^b">
+        <field name="VAR">second_person</field>
+        <value name="VALUE">
+          <block type="text" id="gC.31ui@V}S9+u!o60[*">
+            <field name="TEXT">The Bear</field>
+          </block>
+        </value>
+        <next>
+          <block type="text_print" id=":6O%{b|_4sjWKo^gda%|">
+            <value name="TEXT">
+              <shadow type="text" id="cSDcfJ{)*5@bAqQgV!U9">
+                <field name="TEXT">abc</field>
+              </shadow>
+              <block type="text_join" id="nv_=MK{6-uvx#Z+]S27^">
+                <mutation items="5"></mutation>
+                <value name="ADD0">
+                  <block type="variables_get" id="z1}R]UnoUA_j@V30r!4I">
+                    <field name="VAR">first_person</field>
+                  </block>
+                </value>
+                <value name="ADD1">
+                  <block type="text" id="iT}diY3P24Gg@.H,?CCI">
+                    <field name="TEXT"> </field>
+                  </block>
+                </value>
+                <value name="ADD2">
+                  <block type="text" id="fc:ck9WFZ`IlgPFgWFno">
+                    <field name="TEXT">and</field>
+                  </block>
+                </value>
+                <value name="ADD3">
+                  <block type="text" id="ZETDTGa+uyM5?,VufAd1">
+                    <field name="TEXT"> </field>
+                  </block>
+                </value>
+                <value name="ADD4">
+                  <block type="variables_get" id="(hn=H2w_b.Z^]8UcHnV?">
+                    <field name="VAR">second_person</field>
+                  </block>
+                </value>
+              </block>
+            </value>
+          </block>
+        </next>
+      </block>
+    </next>
+  </block>
+</xml>
