@@ -113,9 +113,10 @@ window.confirm = function(message, default_value, callback){
     $('div#div-confirm').modal('show');
     $('textarea#textarea-confirm').val(default_value);
     $('textarea#textarea-confirm').focus();
+    $('input#input-confirm').val('0')
     set_wait();
     hold_while_wait();
-    var result = $('input#input-confirm').val();
+    var result = $('input#input-confirm').val() == 1;
     if(callback){ // window.confirm is also called from outside sjs (e.g: when rename or make variables
         callback(result);
     }
@@ -127,14 +128,14 @@ function close_confirm_ok(){
     $('input#input-confirm').val('1');
     $('div#div-confirm').modal('hide');
 }
-$('button#btn-confirm-ok').click(close_confirm_ok);
+$('.close-confirm-ok').click(close_confirm_ok);
 
 function close_confirm_cancel(){
     unset_wait();
     $('input#input-confirm').val('0');
     $('div#div-confirm').modal('hide');
 }
-$('button#btn-confirm-cancel').click(close_confirm_cancel);
+$('.close-confirm-cancel').click(close_confirm_cancel);
 
 // define and load the toolbox
 var WORKSPACE = Blockly.inject('div-workplace', {
