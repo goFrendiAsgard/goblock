@@ -16,7 +16,7 @@
     <div class="col-md-12">
         <div id="div-lesson-container" class="col-md-4">
             <h3>Goblock</h3>
-            <h4>Visual Programming for Newbies</h4>
+            <h4>Belajar Ngoding Tanpa Coding</h4>
             <hr>
             <div id="div-lesson-control" class="col-md-12">
                 <select id="lesson-chapter" class="form-control"></select>
@@ -62,7 +62,7 @@
             <div id="div-source-code" class="col-md-6">
                 <!-- The source code of the block -->
             </div>
-            <footer id="footer" class="pull-right">2016 &copy; Go Frendi Gunawan (gofrendiasgard@gmail.com)</footer>
+            <footer id="footer" class="pull-right">2016 - now &copy; Go Frendi Gunawan (gofrendiasgard@gmail.com)</footer>
         </div>
     </div>
 
@@ -132,13 +132,7 @@
 
     <!-- The XML -->
     <xml id="toolbox" style="display: none">
-        <category id="catValues" colour="300" name="Basic Values">
-            <block type="text"></block>
-            <block type="logic_boolean"></block>
-            <block type="math_number"></block>
-            <block type="math_constant"></block>
-        </category>
-        <category id="catVariables" colour="330" custom="VARIABLE" name="Variables"></category>
+        <!-- input/output -->
         <category id="catInputOutput" colour="160" name="Input/Output">
             <block type="text_print">
                 <value name="TEXT">
@@ -149,17 +143,76 @@
             </block>
             <block type="text_prompt"></block>
         </category>
-        <sep></sep>
-        <category id="catLogic" colour="210" name="Logic">
+        <!-- values -->
+        <category id="catValues" colour="300" name="Values">
+            <block type="text"></block>
+            <block type="logic_boolean"></block>
+            <block type="math_number"></block>
+            <block type="math_constant"></block>
+        </category>
+        <!-- variables -->
+        <category id="catVariables" colour="330" custom="VARIABLE" name="Variables"></category>
+        <!-- operation -->
+        <category id="catOperations" colour="230" name="Operations">
+            <block type="logic_compare"></block>
+            <block type="logic_operation"></block>
+            <block type="logic_negate"></block>
+            <block type="math_arithmetic">
+                <value name="A">
+                    <shadow type="math_number">
+                        <field name="NUM">1</field>
+                    </shadow>
+                </value>
+                <value name="B">
+                    <shadow type="math_number">
+                        <field name="NUM">1</field>
+                    </shadow>
+                </value>
+            </block>
+            <block type="math_modulo">
+                <value name="DIVIDEND">
+                    <shadow type="math_number">
+                        <field name="NUM">64</field>
+                    </shadow>
+                </value>
+                <value name="DIVISOR">
+                    <shadow type="math_number">
+                        <field name="NUM">10</field>
+                    </shadow>
+                </value>
+            </block>
+            <block type="math_random_int">
+                <value name="FROM">
+                    <shadow type="math_number">
+                        <field name="NUM">1</field>
+                    </shadow>
+                </value>
+                <value name="TO">
+                    <shadow type="math_number">
+                        <field name="NUM">100</field>
+                    </shadow>
+                </value>
+            </block>
+            <block type="text_join"></block>
+        </category>
+        <!-- controls -->
+        <category id="catControls" colour="120" name="Controls">
             <block type="controls_if"></block>
+            <block type="controls_whileUntil"></block>
+        </category>
+        <sep></sep>
+        <!-- logic -->
+        <category id="catLogic" colour="210" name="Advance Boolean">
+            <!--
             <block type="logic_compare"></block>
             <block type="logic_operation"></block>
             <block type="logic_negate"></block>
             <block type="logic_boolean"></block>
+            -->
             <block type="logic_null"></block>
             <block type="logic_ternary"></block>
         </category>
-        <category id="catLoops" colour="120" name="Loops">
+        <category id="catLoops" colour="120" name="Advance Loops">
             <block type="controls_repeat_ext">
                 <value name="TIMES">
                     <shadow type="math_number">
@@ -167,7 +220,9 @@
                     </shadow>
                 </value>
             </block>
+            <!--
             <block type="controls_whileUntil"></block>
+            -->
             <block type="controls_for">
                 <value name="FROM">
                     <shadow type="math_number">
@@ -188,7 +243,8 @@
             <block type="controls_forEach"></block>
             <block type="controls_flow_statements"></block>
         </category>
-        <category id="catMath" colour="230" name="Math">
+        <category id="catMath" colour="230" name="Advance Math">
+            <!--
             <block type="math_number"></block>
             <block type="math_arithmetic">
                 <value name="A">
@@ -202,6 +258,8 @@
                     </shadow>
                 </value>
             </block>
+            -->
+            <block type="math_constant"></block>
             <block type="math_single">
                 <value name="NUM">
                     <shadow type="math_number">
@@ -216,7 +274,6 @@
                     </shadow>
                 </value>
             </block>
-            <block type="math_constant"></block>
             <block type="math_number_property">
                 <value name="NUMBER_TO_CHECK">
                     <shadow type="math_number">
@@ -239,6 +296,7 @@
                 </value>
             </block>
             <block type="math_on_list"></block>
+            <!--
             <block type="math_modulo">
                 <value name="DIVIDEND">
                     <shadow type="math_number">
@@ -251,6 +309,7 @@
                     </shadow>
                 </value>
             </block>
+            -->
             <block type="math_constrain">
                 <value name="VALUE">
                     <shadow type="math_number">
@@ -268,6 +327,7 @@
                     </shadow>
                 </value>
             </block>
+            <!--
             <block type="math_random_int">
                 <value name="FROM">
                     <shadow type="math_number">
@@ -280,11 +340,14 @@
                     </shadow>
                 </value>
             </block>
+            -->
             <block type="math_random_float"></block>
         </category>
-        <category id="catText" colour="160" name="Text">
+        <category id="catText" colour="160" name="Advance Text">
+            <!--
             <block type="text"></block>
             <block type="text_join"></block>
+            -->
             <block type="text_append">
                 <value name="TEXT">
                     <shadow type="text"></shadow>
@@ -344,6 +407,7 @@
                     </shadow>
                 </value>
             </block>
+            <!--
             <block type="text_print">
                 <value name="TEXT">
                     <shadow type="text">
@@ -358,6 +422,7 @@
                     </shadow>
                 </value>
             </block>
+            -->
         </category>
         <category id="catLists" colour="260" name="Lists">
             <block type="lists_create_with">

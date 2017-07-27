@@ -1,12 +1,13 @@
 div#div-workplace{
-    height: 450px;
+    height: 480px;
+    margin-bottom:10px;
 }
 div#div-control, div#div-lesson-control{
     margin-top:5px;
     margin-bottom:5px;
 }
 div#div-source-code, div#div-output{
-    height: 150px;
+    height: 120px;
 }
 div#div-lesson{
     max-height:480px;

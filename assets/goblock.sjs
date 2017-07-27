@@ -33,7 +33,7 @@ function unset_wait(){
 
 // clear output
 function clear_output(){
-    $('div#div-output').html('<div style="font-size:large; margin-bottom:5px;">Output</div>');
+    $('div#div-output').html('<div style="font-size:normal; margin-bottom:5px;">Output</div>');
 }
 
 // alert
@@ -150,7 +150,7 @@ function show_source_code(event) {
     source_code = source_code.replace(/\n\n/g, '\n'); // remove double new line, we don't have too much space here
     source_code = source_code.replace(/ /g, '&nbsp;');
     source_code = source_code.replace(/\n/g, '<br />');
-    source_code = '<div style="font-size:large; margin-bottom:5px;">' + language + '</div><div style="font-weight:bold">' + source_code + '</div>';
+    source_code = '<div style="font-size:normal; margin-bottom:5px;">' + language + '</div><div style="font-weight:bold">' + source_code + '</div>';
     $('div#div-source-code').html(source_code);
 }
 
