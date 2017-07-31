@@ -59,88 +59,127 @@ var LESSONS = [
         caption   : '01 - 04 String, Number, dan Boolean',
         test_case : [],
         validator : function(input_list, output_list){
+            if(output_list.length != 3){
+                return{success: false, message: 'Program harus menampilkan tiga output, "Hello", 10, dan true'}
+            }
+            if(output_list[0] != "Hello"){
+                return{success: false, message: 'Output pertama harus kata "Hello"'}
+            }
+            if(output_list[1] !== 10){
+                return{success: false, message: 'Output kedua harus angka 10'}
+            }
+            if(output_list[2] !== true){
+                return{success: false, message: 'Output ketiga harus nilai boolean true'}
+            }
             return {success: true, message: 'Bagus!!! Tekan tombol "Ok" untuk melanjutkan'};
         }
     },
 
     {
         code      : '02-01-output-hello-world',
-        caption   : '02-01-output-hello-world',
+        caption   : '02 - 01 Hello World',
         test_case : [],
         validator : function(input_list, output_list){
-            return {success: true, message: 'Bagus!!! Tekan tombol "Ok" untuk melanjutkan'};
+            if(output_list.length == 1 && output_list[0] == "Hello World"){
+                return {success: true, message: 'Bagus!!! Tekan tombol "Ok" untuk melanjutkan'};
+            }
+            return{success: false, message: 'Output yang diberikan harus "Hello World"'}
         }
     },
 
     {
         code      : '02-02-output-hello-plus-world',
-        caption   : '02-02-output-hello-plus-world',
+        caption   : '02 - 02 Concatenation (Penggabungan String)',
         test_case : [],
         validator : function(input_list, output_list){
-            return {success: true, message: 'Bagus!!! Tekan tombol "Ok" untuk melanjutkan'};
+            if(output_list.length == 1 && output_list[0] == "Hello World"){
+                return {success: true, message: 'Bagus!!! Tekan tombol "Ok" untuk melanjutkan'};
+            }
+            return{success: false, message: 'Output yang diberikan harus "Hello World"'}
         }
     },
 
     {
         code      : '02-03-output-5-plus-4',
-        caption   : '02-03-output-5-plus-4',
+        caption   : '02 - 03 Operasi Aritmetik',
         test_case : [],
         validator : function(input_list, output_list){
-            return {success: true, message: 'Bagus!!! Tekan tombol "Ok" untuk melanjutkan'};
+            if(output_list.length == 1 && output_list[0] === 9){
+                return {success: true, message: 'Bagus!!! Tekan tombol "Ok" untuk melanjutkan'};
+            }
+            return{success: false, message: 'Output yang diberikan harus 9'}
         }
     },
 
     {
         code      : '02-04-output-5-less-than-4',
-        caption   : '02-04-output-5-less-than-4',
+        caption   : '02 - 04 Operasi Perbandingan',
         test_case : [],
         validator : function(input_list, output_list){
-            return {success: true, message: 'Bagus!!! Tekan tombol "Ok" untuk melanjutkan'};
+            if(output_list.length == 1 && output_list[0] === false){
+                return {success: true, message: 'Bagus!!! Tekan tombol "Ok" untuk melanjutkan'};
+            }
+            return{success: false, message: 'Output yang diberikan harus false'}
         }
     },
 
     {
         code      : '02-05-output-not-true',
-        caption   : '02-05-output-not-true',
+        caption   : '02 - 05 Negasi',
         test_case : [],
         validator : function(input_list, output_list){
-            return {success: true, message: 'Bagus!!! Tekan tombol "Ok" untuk melanjutkan'};
+            if(output_list.length == 1 && output_list[0] === false){
+                return {success: true, message: 'Bagus!!! Tekan tombol "Ok" untuk melanjutkan'};
+            }
+            return{success: false, message: 'Output yang diberikan harus false'}
         }
     },
 
     {
         code      : '02-06-true-and-false',
-        caption   : '02-06-true-and-false',
+        caption   : '02 - 06 Benar dan salah?',
         test_case : [],
         validator : function(input_list, output_list){
-            return {success: true, message: 'Bagus!!! Tekan tombol "Ok" untuk melanjutkan'};
+            if(output_list.length == 1 && output_list[0] === false){
+                return {success: true, message: 'Bagus!!! Tekan tombol "Ok" untuk melanjutkan'};
+            }
+            return{success: false, message: 'Output yang diberikan harus false'}
         }
     },
 
     {
         code      : '02-07-true-or-false',
-        caption   : '02-07-true-or-false',
+        caption   : '02 - 06 Benar atau salah?',
         test_case : [],
         validator : function(input_list, output_list){
-            return {success: true, message: 'Bagus!!! Tekan tombol "Ok" untuk melanjutkan'};
+            if(output_list.length == 1 && output_list[0] === true){
+                return {success: true, message: 'Bagus!!! Tekan tombol "Ok" untuk melanjutkan'};
+            }
+            return{success: false, message: 'Output yang diberikan harus true'}
         }
     },
 
     {
         code      : '03-01-input-nama',
-        caption   : '03-01-input-nama',
-        test_case : [],
+        caption   : '03 - 01 Your Name',
+        test_case : [['Daenarys Queen of Meereen, Queen of the Andals(, the Rhoynar,) and the First Men, Lady Regnant of the Seven Kingdoms, Khaleesi of the Great Grass Sea, Mhysa, Breaker of Chains, the Unburnt, Mother of Dragons'], ['Uvwevwevwe Onyeteyevwe Ugwemubgwem Osas']],
         validator : function(input_list, output_list){
-            return {success: true, message: 'Bagus!!! Tekan tombol "Ok" untuk melanjutkan'};
+            if(output_list.length == 1 && output_list[0] === input_list[0]){
+                return {success: true, message: 'Bagus!!! Tekan tombol "Ok" untuk melanjutkan'};
+            }
+            return{success: false, message: 'Output yang diberikan harus sama dengan input'}
         }
     },
 
     {
         code      : '03-02-hello-nama',
-        caption   : '03-02-hello-nama',
-        test_case : [],
+        caption   : '03 - 02 Hello again',
+        test_case : [['Daenarys Queen of Meereen, Queen of the Andals(, the Rhoynar,) and the First Men, Lady Regnant of the Seven Kingdoms, Khaleesi of the Great Grass Sea, Mhysa, Breaker of Chains, the Unburnt, Mother of Dragons'], ['Uvwevwevwe Onyeteyevwe Ugwemubgwem Osas']],
         validator : function(input_list, output_list){
-            return {success: true, message: 'Bagus!!! Tekan tombol "Ok" untuk melanjutkan'};
+            if(output_list.length == 1 && output_list[0] === "Hello " + input_list[0]){
+                return {success: true, message: 'Bagus!!! Tekan tombol "Ok" untuk melanjutkan'};
+            }
+            return{success: false, message: 'Output yang diberikan harus sama dengan "Hello " + input'}
         }
     },
 
@@ -154,8 +193,8 @@ var LESSONS = [
     },
 
     {
-        code      : '03-04-penjumlahan-variable',
-        caption   : '03-04-penjumlahan-variable',
+        code      : '03-05-penjumlahan-variable',
+        caption   : '03-05-penjumlahan-variable',
         test_case : [],
         validator : function(input_list, output_list){
             return {success: true, message: 'Bagus!!! Tekan tombol "Ok" untuk melanjutkan'};

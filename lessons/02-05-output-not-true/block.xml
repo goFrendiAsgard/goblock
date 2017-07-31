@@ -4,6 +4,25 @@
       <shadow type="text" id="4vTDg8|BvW.DVBa6Ih_5">
         <field name="TEXT">Welcome to goblock</field>
       </shadow>
+      <block type="logic_negate" id="2_4p+)C4Ko-W;/{UL9[P">
+        <value name="BOOL">
+          <block type="logic_negate" id="ywBzA8xVF4f?Ed4Xpv/x">
+            <value name="BOOL">
+              <block type="logic_negate" id="wRKV@l4B|fRku6OUK}WO">
+                <value name="BOOL">
+                  <block type="logic_negate" id="_6iCTv~7/5Nc;r0=;=Cf">
+                    <value name="BOOL">
+                      <block type="logic_boolean" id="lrIAk)GmC-?#XV3QL_-u">
+                        <field name="BOOL">TRUE</field>
+                      </block>
+                    </value>
+                  </block>
+                </value>
+              </block>
+            </value>
+          </block>
+        </value>
+      </block>
     </value>
   </block>
 </xml>

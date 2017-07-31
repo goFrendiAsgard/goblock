@@ -1,9 +1,24 @@
 <xml xmlns="http://www.w3.org/1999/xhtml">
-  <block type="text_print" id="X.{,f]RqZ){@fX#SRWu}" x="36" y="18">
-    <value name="TEXT">
-      <shadow type="text" id="4vTDg8|BvW.DVBa6Ih_5">
-        <field name="TEXT">Welcome to goblock</field>
-      </shadow>
+  <block type="variables_set" id="1,Z)g*4r|CH0SZZW=f1j" x="34" y="25">
+    <field name="VAR">nama</field>
+    <value name="VALUE">
+      <block type="text_prompt" id="J@#sIf%6:|tPf9GTczt,">
+        <mutation type="TEXT"></mutation>
+        <field name="TYPE">TEXT</field>
+        <field name="TEXT"></field>
+      </block>
     </value>
+    <next>
+      <block type="text_print" id="X.{,f]RqZ){@fX#SRWu}">
+        <value name="TEXT">
+          <shadow type="text" id="4vTDg8|BvW.DVBa6Ih_5">
+            <field name="TEXT">Taki... Mitsuha...</field>
+          </shadow>
+          <block type="variables_get" id="%WC`MW/x_Lbw7XY(=5j!">
+            <field name="VAR">nama</field>
+          </block>
+        </value>
+      </block>
+    </next>
   </block>
 </xml>

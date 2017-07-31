@@ -24,18 +24,8 @@
               <shadow type="text" id="uQGm]T.Z2MC@gH@;{E%g">
                 <field name="TEXT">abc</field>
               </shadow>
-              <block type="math_arithmetic" id="o_f)SMION?W3P7BU`ffB">
-                <field name="OP">ADD</field>
-                <value name="A">
-                  <shadow type="math_number" id="Q81e%43CAN:#weiz@Y}M">
-                    <field name="NUM">1</field>
-                  </shadow>
-                </value>
-                <value name="B">
-                  <shadow type="math_number" id="bXY5XrsYskU*ajl-9JY_">
-                    <field name="NUM">1</field>
-                  </shadow>
-                </value>
+              <block type="variables_get" id="RPUKTRepZqHE5JIPzIuY">
+                <field name="VAR">angka3</field>
               </block>
             </value>
           </block>

@@ -4,6 +4,19 @@
       <shadow type="text" id="4vTDg8|BvW.DVBa6Ih_5">
         <field name="TEXT">Welcome to goblock</field>
       </shadow>
+      <block type="logic_operation" id="6fKa/Wfp?,OIT+r~-s0C">
+        <field name="OP">OR</field>
+        <value name="A">
+          <block type="logic_boolean" id="BL(_ckCLMI9qE)pqzf*l">
+            <field name="BOOL">FALSE</field>
+          </block>
+        </value>
+        <value name="B">
+          <block type="logic_boolean" id="(G-,zrL~C(Z2uow1xVr]">
+            <field name="BOOL">FALSE</field>
+          </block>
+        </value>
+      </block>
     </value>
   </block>
 </xml>

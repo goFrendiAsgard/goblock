@@ -1,9 +1,28 @@
 <xml xmlns="http://www.w3.org/1999/xhtml">
-  <block type="text_print" id="X.{,f]RqZ){@fX#SRWu}" x="36" y="18">
-    <value name="TEXT">
-      <shadow type="text" id="4vTDg8|BvW.DVBa6Ih_5">
-        <field name="TEXT">Welcome to goblock</field>
-      </shadow>
+  <block type="controls_if" id="5z;on30;`qgr/t-Pi+p," x="24" y="22">
+    <value name="IF0">
+      <block type="logic_compare" id=".,dtOmb3ekd(b8AxgCqb">
+        <field name="OP">GT</field>
+        <value name="A">
+          <block type="math_number" id="|PS2_Nw3rWMhT+9=WU%2">
+            <field name="NUM">3</field>
+          </block>
+        </value>
+        <value name="B">
+          <block type="math_number" id="%}jdAW=RTV:|vQvzhQN#">
+            <field name="NUM">4</field>
+          </block>
+        </value>
+      </block>
     </value>
+    <statement name="DO0">
+      <block type="text_print" id="X.{,f]RqZ){@fX#SRWu}">
+        <value name="TEXT">
+          <shadow type="text" id="4vTDg8|BvW.DVBa6Ih_5">
+            <field name="TEXT">Hello</field>
+          </shadow>
+        </value>
+      </block>
+    </statement>
   </block>
 </xml>

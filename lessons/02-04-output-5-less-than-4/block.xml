@@ -4,6 +4,19 @@
       <shadow type="text" id="4vTDg8|BvW.DVBa6Ih_5">
         <field name="TEXT">Welcome to goblock</field>
       </shadow>
+      <block type="logic_compare" id="f(nJKE)A8Pcp+4GB7DU1">
+        <field name="OP">EQ</field>
+        <value name="A">
+          <block type="math_number" id="qvr5(W^A9DxU=C%K+uvr">
+            <field name="NUM">0</field>
+          </block>
+        </value>
+        <value name="B">
+          <block type="math_number" id="~NhzRpxn4j[Y7}goiQ-Y">
+            <field name="NUM">0</field>
+          </block>
+        </value>
+      </block>
     </value>
   </block>
 </xml>

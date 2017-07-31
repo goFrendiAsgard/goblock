@@ -9,14 +9,14 @@
       <block type="text_print" id="qiQr=bGu6ZI!e9%Y/3hn">
         <value name="TEXT">
           <shadow type="text" id="5:vv}=Kns#4,9J{HwX?a">
-            <field name="TEXT">Karena kenal saja...</field>
+            <field name="TEXT">Karena kenal saja belum tentu sayang</field>
           </shadow>
         </value>
         <next>
-          <block type="text_print" id="9c06y}~aG~OtbzZ=nlBb">
+          <block type="text_print" id="+IAh}FyWcCYI,V[WeUi,">
             <value name="TEXT">
-              <shadow type="text" id="]wl;JPn{K2#v5V37JA.f">
-                <field name="TEXT">belum tentu sayang</field>
+              <shadow type="text" id="X#`ib)PM8iHc)4)c-@5o">
+                <field name="TEXT">~ Fiqh R. S. (Mahasiswa STIKI, ahli persajakan)</field>
               </shadow>
             </value>
           </block>

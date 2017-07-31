@@ -2,8 +2,21 @@
   <block type="text_print" id="X.{,f]RqZ){@fX#SRWu}" x="36" y="18">
     <value name="TEXT">
       <shadow type="text" id="4vTDg8|BvW.DVBa6Ih_5">
-        <field name="TEXT">Welcome to goblock</field>
+        <field name="TEXT">Welcome to wkwkwk land</field>
       </shadow>
+      <block type="text_join" id=".Kzds6YB7E);yDhk|-_v">
+        <mutation items="2"></mutation>
+        <value name="ADD0">
+          <block type="text" id="ON_Jp_;DKlMA@BI!Pqko">
+            <field name="TEXT">Hello </field>
+          </block>
+        </value>
+        <value name="ADD1">
+          <block type="text" id="P~.Uj}bPz4ZPQ_]4s4#W">
+            <field name="TEXT">Good Bye</field>
+          </block>
+        </value>
+      </block>
     </value>
   </block>
 </xml>

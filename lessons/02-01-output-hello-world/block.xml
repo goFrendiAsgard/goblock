@@ -2,8 +2,11 @@
   <block type="text_print" id="X.{,f]RqZ){@fX#SRWu}" x="36" y="18">
     <value name="TEXT">
       <shadow type="text" id="4vTDg8|BvW.DVBa6Ih_5">
-        <field name="TEXT">Welcome to goblock</field>
+        <field name="TEXT">Hello World</field>
       </shadow>
+      <block type="text" id="|zd:Av@iLe|Dat,qsx7]">
+        <field name="TEXT">Hello</field>
+      </block>
     </value>
   </block>
 </xml>
