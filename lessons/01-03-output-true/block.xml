@@ -1,0 +1,12 @@
+<xml xmlns="http://www.w3.org/1999/xhtml">
+  <block type="text_print" id="X.{,f]RqZ){@fX#SRWu}" x="36" y="18">
+    <value name="TEXT">
+      <shadow type="text" id="4vTDg8|BvW.DVBa6Ih_5">
+        <field name="TEXT">Welcome to goblock</field>
+      </shadow>
+      <block type="logic_boolean" id="!anb*=OC;%ICkf9DbpKO">
+        <field name="BOOL">TRUE</field>
+      </block>
+    </value>
+  </block>
+</xml>

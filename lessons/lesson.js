@@ -1,254 +1,282 @@
 var LESSONS = [
+
     {
-        code : 'introduction',
-        caption : 'Introduction',
+        code      : '00-01-introduction',
+        caption   : '00 - 01 Pengenalan',
         test_case : [],
         validator : function(input_list, output_list){
-            return {success: true, message: 'Nice. Please click "Ok" to continue'};
+            return {success: true, message: 'Bagus!!! Tekan tombol "Ok" untuk melanjutkan'};
         }
     },
+
     {
-        code : 'tell_me_anything',
-        caption : 'Tell Me Anything',
+        code      : '00-02-simbol-flowchart',
+        caption   : '00 - 02 Simbol Flowchart',
         test_case : [],
         validator : function(input_list, output_list){
-            if(output_list.length == 0){ return {success: false, message: 'Computer should write something'}; }
-            if(output_list[0] == 'abc'){ return {success: false, message: 'Computer should write something else'}; }
-            return {success: true, message: 'You got it,... Nice !!!'};
+            return {success: true, message: 'Bagus!!! Tekan tombol "Ok" untuk melanjutkan'};
         }
     },
+
     {
-        code : 'love_poem',
-        caption : 'Love Poem',
+        code      : '00-03-bahasa-pemrograman',
+        caption   : '00 - 03 Bahasa Pemrograman',
         test_case : [],
         validator : function(input_list, output_list){
-            if(output_list.length != 4){
-                return {success: false, message: 'Computer should write exactly 4 lines'};
-            }else if(output_list[0].toLowerCase() != 'roses are red'){
-                return {success: false, message: 'First line should be "Roses are red"'};
-            }else if(output_list[1].toLowerCase() != 'violet is blue'){
-                return {success: false, message: 'Second line should be "Violet is blue"'};
-            }else if(output_list[2].toLowerCase() != 'sugar is sweet'){
-                return {success: false, message: 'Third line should be "Sugar is sweet"'};
-            }else if(output_list[3].toLowerCase() != 'and so are you'){
-                return {success: false, message: 'Fourth line should be "And so are you"'};
-            }
-            return {success: true, message: 'Good poem... Now move on...'};
+            return {success: true, message: 'Bagus!!! Tekan tombol "Ok" untuk melanjutkan'};
         }
     },
+
     {
-        code : 'you_and_i_1',
-        caption : 'You and I, Episode 01: The Beginning',
+        code      : '01-01-output-hello',
+        caption   : '01 - 01 String',
         test_case : [],
         validator : function(input_list, output_list){
-            if(output_list.length != 1 || output_list[0].toLowerCase() != 'you and i'){
-                return {success: false, message: 'Computer should only show a single line "You and I"'};
-            }
-            return {success: true, message: 'Good job'};
+            return {success: true, message: 'Bagus!!! Tekan tombol "Ok" untuk melanjutkan'};
         }
     },
+
     {
-        code : 'you_and_i_2',
-        caption : 'You and I, Episode 02: No Other One',
+        code      : '01-02-output-10',
+        caption   : '01 - 02 Number',
         test_case : [],
         validator : function(input_list, output_list){
-            if(output_list.length != 1 || output_list[0].toLowerCase() != 'you and i'){
-                return {success: false, message: 'Computer should only show a single line "You and I"'};
-            }
-            return {success: true, message: 'Good job'};
+            return {success: true, message: 'Bagus!!! Tekan tombol "Ok" untuk melanjutkan'};
         }
     },
+
     {
-        code : 'you_and_i_3',
-        caption : 'You and I, Episode 03: Just The Two of Us',
+        code      : '01-03-output-true',
+        caption   : '01 - 03 Boolean',
         test_case : [],
         validator : function(input_list, output_list){
-            if(output_list.length != 1 || output_list[0].toLowerCase() != 'you and i'){
-                return {success: false, message: 'Computer should only show a single line "You and I"'};
-            }
-            return {success: true, message: 'Good job'};
+            return {success: true, message: 'Bagus!!! Tekan tombol "Ok" untuk melanjutkan'};
         }
     },
+
     {
-        code : 'one_step_closer',
-        caption : 'One Step Closer',
-        test_case : [['Arya Stark'], ['Daenarys Targaryen']],
-        validator : function(input_list, output_list){
-            if(input_list.length != 1){
-                return {success: false, message: 'Computer should ask for name.'};
-            }
-            var name = input_list[0];
-            var correct_response = 'Hi, '+name;
-            if(output_list.length != 1 || output_list[0] != correct_response){
-                return {success: false, message: 'The program should say "' + correct_response + '".'};
-            }
-            return {success: true, message: 'Nice. Say hi can be the begining of new friendship or relationship...'};
-        }
-    },
-    {
-        code : 'even_more',
-        caption : 'And Even More ...',
-        test_case : [['Tiger Wong', 32], ['Nobita', 10]],
-        validator : function(input_list, output_list){
-            if(input_list.length != 2){
-                return {success: false, message: 'Computer should ask for name and age.'};
-            }
-            var name = input_list[0];
-            var age = input_list[1];
-            var correct_response_1 = 'Hi, '+name;
-            var correct_response_2 = 'You are '+age+' old';
-            if(output_list.length != 2 || output_list[0] != correct_response_1 && output_list[1] != correct_response_2){
-                return {success: false, message: 'The program should say "' + correct_response_1 + '<br />' + correct_response_2 + '".'};
-            }
-            return {success: true, message: 'Nice. Good friends know alot about each others'};
-        }
-    },
-    {
-        code : 'joining_forces',
-        caption : 'Joining Forces',
-        test_case : [[25000, 30000], [1000, 200]],
-        validator : function(input_list, output_list){
-            if(input_list.length != 2){
-                return {success: false, message: 'You need to ask for both, your money and your friend\'s money.'};
-            }
-            var your_money = parseFloat(input_list[0]);
-            var friend_money = parseFloat(input_list[1]);
-            var total = your_money + friend_money;
-            if(output_list.length != 1 || output_list[0] != total){
-                return {success: false, message: 'The program should say "' + total + '".'};
-            }
-            return {success: true, message: 'By joining forces (and money), you can achieve something greater. That\'s how bunch of idiots beat the smart one'};
-        }
-    },
-    {
-        code : 'pizza',
-        caption : 'Pizza',
-        test_case : [[101000, 100000], [100000, 100000], [51000, 50000], [50000, 50000], [20000, 30000]],
-        validator : function(input_list, output_list){
-            if(input_list.length != 2){
-                return {success: false, message: 'You need to ask for both, your money and your friend\'s money.'};
-            }
-            var your_money = parseFloat(input_list[0]);
-            var friend_money = parseFloat(input_list[1]);
-            var total = your_money + friend_money;
-            if(total >= 100000 && output_list.length == 1 && output_list[0] == 'pizza'){
-                return {success: true, message: 'Great, you got the pizza'};
-            }else if(total < 100000 && output_list.length == 0){
-                return {success: true, message: 'Sadly you don\'t get the pizza. Nice try however :)'};
-            }
-            return {success: false, message: 'No, computer should only say "pizza" if your money + your friend\'s money is greater or equal to 100000'};
-        }
-    },
-    {
-        code : 'pizza_or_no_pizza',
-        caption : 'Pizza or No Pizza ',
-        test_case : [[101000, 100000], [100000, 100000], [51000, 50000], [50000, 50000], [20000, 30000]],
-        validator : function(input_list, output_list){
-            if(input_list.length != 2){
-                return {success: false, message: 'You need to ask for both, your money and your friend\'s money.'};
-            }
-            var your_money = parseFloat(input_list[0]);
-            var friend_money = parseFloat(input_list[1]);
-            var total = your_money + friend_money;
-            if(total >= 100000 && output_list.length == 1 && output_list[0] == 'pizza'){
-                return {success: true, message: 'Great, you got the pizza'};
-            }else if(total < 100000 && output_list.length == 1 && output_list[0] == 'no pizza'){
-                return {success: true, message: 'Sadly you don\'t get the pizza. Nice try however :)'};
-            }
-            return {success: false, message: 'No, computer should only say "pizza" if your money + your friend\'s money is greater or equal to 100000, and say "no pizza" otherwise'};
-        }
-    },
-    {
-        code : 'deluxe_regular_or_no_pizza',
-        caption : 'Deluxe, Regular, or No Pizza',
-        test_case : [[101000, 100000], [100000, 100000], [51000, 50000], [50000, 50000], [20000, 30000]],
-        validator : function(input_list, output_list){
-            if(input_list.length != 2){
-                return {success: false, message: 'You need to ask for both, your money and your friend\'s money.'};
-            }
-            var your_money = parseFloat(input_list[0]);
-            var friend_money = parseFloat(input_list[1]);
-            var total = your_money + friend_money;
-            if(total >= 200000 && output_list.length == 1 && output_list[0] == 'deluxe'){
-                return {success: true, message: 'Great, you got deluxe'};
-            }else if(total <= 200000 && total >= 100000 && output_list.length == 1 && output_list[0] == 'regular'){
-                return {success: true, message: 'Great, you got regular'};
-            }else if(total < 100000 && output_list.length == 1 && output_list[0] == 'no pizza'){
-                return {success: true, message: 'Sadly you don\'t get the pizza. Nice try however :)'};
-            }
-            return {success: false, message: '<p>Computer should only say "deluxe" if your money + your friend\'s money is greater or equal to 200000.</p><p> Otherwise, if your money + your friend\'s money is greater or equal to 10000, computer should say "regular".</p><p>Finally, if you guys are really that poor, you should say "no pizza" (and probably should find a part-time job)</p>'};
-        }
-    },
-    {
-        code: 'nom_nom_nom_1',
-        caption: 'Nom... Nom... Nom...',
+        code      : '01-04-output-hello-10-true',
+        caption   : '01 - 04 String, Number, dan Boolean',
         test_case : [],
         validator : function(input_list, output_list){
-            if(output_list.length != 10){
-                return {success: false, message: 'Computer should say "nom" 10 times'};
-            }
-            for(var i=0; i<10; i++){
-                if(output_list[i] != 'nom'){
-                    return {success: false, message: 'Line #' + (i+1) + ' should be "nom"'};
-                }
-            }
-            return {success: true, message: 'Good... nom... nom... nom...'};
+            return {success: true, message: 'Bagus!!! Tekan tombol "Ok" untuk melanjutkan'};
         }
     },
+
     {
-        code: 'nom_nom_nom_2',
-        caption: 'Dynamic Nom... Nom... Nom...',
-        test_case : [[3],[5],[10]],
-        validator : function(input_list, output_list){
-            if(input_list.length != 1){
-                return {success: false, message: 'Computer should ask for a number'};
-            }
-            var number = input_list[0];
-            if(output_list.length != number){
-                return {success: false, message: 'Computer should say "nom" ' + number + ' times'};
-            }
-            for(var i=0; i<(number-1); i++){
-                if(output_list[i] != 'nom'){
-                    return {success: false, message: 'Line #' + (i+1) + ' should be "nom"'};
-                }
-            }
-            return {success: true, message: 'Good... nom... nom... nom...'};
-        }
-    },
-    {
-        code: 'hanabi_festival',
-        caption: 'Hanabi Festival',
+        code      : '02-01-output-hello-world',
+        caption   : '02-01-output-hello-world',
         test_case : [],
         validator : function(input_list, output_list){
-            if(input_list.length != 1){
-                return {success: false, message: 'Computer should ask for a number'};
-            }
-            var number = parseFloat(input_list[0]);
-            if(output_list.length != number+1){
-                return {sucess: false, message: 'Computer should show '+(number+1)+' lines of output'};
-            }
-            for(var i=0; i<(number-1); i++){
-                if(output_list[i] != (number-i)){
-                    return {success: false, message: 'Line #' + (i+1) + ' should be "' + (number-i) + '"'};
-                }
-            }
-            if(output_list[number] != '*'){
-                return {success: false, message: 'The last line should be "*"'};
-            }
-            return {success: true, message: 'It is always good to have fun, either by watching fireworks or just simply hangout with friends'};
+            return {success: true, message: 'Bagus!!! Tekan tombol "Ok" untuk melanjutkan'};
         }
     },
+
     {
-        code: 'part_time_job',
-        caption: 'Part Time Job',
-        test_case: [['y','y','y','y','y','n'], ['n'], ['y','y','n']],
-        validator: function(input_list, output_list){
-            if(output_list.length != 1){
-                return {success: false, message: 'Computer should show your salary'};
-            }else if(output_list[0] != 20000 * (input_list.length -1)){
-                return {success: false, message: 'Your salary should be "' + (20000 * (input_list.length -1)) + '"'};
-            }
-            return {success: true, message: 'Nice. Keep your life in harmony'};
+        code      : '02-02-output-hello-plus-world',
+        caption   : '02-02-output-hello-plus-world',
+        test_case : [],
+        validator : function(input_list, output_list){
+            return {success: true, message: 'Bagus!!! Tekan tombol "Ok" untuk melanjutkan'};
         }
     },
+
+    {
+        code      : '02-03-output-5-plus-4',
+        caption   : '02-03-output-5-plus-4',
+        test_case : [],
+        validator : function(input_list, output_list){
+            return {success: true, message: 'Bagus!!! Tekan tombol "Ok" untuk melanjutkan'};
+        }
+    },
+
+    {
+        code      : '02-04-output-5-less-than-4',
+        caption   : '02-04-output-5-less-than-4',
+        test_case : [],
+        validator : function(input_list, output_list){
+            return {success: true, message: 'Bagus!!! Tekan tombol "Ok" untuk melanjutkan'};
+        }
+    },
+
+    {
+        code      : '02-05-output-not-true',
+        caption   : '02-05-output-not-true',
+        test_case : [],
+        validator : function(input_list, output_list){
+            return {success: true, message: 'Bagus!!! Tekan tombol "Ok" untuk melanjutkan'};
+        }
+    },
+
+    {
+        code      : '02-06-true-and-false',
+        caption   : '02-06-true-and-false',
+        test_case : [],
+        validator : function(input_list, output_list){
+            return {success: true, message: 'Bagus!!! Tekan tombol "Ok" untuk melanjutkan'};
+        }
+    },
+
+    {
+        code      : '02-07-true-or-false',
+        caption   : '02-07-true-or-false',
+        test_case : [],
+        validator : function(input_list, output_list){
+            return {success: true, message: 'Bagus!!! Tekan tombol "Ok" untuk melanjutkan'};
+        }
+    },
+
+    {
+        code      : '03-01-input-nama',
+        caption   : '03-01-input-nama',
+        test_case : [],
+        validator : function(input_list, output_list){
+            return {success: true, message: 'Bagus!!! Tekan tombol "Ok" untuk melanjutkan'};
+        }
+    },
+
+    {
+        code      : '03-02-hello-nama',
+        caption   : '03-02-hello-nama',
+        test_case : [],
+        validator : function(input_list, output_list){
+            return {success: true, message: 'Bagus!!! Tekan tombol "Ok" untuk melanjutkan'};
+        }
+    },
+
+    {
+        code      : '03-04-penjumlahan',
+        caption   : '03-04-penjumlahan',
+        test_case : [],
+        validator : function(input_list, output_list){
+            return {success: true, message: 'Bagus!!! Tekan tombol "Ok" untuk melanjutkan'};
+        }
+    },
+
+    {
+        code      : '03-04-penjumlahan-variable',
+        caption   : '03-04-penjumlahan-variable',
+        test_case : [],
+        validator : function(input_list, output_list){
+            return {success: true, message: 'Bagus!!! Tekan tombol "Ok" untuk melanjutkan'};
+        }
+    },
+
+    {
+        code      : '04-01-if-false',
+        caption   : '04-01-if-false',
+        test_case : [],
+        validator : function(input_list, output_list){
+            return {success: true, message: 'Bagus!!! Tekan tombol "Ok" untuk melanjutkan'};
+        }
+    },
+
+    {
+        code      : '04-02-if-true',
+        caption   : '04-02-if-true',
+        test_case : [],
+        validator : function(input_list, output_list){
+            return {success: true, message: 'Bagus!!! Tekan tombol "Ok" untuk melanjutkan'};
+        }
+    },
+
+    {
+        code      : '04-03-if-3-less-than-4',
+        caption   : '04-03-if-3-less-than-4',
+        test_case : [],
+        validator : function(input_list, output_list){
+            return {success: true, message: 'Bagus!!! Tekan tombol "Ok" untuk melanjutkan'};
+        }
+    },
+
+    {
+        code      : '04-04-if-3-greater-than-4',
+        caption   : '04-04-if-3-greater-than-4',
+        test_case : [],
+        validator : function(input_list, output_list){
+            return {success: true, message: 'Bagus!!! Tekan tombol "Ok" untuk melanjutkan'};
+        }
+    },
+
+    {
+        code      : '04-05-if-lulus',
+        caption   : '04-05-if-lulus',
+        test_case : [],
+        validator : function(input_list, output_list){
+            return {success: true, message: 'Bagus!!! Tekan tombol "Ok" untuk melanjutkan'};
+        }
+    },
+
+    {
+        code      : '04-06-if-lulus-if-not-lulus',
+        caption   : '04-06-if-lulus-if-not-lulus',
+        test_case : [],
+        validator : function(input_list, output_list){
+            return {success: true, message: 'Bagus!!! Tekan tombol "Ok" untuk melanjutkan'};
+        }
+    },
+
+    {
+        code      : '04-07-if-lulus-else',
+        caption   : '04-07-if-lulus-else',
+        test_case : [],
+        validator : function(input_list, output_list){
+            return {success: true, message: 'Bagus!!! Tekan tombol "Ok" untuk melanjutkan'};
+        }
+    },
+
+    {
+        code      : '05-01-1-2-3',
+        caption   : '05-01-1-2-3',
+        test_case : [],
+        validator : function(input_list, output_list){
+            return {success: true, message: 'Bagus!!! Tekan tombol "Ok" untuk melanjutkan'};
+        }
+    },
+
+    {
+        code      : '05-02-i',
+        caption   : '05-02-i',
+        test_case : [],
+        validator : function(input_list, output_list){
+            return {success: true, message: 'Bagus!!! Tekan tombol "Ok" untuk melanjutkan'};
+        }
+    },
+
+    {
+        code      : '05-03-i-if',
+        caption   : '05-03-i-if',
+        test_case : [],
+        validator : function(input_list, output_list){
+            return {success: true, message: 'Bagus!!! Tekan tombol "Ok" untuk melanjutkan'};
+        }
+    },
+
+    {
+        code      : '05-04-while',
+        caption   : '05-04-while',
+        test_case : [],
+        validator : function(input_list, output_list){
+            return {success: true, message: 'Bagus!!! Tekan tombol "Ok" untuk melanjutkan'};
+        }
+    },
+
+    {
+        code      : '05-05-while-input',
+        caption   : '05-05-while-input',
+        test_case : [],
+        validator : function(input_list, output_list){
+            return {success: true, message: 'Bagus!!! Tekan tombol "Ok" untuk melanjutkan'};
+        }
+    },
+
+    {
+        code      : '05-06-while-if',
+        caption   : '05-06-while-if',
+        test_case : [],
+        validator : function(input_list, output_list){
+            return {success: true, message: 'Bagus!!! Tekan tombol "Ok" untuk melanjutkan'};
+        }
+    },
+
 ];

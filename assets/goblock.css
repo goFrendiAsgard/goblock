@@ -1,3 +1,7 @@
+.col-md-12{
+    padding-left:5px;
+    padding-right:5px;
+}
 div#div-workplace{
     height: 480px;
     margin-bottom:10px;
@@ -7,24 +11,38 @@ div#div-control, div#div-lesson-control{
     margin-bottom:5px;
 }
 div#div-source-code, div#div-output{
-    height: 120px;
+    height: 130px;
+}
+div#div-lesson-control{
+    padding-right:0px;
 }
 div#div-lesson{
-    max-height:480px;
+    max-height:600px;
     font-size:small;
+    margin-top:10px;
 }
 div#div-lesson p{
     text-align:justify;
 }
+div#div-lesson div.alert{
+    font-size:small;
+}
 div#div-lesson, div#div-source-code, div#div-output{
     overflow-y: scroll;
+}
+div#div-lesson img{
+    max-width:100%;
+    padding:5px;
+    border:1px solid gray;
 }
 div#div-output, div#div-source-code{
     font-family:monospace;
     font-size:small;
 }
 footer#footer{
-    font-size:smaller;
+    text-align:right;
+    font-size:x-small;
+    color:gray;
 }
 div.alert{
     font-size:medium;

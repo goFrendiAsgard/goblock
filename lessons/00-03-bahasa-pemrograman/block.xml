@@ -1,0 +1,34 @@
+<xml xmlns="http://www.w3.org/1999/xhtml">
+  <block type="variables_set" id="D/;(i]Nt`i|qdpD[JbgL" x="30" y="37">
+    <field name="VAR">nama</field>
+    <value name="VALUE">
+      <block type="text_prompt" id="|HJLEnJZnCPD^e-Uz5n7">
+        <mutation type="TEXT"></mutation>
+        <field name="TYPE">TEXT</field>
+        <field name="TEXT">Siapa namamu?</field>
+      </block>
+    </value>
+    <next>
+      <block type="text_print" id="X.{,f]RqZ){@fX#SRWu}">
+        <value name="TEXT">
+          <shadow type="text" id="4vTDg8|BvW.DVBa6Ih_5">
+            <field name="TEXT">Welcome to goblock</field>
+          </shadow>
+          <block type="text_join" id="0GYw:%LcAtBkvZqxz7#F">
+            <mutation items="2"></mutation>
+            <value name="ADD0">
+              <block type="text" id=".R[TzJ)KDGFsI)o9nJ!w">
+                <field name="TEXT">Halo </field>
+              </block>
+            </value>
+            <value name="ADD1">
+              <block type="variables_get" id="Nt*e7D+!@~r{lDsf1I]7">
+                <field name="VAR">nama</field>
+              </block>
+            </value>
+          </block>
+        </value>
+      </block>
+    </next>
+  </block>
+</xml>

@@ -337,7 +337,11 @@ function load_lesson(id){
         'url' : 'lessons/' + code + '/intro.html',
         'cache' : false,
         'success' : function(html){
+            // adjust src and href
+            html = html.replace(/src="([a-z0-9_\-\.\/]*)"/ig, 'src="lessons/' + code + '/$1"');
+            html = html.replace(/href="([a-z0-9_\-\.\/]*)"/ig, 'href="lessons/' + code + '/$1"');
             $('div#div-lesson').html(html);
+            console.log(html);
         }
     });
     $.ajax({
