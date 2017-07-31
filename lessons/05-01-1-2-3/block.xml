@@ -4,6 +4,33 @@
       <shadow type="text" id="4vTDg8|BvW.DVBa6Ih_5">
         <field name="TEXT">Welcome to goblock</field>
       </shadow>
+      <block type="math_number" id="gKgK0Z3iPp[U6ReShI*)">
+        <field name="NUM">1</field>
+      </block>
     </value>
+    <next>
+      <block type="text_print" id="DB?+_]lUVqsStvJ*,Z,M">
+        <value name="TEXT">
+          <shadow type="text" id="4vTDg8|BvW.DVBa6Ih_5">
+            <field name="TEXT">Welcome to goblock</field>
+          </shadow>
+          <block type="math_number" id="pc;|h/mLIN0pYp3.%Q?P">
+            <field name="NUM">2</field>
+          </block>
+        </value>
+        <next>
+          <block type="text_print" id="`1aCn#jKP*xdPJ|47P7c">
+            <value name="TEXT">
+              <shadow type="text" id="4vTDg8|BvW.DVBa6Ih_5">
+                <field name="TEXT">Welcome to goblock</field>
+              </shadow>
+              <block type="math_number" id="_8vemEJu(Q{Og4JUq8RI">
+                <field name="NUM">3</field>
+              </block>
+            </value>
+          </block>
+        </next>
+      </block>
+    </next>
   </block>
 </xml>

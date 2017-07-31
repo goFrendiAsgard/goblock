@@ -1,9 +1,68 @@
 <xml xmlns="http://www.w3.org/1999/xhtml">
-  <block type="text_print" id="X.{,f]RqZ){@fX#SRWu}" x="36" y="18">
-    <value name="TEXT">
-      <shadow type="text" id="4vTDg8|BvW.DVBa6Ih_5">
-        <field name="TEXT">Welcome to goblock</field>
-      </shadow>
+  <block type="variables_set" id="dM=,M6.YoJx!40VYw6d+" x="29" y="2">
+    <field name="VAR">nilai</field>
+    <value name="VALUE">
+      <block type="text_prompt" id="yx;7AS{KM}MqZpXpHgPb">
+        <mutation type="NUMBER"></mutation>
+        <field name="TYPE">NUMBER</field>
+        <field name="TEXT"></field>
+      </block>
     </value>
+    <next>
+      <block type="controls_if" id="zi/?riK~Fy}Yj3Of1nza">
+        <value name="IF0">
+          <block type="logic_compare" id=":AuA1*wHvkFJ=ImPCfoP">
+            <field name="OP">GT</field>
+            <value name="A">
+              <block type="variables_get" id="%8xJ3qQ/Fm[3SK|(+q{_">
+                <field name="VAR">nilai</field>
+              </block>
+            </value>
+            <value name="B">
+              <block type="math_number" id="k*(x[G(T*,hV}HoXk8v9">
+                <field name="NUM">50</field>
+              </block>
+            </value>
+          </block>
+        </value>
+        <statement name="DO0">
+          <block type="text_print" id="X.{,f]RqZ){@fX#SRWu}">
+            <value name="TEXT">
+              <shadow type="text" id="4vTDg8|BvW.DVBa6Ih_5">
+                <field name="TEXT">Lulus</field>
+              </shadow>
+            </value>
+          </block>
+        </statement>
+        <next>
+          <block type="controls_if" id="H7k-*EqB(OR[U;%C)w9p">
+            <value name="IF0">
+              <block type="logic_compare" id="P])G4{0}y9p,pEeAVhEr">
+                <field name="OP">LTE</field>
+                <value name="A">
+                  <block type="variables_get" id="F}Gx/!!MycUF)tRS/7@M">
+                    <field name="VAR">nilai</field>
+                  </block>
+                </value>
+                <value name="B">
+                  <block type="math_number" id="Y_|Qi2!=;4.QgD3oZ:;6">
+                    <field name="NUM">50</field>
+                  </block>
+                </value>
+              </block>
+            </value>
+            <statement name="DO0">
+              <block type="text_print" id="sRrb!+uSNCIc1L15E7LX">
+                <value name="TEXT">
+                  <shadow type="text" id="!}u0NKZ^Ay5gL!^J:M_0">
+                    <field name="TEXT">Tidak Lulus</field>
+                  </shadow>
+                </value>
+              </block>
+            </statement>
+          </block>
+        </next>
+      </block>
+    </next>
   </block>
 </xml>
