@@ -43,6 +43,7 @@ footer#footer{
     text-align:right;
     font-size:x-small;
     color:gray;
+    padding:0px;
 }
 div.alert{
     font-size:medium;

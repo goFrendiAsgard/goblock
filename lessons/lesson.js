@@ -267,9 +267,20 @@ var LESSONS = [
     {
         code      : '04-05-if-lulus',
         caption   : '04 - 05 Kabari Jika Lulus',
-        test_case : [],
+        test_case : [[30], [40], [50], [60], [100]],
         validator : function(input_list, output_list){
-            return {success: true, message: 'Bagus!!! Tekan tombol "Ok" untuk melanjutkan'};
+            if(input_list[0] <= 50 && output_list.length == 0){
+                if(output_list.length == 0){
+                    return {success: true, message: 'Bagus!!! Tekan tombol "Ok" untuk melanjutkan'};
+                }
+                return {success: false, message: 'Hanya munculkan pesan "Lulus" jika nilai lebih dari 50'};
+            }
+            else if(input_list[0] > 50){
+                if(output_list.length == 1 && output_list[0] === "Lulus"){
+                    return {success: true, message: 'Bagus!!! Tekan tombol "Ok" untuk melanjutkan'};
+                }
+                return {success: false, message: 'Jika nilai > 50, munculkan pesan "Lulus"'};
+            }
         }
     },
 
@@ -278,7 +289,13 @@ var LESSONS = [
         caption   : '04 - 06 Kabari Jika Lulus, Kabari Juga Jika Tidak Lulus',
         test_case : [],
         validator : function(input_list, output_list){
-            return {success: true, message: 'Bagus!!! Tekan tombol "Ok" untuk melanjutkan'};
+            if(output_list.length == 1){
+                if( (input_list[0] > 50 && output_list[0] == 'Lulus') || (input_list[0] <= 50 && output_list[0] == 'Tidak Lulus')){
+
+                    return {success: true, message: 'Bagus!!! Tekan tombol "Ok" untuk melanjutkan'};
+                }
+            }
+            return {success: false, message: 'Program harus memberikan output "Lulus" atau "Tidak Lulus"'};
         }
     },
 
@@ -287,7 +304,13 @@ var LESSONS = [
         caption   : '04 - 07 Kabari Apapun Yang Terjadi',
         test_case : [],
         validator : function(input_list, output_list){
-            return {success: true, message: 'Bagus!!! Tekan tombol "Ok" untuk melanjutkan'};
+            if(output_list.length == 1){
+                if( (input_list[0] > 50 && output_list[0] == 'Lulus') || (input_list[0] <= 50 && output_list[0] == 'Tidak Lulus')){
+
+                    return {success: true, message: 'Bagus!!! Tekan tombol "Ok" untuk melanjutkan'};
+                }
+            }
+            return {success: false, message: 'Program harus memberikan output "Lulus" atau "Tidak Lulus"'};
         }
     },
 
@@ -296,7 +319,10 @@ var LESSONS = [
         caption   : '05 - 01 Satu, Dua, Tiga',
         test_case : [],
         validator : function(input_list, output_list){
-            return {success: true, message: 'Bagus!!! Tekan tombol "Ok" untuk melanjutkan'};
+            if(output_list.length == 3 && output_list[0] === 1 && output_list[1] === 2 && output_list[2] === 3){
+                return {success: true, message: 'Bagus!!! Tekan tombol "Ok" untuk melanjutkan'};
+            }
+            return {success: false, message: 'Program harus menghasilkan 3 output, 1, 2, dan 3'};
         }
     },
 
@@ -305,42 +331,73 @@ var LESSONS = [
         caption   : '05 - 02 Satu, Dua, Tiga (Dengan Kekuatan Copy Paste)',
         test_case : [],
         validator : function(input_list, output_list){
-            return {success: true, message: 'Bagus!!! Tekan tombol "Ok" untuk melanjutkan'};
+            if(output_list.length == 3 && output_list[0] === 1 && output_list[1] === 2 && output_list[2] === 3){
+                return {success: true, message: 'Bagus!!! Tekan tombol "Ok" untuk melanjutkan'};
+            }
+            return {success: false, message: 'Program harus menghasilkan 3 output, 1, 2, dan 3'};
         }
     },
 
     {
         code      : '05-03-i-if',
-        caption   : '05-03-i-if',
+        caption   : '05 - 03 Satu, Dua, Tiga (Dengan Kekuatan Percabangan)',
         test_case : [],
         validator : function(input_list, output_list){
-            return {success: true, message: 'Bagus!!! Tekan tombol "Ok" untuk melanjutkan'};
+            if(output_list.length == 3 && output_list[0] === 1 && output_list[1] === 2 && output_list[2] === 3){
+                return {success: true, message: 'Bagus!!! Tekan tombol "Ok" untuk melanjutkan'};
+            }
+            return {success: false, message: 'Program harus menghasilkan 3 output, 1, 2, dan 3'};
         }
     },
 
     {
         code      : '05-04-while',
-        caption   : '05-04-while',
+        caption   : '05 - 04 Satu, DUa, Tiga (Dengan Kekuatan Perulangan)',
         test_case : [],
         validator : function(input_list, output_list){
-            return {success: true, message: 'Bagus!!! Tekan tombol "Ok" untuk melanjutkan'};
+            if(output_list.length == 3 && output_list[0] === 1 && output_list[1] === 2 && output_list[2] === 3){
+                return {success: true, message: 'Bagus!!! Tekan tombol "Ok" untuk melanjutkan'};
+            }
+            return {success: false, message: 'Program harus menghasilkan 3 output, 1, 2, dan 3'};
         }
     },
 
     {
         code      : '05-05-while-input',
-        caption   : '05-05-while-input',
-        test_case : [],
+        caption   : '05 - 05 Satu, Dua, Seratus',
+        test_case : [[4], [5], [2], [100]],
         validator : function(input_list, output_list){
+            if(output_list.length != input_list[0]){
+                return {success: false, message: 'Jumlah output tidak sesuai'};
+            }
+            for(var i=0; i<output_list.length; i++){
+                if(output_list[i] != i+1){
+                    return {success: false, message: 'Ada nilai output yang salah'};
+                }
+            }
             return {success: true, message: 'Bagus!!! Tekan tombol "Ok" untuk melanjutkan'};
         }
     },
 
     {
         code      : '05-06-while-if',
-        caption   : '05-06-while-if',
-        test_case : [],
+        caption   : '05 - 06 Yang Genap, Yang Genap...',
+        test_case : [[4], [5], [2], [100]],
         validator : function(input_list, output_list){
+            var jawabanBenar = []
+            for(var i=1; i<= input_list[0]; i++){
+                if(i%2 == 0){
+                    jawabanBenar.push(i);
+                }
+            }
+            if(jawabanBenar.length != output_list.length){
+                return {success: false, message: 'Jumlah output tidak sesuai'};
+            }
+            for(var i=0; i<output_list.length; i++){
+                if(output_list[i] != jawabanBenar[i]){
+                    return {success: false, message: 'Ada nilai output yang salah'};
+                }
+            }
             return {success: true, message: 'Bagus!!! Tekan tombol "Ok" untuk melanjutkan'};
         }
     },
