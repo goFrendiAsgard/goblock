@@ -32,7 +32,10 @@ var LESSONS = [
         caption   : '01 - 01 String',
         test_case : [],
         validator : function(input_list, output_list){
-            return {success: true, message: 'Bagus!!! Tekan tombol "Ok" untuk melanjutkan'};
+            if(output_list.length == 1 && output_list[0] === 'Hello'){
+                return {success: true, message: 'Bagus!!! Tekan tombol "Ok" untuk melanjutkan'};
+            }
+            return {success: false, message: 'Output harus "Hello"'};
         }
     },
 
@@ -41,7 +44,10 @@ var LESSONS = [
         caption   : '01 - 02 Number',
         test_case : [],
         validator : function(input_list, output_list){
-            return {success: true, message: 'Bagus!!! Tekan tombol "Ok" untuk melanjutkan'};
+            if(output_list.length == 1 && output_list[0] === 10){
+                return {success: true, message: 'Bagus!!! Tekan tombol "Ok" untuk melanjutkan'};
+            }
+            return {success: false, message: 'Output harus 10'};
         }
     },
 
@@ -50,7 +56,10 @@ var LESSONS = [
         caption   : '01 - 03 Boolean',
         test_case : [],
         validator : function(input_list, output_list){
-            return {success: true, message: 'Bagus!!! Tekan tombol "Ok" untuk melanjutkan'};
+            if(output_list.length == 1 && output_list[0] === true){
+                return {success: true, message: 'Bagus!!! Tekan tombol "Ok" untuk melanjutkan'};
+            }
+            return {success: false, message: 'Output harus true'};
         }
     },
 
@@ -185,61 +194,79 @@ var LESSONS = [
 
     {
         code      : '03-04-penjumlahan',
-        caption   : '03-04-penjumlahan',
-        test_case : [],
+        caption   : '03 - 04 Penjumlahan Variable',
+        test_case : [[4,4], [8,1], [2,3]],
         validator : function(input_list, output_list){
-            return {success: true, message: 'Bagus!!! Tekan tombol "Ok" untuk melanjutkan'};
+            if(output_list.length == 1 && output_list[0] === (input_list[0] + input_list[1])){
+                return {success: true, message: 'Bagus!!! Tekan tombol "Ok" untuk melanjutkan'};
+            }
+            return{success: false, message: 'Output yang diberikan harus berupa pernjumlahan dari kedua input'}
         }
     },
 
     {
         code      : '03-05-penjumlahan-variable',
-        caption   : '03-05-penjumlahan-variable',
+        caption   : '03 - 05 Variable Penampung',
         test_case : [],
         validator : function(input_list, output_list){
-            return {success: true, message: 'Bagus!!! Tekan tombol "Ok" untuk melanjutkan'};
+            if(output_list.length == 1 && output_list[0] === (input_list[0] + input_list[1])){
+                return {success: true, message: 'Bagus!!! Tekan tombol "Ok" untuk melanjutkan'};
+            }
+            return{success: false, message: 'Output yang diberikan harus berupa pernjumlahan dari kedua input'}
         }
     },
 
     {
         code      : '04-01-if-false',
-        caption   : '04-01-if-false',
+        caption   : '04 - 01 Jika Salah',
         test_case : [],
         validator : function(input_list, output_list){
-            return {success: true, message: 'Bagus!!! Tekan tombol "Ok" untuk melanjutkan'};
+            if(output_list.length == 0){
+                return {success: true, message: 'Bagus!!! Tekan tombol "Ok" untuk melanjutkan'};
+            }
+            return{success: false, message: 'Tidak boleh ada output'}
         }
     },
 
     {
         code      : '04-02-if-true',
-        caption   : '04-02-if-true',
+        caption   : '04 - 02 Jika Benar',
         test_case : [],
         validator : function(input_list, output_list){
-            return {success: true, message: 'Bagus!!! Tekan tombol "Ok" untuk melanjutkan'};
+            if(output_list.length == 1 && output_list[0] === 'Hello'){
+                return {success: true, message: 'Bagus!!! Tekan tombol "Ok" untuk melanjutkan'};
+            }
+            return {success: false, message: 'Output harus "Hello"'};
         }
     },
 
     {
         code      : '04-03-if-3-less-than-4',
-        caption   : '04-03-if-3-less-than-4',
+        caption   : '04 - 03 Jika Benar (Lagi)',
         test_case : [],
         validator : function(input_list, output_list){
-            return {success: true, message: 'Bagus!!! Tekan tombol "Ok" untuk melanjutkan'};
+            if(output_list.length == 1 && output_list[0] === 'Hello'){
+                return {success: true, message: 'Bagus!!! Tekan tombol "Ok" untuk melanjutkan'};
+            }
+            return {success: false, message: 'Output harus "Hello"'};
         }
     },
 
     {
         code      : '04-04-if-3-greater-than-4',
-        caption   : '04-04-if-3-greater-than-4',
+        caption   : '04 - 04 Jika Salah (Lagi)',
         test_case : [],
         validator : function(input_list, output_list){
-            return {success: true, message: 'Bagus!!! Tekan tombol "Ok" untuk melanjutkan'};
+            if(output_list.length == 0){
+                return {success: true, message: 'Bagus!!! Tekan tombol "Ok" untuk melanjutkan'};
+            }
+            return{success: false, message: 'Tidak boleh ada output'}
         }
     },
 
     {
         code      : '04-05-if-lulus',
-        caption   : '04-05-if-lulus',
+        caption   : '04 - 05 Kabari Jika Lulus',
         test_case : [],
         validator : function(input_list, output_list){
             return {success: true, message: 'Bagus!!! Tekan tombol "Ok" untuk melanjutkan'};
@@ -248,7 +275,7 @@ var LESSONS = [
 
     {
         code      : '04-06-if-lulus-if-not-lulus',
-        caption   : '04-06-if-lulus-if-not-lulus',
+        caption   : '04 - 06 Kabari Jika Lulus, Kabari Juga Jika Tidak Lulus',
         test_case : [],
         validator : function(input_list, output_list){
             return {success: true, message: 'Bagus!!! Tekan tombol "Ok" untuk melanjutkan'};
@@ -257,7 +284,7 @@ var LESSONS = [
 
     {
         code      : '04-07-if-lulus-else',
-        caption   : '04-07-if-lulus-else',
+        caption   : '04 - 07 Kabari Apapun Yang Terjadi',
         test_case : [],
         validator : function(input_list, output_list){
             return {success: true, message: 'Bagus!!! Tekan tombol "Ok" untuk melanjutkan'};
@@ -266,7 +293,7 @@ var LESSONS = [
 
     {
         code      : '05-01-1-2-3',
-        caption   : '05-01-1-2-3',
+        caption   : '05 - 01 Satu, Dua, Tiga',
         test_case : [],
         validator : function(input_list, output_list){
             return {success: true, message: 'Bagus!!! Tekan tombol "Ok" untuk melanjutkan'};
@@ -275,7 +302,7 @@ var LESSONS = [
 
     {
         code      : '05-02-i',
-        caption   : '05-02-i',
+        caption   : '05 - 02 Satu, Dua, Tiga (Dengan Kekuatan Copy Paste)',
         test_case : [],
         validator : function(input_list, output_list){
             return {success: true, message: 'Bagus!!! Tekan tombol "Ok" untuk melanjutkan'};

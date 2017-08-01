@@ -165,7 +165,7 @@
                 <next>
                   <block type="controls_if" id="JwA(hO6#QJ8(Ul3yzVD-">
                     <comment pinned="false" h="80" w="160">Di sini nilai i adalah 4,
-sehingga i
+                        sehingga i&lt;=3 bernilai false
                     </comment>
                     <value name="IF0">
                       <block type="logic_compare" id="/:BnsuV~4)qfgDS#D9Y*">
@@ -225,15 +225,5 @@ sehingga i
         </next>
       </block>
     </next>
-  </block>
-  <block type="text_print" id="l6~eHW7{D0}XYTQ)4Fzm" x="78" y="324">
-    <value name="TEXT">
-      <shadow type="text" id="m?2^0Gqp~SlBLz4GI5I1">
-        <field name="TEXT">abc</field>
-      </shadow>
-      <block type="variables_get" id="Wb`A[p1ORL|Z{BO,.Xhk">
-        <field name="VAR">i</field>
-      </block>
-    </value>
   </block>
 </xml>
