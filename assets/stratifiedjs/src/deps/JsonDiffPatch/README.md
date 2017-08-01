@@ -37,7 +37,7 @@ eg:
 	var country2 = JSON.parse(JSON.stringify(country),jsondiffpatch.dateReviver);
 	 
 	// make some changes
-	country2.name = "República Argentina";
+	country2.name = "RepÃºblica Argentina";
 	country2.population = "41324992";
 	delete country2.capital;
   
@@ -45,7 +45,7 @@ eg:
 	
 	/*
 	delta = {
-		"name":["Argentina","República Argentina"], // old value, new value
+		"name":["Argentina","RepÃºblica Argentina"], // old value, new value
 		"population":["41324992"], // new value
 		"capital":["Buenos Aires",0,0] // deleted
 	}
