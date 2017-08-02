@@ -20,6 +20,7 @@ div#div-lesson{
     max-height:600px;
     font-size:small;
     margin-top:10px;
+    background-color:white;
 }
 div#div-lesson p{
     text-align:justify;
@@ -38,6 +39,7 @@ div#div-lesson img{
 div#div-output, div#div-source-code{
     font-family:monospace;
     font-size:small;
+    background-color:white;
 }
 footer#footer{
     text-align:right;
@@ -47,4 +49,15 @@ footer#footer{
 }
 div.alert{
     font-size:medium;
+}
+body{
+    background-color: #e9ebee;
+}
+select#lesson-chapter{
+    max-width:300px;
+}
+select#language{
+    max-width:150px;
+}
+table#table-watcher{
 }

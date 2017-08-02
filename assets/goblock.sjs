@@ -1,3 +1,6 @@
+// default properties, should not be watched on each steps
+var DEFAULT_PROPERTIES = ['Infinity', 'Array', 'Boolean', 'Date', 'Error', 'EvalError', 'Function', 'JSON', 'Math', 'NaN', 'Number', 'Object', 'RangeError', 'ReferenceError', 'RegExp', 'String', 'SyntaxError', 'TypeError', 'URIError', 'alert', 'decodeURI', 'decodeURIComponent', 'encodeURI', 'encodeURIComponent', 'escape', 'eval', 'highlightBlock', 'isFinite', 'isNaN', 'parseFloat', 'parseInt', 'prompt', 'self', 'undefined', 'unescape', 'window'];
+
 var SYS = require("stratifiedjs/modules/sys.sjs");
 // state variables
 var WAIT = false; // If WAIT is true, then the program shall halt until alert or prompt box is closed
@@ -6,10 +9,13 @@ var SILENT_MODE = false; // Execute things, silently
 var INPUT_LIST = [];
 var OUTPUT_LIST = [];
 var TEST_CASE_INDEX = 0; // If SILENT_MODE is activated, then INPUT is taken from LESSONS, thus we need to be informed about current INPUT_INDEX
+var INPUT_LIST_INDEX = 0; // only used when EXEC_MODE is activated
 var INPUT_TEST_INDEX = 0;
 var INTERPRETER = null;
 var HIGHLIGHT_PAUSE = false;
 var LESSON_ID = 0
+var SHOW_LESSON = true;
+var LAST_VARIABLE_WATCH = ''; // variable watch log, used when a step is performed
 
 // original alert, prompt, and confirm
 var WINDOW_ALERT = window.alert;
@@ -64,7 +70,7 @@ window.prompt = function(message, default_value, callback){
         if(TEST_CASE_INDEX < test_case.length){
             input_test = test_case[TEST_CASE_INDEX];
             if(INPUT_TEST_INDEX < input_test.length){
-                result = input_test[INPUT_TEST_INDEX];
+                var result = input_test[INPUT_TEST_INDEX];
                 INPUT_TEST_INDEX ++;
                 return result;
             }else{
@@ -76,7 +82,10 @@ window.prompt = function(message, default_value, callback){
     }
     // Acorn interpreter cannot handle custom window prompt
     if(EXEC_MODE && INTERPRETER){
-        return WINDOW_PROMPT(message, default_value);
+        var result = INPUT_LIST[INPUT_LIST_INDEX];
+        INPUT_LIST_INDEX++;
+        $('div#div-output').append('<b>' + message + '</b> ' + result + '<br />');
+        return result;
     }
     $('div#div-prompt-message').html(message);
     $('div#div-prompt').modal('show');
@@ -137,10 +146,27 @@ function close_confirm_cancel(){
 }
 $('.close-confirm-cancel').click(close_confirm_cancel);
 
+
 // define and load the toolbox
 var WORKSPACE = Blockly.inject('div-workplace', {
     toolbox : document.getElementById('toolbox'),
     media: 'assets/blockly/media/'
+});
+
+$('button#btn-toggle-lesson').click(function(){
+    SHOW_LESSON = !SHOW_LESSON;
+    if(SHOW_LESSON){
+        $('div#div-lesson-container').show();
+        $('div#div-workspace-container').removeClass('col-md-12');
+        $('div#div-workspace-container').addClass('col-md-7');
+    }
+    else{
+        $('div#div-lesson-container').hide();
+        $('div#div-workspace-container').removeClass('col-md-7');
+        $('div#div-workspace-container').addClass('col-md-12');
+    }
+    WORKSPACE.setVisible(true);
+    window.dispatchEvent(new Event('resize'));
 });
 
 // functions for show source
@@ -159,6 +185,8 @@ function run_code(event, is_evaluation) {
     INPUT_LIST = []; // clear input and output list
     OUTPUT_LIST = [];
     INTERPRETER = null;
+    LAST_VARIABLE_WATCH = '';
+    adjustWatcher();
     clear_output();
     window.LoopTrap = 10000000; // handle infinite loop
     Blockly.JavaScript.INFINITE_LOOP_TRAP = 'if(--window.LoopTrap == 0) throw "Infinite loop.";\n';
@@ -186,7 +214,7 @@ function run_code(event, is_evaluation) {
                 TEST_CASE_INDEX = i;
                 INPUT_TEST_INDEX = 0;
                 var current_test_case = test_case[i];
-                var error_message = 'Your program has been failed in our test case.<br /><b>Input:</b> <div style="padding-left:10px">' + current_test_case.join('<br />') + '</div>';
+                var error_message = 'Test Case Failure.<br /><b>Input:</b> <div style="padding-left:10px">' + current_test_case.join('<br />') + '</div>';
                 try{
                     INPUT_LIST = []; // clear input and output list
                     OUTPUT_LIST = [];
@@ -213,7 +241,7 @@ function run_code(event, is_evaluation) {
                     $('#lesson-chapter').val(LESSON_ID);
                     load_lesson(LESSON_ID);
                 }else{ // no other lesson available
-                    window.alert('<div class="alert alert-success"><b>You have reach the end of the lesson.</b> Thank you for using goblock</div>');
+                    window.alert('<div class="alert alert-success"><b>End of Lesson</b> You have complete the lesson</div>');
                 }
             }
         }else{ // evaluation failed
@@ -226,6 +254,7 @@ $('button#btn-evaluate').click(function(event){run_code(event, true);});
 
 // Debugging functions
 function init_api(interpreter, scope) {
+    
     // Add an API function for the alert() block.
     var wrapper = function(text) {
         text = text ? text.toString() : '';
@@ -249,6 +278,7 @@ function init_api(interpreter, scope) {
     };
     interpreter.setProperty(scope, 'highlightBlock',
             interpreter.createNativeFunction(wrapper));
+
 }
 
 function highlightBlock(id) {
@@ -256,8 +286,27 @@ function highlightBlock(id) {
     HIGHLIGHT_PAUSE = true;
 }
 
+function adjustWatcher(){
+    if(LAST_VARIABLE_WATCH != ''){
+        var containerHeight = $('div#div-lesson-container').height();
+        $('table#table-watcher').show();
+        var lessonHeight = $('div#div-lesson').height();
+        var watcherHeight = $('table#table-watcher').height();
+        console.log([lessonHeight, watcherHeight, containerHeight]);
+        if((containerHeight - 10) < (lessonHeight + watcherHeight)){
+            $('div#div-lesson').height(lessonHeight - watcherHeight - 10);
+        }
+    }
+    else{
+        $('table#table-watcher').hide();
+        $('div#div-lesson').height('');
+    }
+}
+
 function step_code() {
     if(!INTERPRETER){
+        LAST_VARIABLE_WATCH = '';
+        adjustWatcher();
         clear_output();
         // get the code
         Blockly.JavaScript.STATEMENT_PREFIX = 'highlightBlock(%1);\n';
@@ -272,11 +321,32 @@ function step_code() {
         HIGHLIGHT_PAUSE = false;
         WORKSPACE.traceOn(true);
         WORKSPACE.highlightBlock(null);
-        window.alert('<p>You are entering debugging mode. Keep on clicking <b>step</b> button until the program finished. The currently executed block will be highlighted.</p><p>Please <b>never</b> check <i>Prevent this page from creating additional dialog</i> when prompt dialog popped up</p><br /><img src="assets/images/dont-click-this.png" />');
+        var raw_input = window.prompt('<b>Please write your input test-case</b><ul><li>Multiple input should be separated by new line</li><li>Hold <b>shift</b> and <b>press</b> enter to make a new line</li></ul>');
+        INPUT_LIST = raw_input.split('\n');
+        INPUT_LIST_INDEX = 0;
     }else{
         try {
             EXEC_MODE = true;
             var ok = INTERPRETER.step();
+            // watcher
+            var variable_watch = [];
+            // get properties
+            var properties = (Object.keys(INTERPRETER.getScope().properties));
+            for(var i=0; i<properties.length; i++){
+                var property = properties[i];
+                if(DEFAULT_PROPERTIES.indexOf(property) == -1){
+                    var value = INTERPRETER.getValueFromScope(property).data;
+                    variable_watch.push('<tr><td>' + property + '</td><td>' + value + '</td></tr>');
+                }
+            }
+            variable_watch = variable_watch.join(', ');
+            // avoid the same thing appeared all the time
+            if(variable_watch != LAST_VARIABLE_WATCH){
+                $('table#table-watcher tbody').html( variable_watch);
+                LAST_VARIABLE_WATCH = variable_watch;
+                adjustWatcher();
+            }
+            // exit EXEC_MODE
             EXEC_MODE = false;
         } finally {
             if (!ok) {
@@ -284,6 +354,8 @@ function step_code() {
                 window.alert('Execution Complete');
                 WORKSPACE.highlightBlock(null);
                 INTERPRETER = null;
+                LAST_VARIABLE_WATCH = '';
+                adjustWatcher();
                 return;
             }
         }
@@ -353,6 +425,10 @@ function load_lesson(id){
             Blockly.Xml.domToWorkspace(xml, WORKSPACE);
         }
     });
+
+    LAST_VARIABLE_WATCH = '';
+    adjustWatcher();
+    clear_output();
 }
 load_lesson(LESSON_ID);
 $('#lesson-chapter').change(function(event){
