@@ -352,7 +352,7 @@ var LESSONS = [
 
     {
         code      : '05-04-while',
-        caption   : '05 - 04 Satu, DUa, Tiga (Dengan Kekuatan Perulangan)',
+        caption   : '05 - 04 Satu, Dua, Tiga (Dengan Kekuatan Perulangan)',
         test_case : [],
         validator : function(input_list, output_list){
             if(output_list.length == 3 && output_list[0] === 1 && output_list[1] === 2 && output_list[2] === 3){

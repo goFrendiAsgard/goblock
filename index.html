@@ -13,44 +13,53 @@
 
 <body>
     <!-- The HTML components -->
+
     <div class="col-md-12">
-        <div id="div-lesson-container" class="col-md-5">
-            <div id="div-lesson-control" class="col-md-12">
+        <div id="div-control" class="col-md-12">
+            <!-- The control -->
+            <div class="form-inline">
+                <button id="btn-toggle-lesson" class="btn btn-default">
+                    <i class="glyphicon glyphicon-align-justify"></i>
+                </button>
                 <select id="lesson-chapter" class="form-control"></select>
+                <button id="btn-run" class="btn btn-default">
+                    <i class="glyphicon glyphicon-play"></i> Run
+                </button>
+                <button id="btn-step" class="btn btn-default hidden-sm hidden-xs">
+                    <i class="glyphicon glyphicon-share-alt"></i> Step
+                </button>
+                <button id="btn-evaluate" class="btn btn-primary">
+                    <i class="glyphicon glyphicon-sunglasses"></i> Evaluate
+                </button>
+                <button id="btn-save" class="btn btn-default hidden-sm hidden-xs">
+                    <i class="glyphicon glyphicon-floppy-disk"></i> Save
+                </button>
+                <button id="btn-load" class="btn btn-default hidden-sm hidden-xs">
+                    <i class="glyphicon glyphicon-open"></i> Load
+                </button>
+                <select id="language" class="form-control">
+                    <option value="JavaScript">JavaScript</option>
+                    <option value="Python">Python</option>
+                    <option value="PHP">PHP</option>
+                    <option value="Lua">Lua</option>
+                    <option value="Dart">Dart</option>
+                </select>
             </div>
+        </div>
+        <div id="div-lesson-container" class="col-md-5">
             <footer id="footer" class="col-xs-12">Goblock Project, 2016 - now &copy; Go Frendi Gunawan (gofrendiasgard@gmail.com)</footer>
+            <table id="table-watcher" class="table table-bordered" style="display:none;">
+                <thead><tr><th>Variable</th><th>Value</th></thead>
+                <tbody>
+                    <!-- the variable watch will be shown here -->
+                </tbody>
+            </table>
+
             <div id="div-lesson" class="col-md-12">
                 <!-- Lesson will be loaded here -->
             </div>
         </div>
-        <div class="col-md-7">
-            <div id="div-control" class="col-md-12">
-                <!-- The control -->
-                <div class="form-inline">
-                    <button id="btn-run" class="btn btn-default">
-                        <i class="glyphicon glyphicon-play"></i> Run
-                    </button>
-                    <button id="btn-step" class="btn btn-default">
-                        <i class="glyphicon glyphicon-share-alt"></i> Step
-                    </button>
-                    <button id="btn-evaluate" class="btn btn-primary">
-                        <i class="glyphicon glyphicon-sunglasses"></i> Evaluate
-                    </button>
-                    <button id="btn-save" class="btn btn-default">
-                        <i class="glyphicon glyphicon-floppy-disk"></i> Save
-                    </button>
-                    <button id="btn-load" class="btn btn-default">
-                        <i class="glyphicon glyphicon-open"></i> Load
-                    </button>
-                    <select id="language" class="form-control">
-                        <option value="JavaScript">JavaScript</option>
-                        <option value="Python">Python</option>
-                        <option value="PHP">PHP</option>
-                        <option value="Lua">Lua</option>
-                        <option value="Dart">Dart</option>
-                    </select>
-                </div>
-            </div>
+        <div id="div-workspace-container" class="col-md-7">
             <div id="div-workplace" class="col-md-12">
                 <!-- The blocks will be loaded here -->
             </div>
@@ -527,9 +536,9 @@
     <script type="text/javascript" src="assets/blockly/msg/js/en.js"></script>
     <script type="text/javascript" src="assets/js-interpreter/acorn_interpreter.js"></script>
     <script>
-        var window_alert = window.alert;
-        var window_prompt = window.prompt;
-        var window_confirm = window.confirm;
+        //var window_alert = window.alert;
+        //var window_prompt = window.prompt;
+        //var window_confirm = window.confirm;
     </script>
     <script type="text/javascript" src="lessons/lesson.js"></script>
     <script type="text/javascript" src="assets/stratifiedjs/stratified.js" main="assets/goblock"></script>
