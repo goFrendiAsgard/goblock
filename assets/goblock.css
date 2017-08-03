@@ -10,14 +10,11 @@ div#div-control, div#div-lesson-control{
     margin-top:5px;
     margin-bottom:5px;
 }
-div#div-source-code, div#div-output{
-    height: 130px;
-}
 div#div-lesson-control{
     padding-right:0px;
 }
 div#div-lesson{
-    max-height:600px;
+    height:600px;
     font-size:small;
     margin-top:10px;
     background-color:white;
@@ -40,6 +37,7 @@ div#div-output, div#div-source-code{
     font-family:monospace;
     font-size:small;
     background-color:white;
+    height: 130px;
 }
 footer#footer{
     text-align:right;

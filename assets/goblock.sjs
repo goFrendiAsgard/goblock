@@ -1,5 +1,5 @@
 // default properties, should not be watched on each steps
-var DEFAULT_PROPERTIES = ['Infinity', 'Array', 'Boolean', 'Date', 'Error', 'EvalError', 'Function', 'JSON', 'Math', 'NaN', 'Number', 'Object', 'RangeError', 'ReferenceError', 'RegExp', 'String', 'SyntaxError', 'TypeError', 'URIError', 'alert', 'decodeURI', 'decodeURIComponent', 'encodeURI', 'encodeURIComponent', 'escape', 'eval', 'highlightBlock', 'isFinite', 'isNaN', 'parseFloat', 'parseInt', 'prompt', 'self', 'undefined', 'unescape', 'window'];
+var DEFAULT_PROPERTIES = ['Infinity', 'Array', 'Boolean', 'Date', 'Error', 'EvalError', 'Function', 'JSON', 'Math', 'NaN', 'Number', 'Object', 'RangeError', 'ReferenceError', 'RegExp', 'String', 'SyntaxError', 'TypeError', 'URIError', 'alert', 'decodeURI', 'decodeURIComponent', 'encodeURI', 'encodeURIComponent', 'escape', 'eval', 'highlightBlock', 'isFinite', 'isNaN', 'parseFloat', 'parseInt', 'prompt', 'self', 'undefined', 'unescape', 'window', 'LoopTrap'];
 
 var SYS = require("stratifiedjs/modules/sys.sjs");
 // state variables
@@ -147,6 +147,28 @@ function close_confirm_cancel(){
 $('.close-confirm-cancel').click(close_confirm_cancel);
 
 
+// resize
+function adjust_height(){
+    var window_height = $(window).height();
+    var watcher_height = $('table#table-watcher').is(':visible')? $('table#table-watcher').height()+30 : 0;
+    if(window_height < 668){
+        $('div#div-lesson').height(600 - watcher_height);
+        $('div#div-output, div#div-source-code').height(130);
+    }
+    else{
+        $('div#div-lesson').height(window_height - 68 - watcher_height);
+        $('div#div-output, div#div-source-code').height(window_height - 538);
+    }
+}
+
+$(window).resize(function(event){
+    adjust_height();
+});
+
+$(document).ready(function(event){
+    adjust_height();
+});
+
 // define and load the toolbox
 var WORKSPACE = Blockly.inject('div-workplace', {
     toolbox : document.getElementById('toolbox'),
@@ -186,7 +208,8 @@ function run_code(event, is_evaluation) {
     OUTPUT_LIST = [];
     INTERPRETER = null;
     LAST_VARIABLE_WATCH = '';
-    adjustWatcher();
+    adjust_watcher();
+    adjust_height();
     clear_output();
     window.LoopTrap = 10000000; // handle infinite loop
     Blockly.JavaScript.INFINITE_LOOP_TRAP = 'if(--window.LoopTrap == 0) throw "Infinite loop.";\n';
@@ -286,27 +309,29 @@ function highlightBlock(id) {
     HIGHLIGHT_PAUSE = true;
 }
 
-function adjustWatcher(){
+function adjust_watcher(){
     if(LAST_VARIABLE_WATCH != ''){
-        var containerHeight = $('div#div-lesson-container').height();
+        //var containerHeight = $('div#div-lesson-container').height();
         $('table#table-watcher').show();
+        /*
         var lessonHeight = $('div#div-lesson').height();
         var watcherHeight = $('table#table-watcher').height();
-        console.log([lessonHeight, watcherHeight, containerHeight]);
         if((containerHeight - 10) < (lessonHeight + watcherHeight)){
             $('div#div-lesson').height(lessonHeight - watcherHeight - 10);
         }
+        */
     }
     else{
         $('table#table-watcher').hide();
-        $('div#div-lesson').height('');
+        //$('div#div-lesson').height('');
     }
 }
 
 function step_code() {
     if(!INTERPRETER){
         LAST_VARIABLE_WATCH = '';
-        adjustWatcher();
+        adjust_watcher();
+        adjust_height();
         clear_output();
         // get the code
         Blockly.JavaScript.STATEMENT_PREFIX = 'highlightBlock(%1);\n';
@@ -335,7 +360,7 @@ function step_code() {
             for(var i=0; i<properties.length; i++){
                 var property = properties[i];
                 if(DEFAULT_PROPERTIES.indexOf(property) == -1){
-                    var value = INTERPRETER.getValueFromScope(property).data;
+                    var value = INTERPRETER.getValueFromScope(property);
                     variable_watch.push('<tr><td>' + property + '</td><td>' + value + '</td></tr>');
                 }
             }
@@ -344,7 +369,8 @@ function step_code() {
             if(variable_watch != LAST_VARIABLE_WATCH){
                 $('table#table-watcher tbody').html( variable_watch);
                 LAST_VARIABLE_WATCH = variable_watch;
-                adjustWatcher();
+                adjust_watcher();
+                adjust_height();
             }
             // exit EXEC_MODE
             EXEC_MODE = false;
@@ -355,7 +381,8 @@ function step_code() {
                 WORKSPACE.highlightBlock(null);
                 INTERPRETER = null;
                 LAST_VARIABLE_WATCH = '';
-                adjustWatcher();
+                adjust_watcher();
+                adjust_height();
                 return;
             }
         }
@@ -427,7 +454,8 @@ function load_lesson(id){
     });
 
     LAST_VARIABLE_WATCH = '';
-    adjustWatcher();
+    adjust_watcher();
+    adjust_height();
     clear_output();
 }
 load_lesson(LESSON_ID);
