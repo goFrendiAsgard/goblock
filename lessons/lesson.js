@@ -197,7 +197,7 @@ var LESSONS = [
         caption   : '03 - 04 Penjumlahan Variable',
         test_case : [[4,4], [8,1], [2,3]],
         validator : function(input_list, output_list){
-            if(output_list.length == 1 && output_list[0] === (input_list[0] + input_list[1])){
+            if(output_list.length == 1 && output_list[0] === (parseFloat(input_list[0]) + parseFloat(input_list[1]))){
                 return {success: true, message: 'Bagus!!! Tekan tombol "Ok" untuk melanjutkan'};
             }
             return{success: false, message: 'Output yang diberikan harus berupa pernjumlahan dari kedua input'}
@@ -209,7 +209,7 @@ var LESSONS = [
         caption   : '03 - 05 Variable Penampung',
         test_case : [],
         validator : function(input_list, output_list){
-            if(output_list.length == 1 && output_list[0] === (input_list[0] + input_list[1])){
+            if(output_list.length == 1 && output_list[0] === (parseFloat(input_list[0]) + parseFloat(input_list[1]))){
                 return {success: true, message: 'Bagus!!! Tekan tombol "Ok" untuk melanjutkan'};
             }
             return{success: false, message: 'Output yang diberikan harus berupa pernjumlahan dari kedua input'}
