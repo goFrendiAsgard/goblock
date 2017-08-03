@@ -48,9 +48,9 @@ window.alert = function(message){
         OUTPUT_LIST.push(message);
     }else if(EXEC_MODE){
         OUTPUT_LIST.push(message);
-        $('div#div-output').append('<b>' + message + '</b><br />');
+        $('div#div-output').append('<b>' + escapeHtml(message) + '</b><br />');
     }else{
-        $('div#div-alert-message').html(message);
+        $('div#div-alert-message').html(escapeHtml(message));
         $('div#div-alert').modal('show');
         set_wait();
         hold_while_wait();
@@ -84,7 +84,7 @@ window.prompt = function(message, default_value, callback){
     if(EXEC_MODE && INTERPRETER){
         var result = INPUT_LIST[INPUT_LIST_INDEX];
         INPUT_LIST_INDEX++;
-        $('div#div-output').append('<b>' + message + '</b> ' + result + '<br />');
+        $('div#div-output').append('<b>' + escapeHtml(message) + '</b> ' + result + '<br />');
         return result;
     }
     $('div#div-prompt-message').html(message);
@@ -191,13 +191,20 @@ $('button#btn-toggle-lesson').click(function(){
     window.dispatchEvent(new Event('resize'));
 });
 
+function escapeHtml(str){
+    str = str.replace(/\n\n/g, '\n'); // remove double new line, we don't have too much space here
+    str = str.replace(/ /g, '&nbsp;');
+    str = str.replace(/</g, '&lt;')
+    str = str.replace(/>/g, '&gt;')
+    str = str.replace(/\n/g, '<br />');
+    return str;
+}
+
 // functions for show source
 function show_source_code(event) {
     var language = $('select#language').val();
     var source_code = Blockly[language].workspaceToCode(WORKSPACE);
-    source_code = source_code.replace(/\n\n/g, '\n'); // remove double new line, we don't have too much space here
-    source_code = source_code.replace(/ /g, '&nbsp;');
-    source_code = source_code.replace(/\n/g, '<br />');
+    source_code = escapeHtml(source_code);
     source_code = '<div style="font-size:normal; margin-bottom:5px;">' + language + '</div><div style="font-weight:bold">' + source_code + '</div>';
     $('div#div-source-code').html(source_code);
 }
