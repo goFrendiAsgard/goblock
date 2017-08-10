@@ -158,7 +158,7 @@ var LESSONS = [
 
     {
         code      : '02-07-true-or-false',
-        caption   : '02 - 06 Benar atau salah?',
+        caption   : '02 - 07 Benar atau salah?',
         test_case : [],
         validator : function(input_list, output_list){
             if(output_list.length == 1 && output_list[0] === true){
@@ -193,8 +193,8 @@ var LESSONS = [
     },
 
     {
-        code      : '03-04-penjumlahan',
-        caption   : '03 - 04 Penjumlahan Variable',
+        code      : '03-03-penjumlahan',
+        caption   : '03 - 03 Penjumlahan Variable',
         test_case : [[4,4], [8,1], [2,3]],
         validator : function(input_list, output_list){
             if(output_list.length == 1 && output_list[0] === (parseFloat(input_list[0]) + parseFloat(input_list[1]))){
@@ -205,8 +205,8 @@ var LESSONS = [
     },
 
     {
-        code      : '03-05-penjumlahan-variable',
-        caption   : '03 - 05 Variable Penampung',
+        code      : '03-04-penjumlahan-variable',
+        caption   : '03 - 04 Variable Penampung',
         test_case : [],
         validator : function(input_list, output_list){
             if(output_list.length == 1 && output_list[0] === (parseFloat(input_list[0]) + parseFloat(input_list[1]))){
