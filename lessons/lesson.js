@@ -402,4 +402,13 @@ var LESSONS = [
         }
     },
 
+    {
+        code      : '99-final',
+        caption   : 'Final',
+        test_case : [],
+        validator : function(input_list, output_list){
+            return {success: true, message: ':)'};
+        }
+    }
+
 ];
