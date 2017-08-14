@@ -43,14 +43,19 @@ function clear_output(){
 }
 
 // alert
-window.alert = function(message){
+window.alert = function(message, escape_html){
     if(SILENT_MODE){
         OUTPUT_LIST.push(message);
     }else if(EXEC_MODE){
         OUTPUT_LIST.push(message);
         $('div#div-output').append('<b>' + escapeHtml(message) + '</b><br />');
     }else{
-        $('div#div-alert-message').html(escapeHtml(message));
+        if(escape_html === false){
+            $('div#div-alert-message').html(message);
+        }
+        else{
+            $('div#div-alert-message').html(escapeHtml(message));
+        }
         $('div#div-alert').modal('show');
         set_wait();
         hold_while_wait();
@@ -410,7 +415,7 @@ function show_xml(){
     xml = Blockly.Xml.domToPrettyText(xml);
     textarea = '<textarea class="form-control" style="height:200px;" readonly>' + xml + '</textarea>';
     html = '<h3>Please copy this XML to notepad and save it</h3>' + textarea;
-    window.alert(html);
+    window.alert(html, false);
 }
 $('button#btn-save').click(show_xml);
 
