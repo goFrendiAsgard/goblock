@@ -1,0 +1,67 @@
+<head>
+    <meta charset="utf-8">
+    <title>Goblock</title>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" type="text/css" href="assets/bootstrap-3.3.7/css/bootstrap.min.css" />
+    <link rel="stylesheet" type="text/css" href="assets/goblock.css" />
+    <style>
+        .break { page-break-before: always; }
+        .center {text-align:center;}
+    </style>
+</head>
+<body>
+    <div id="content"></div>
+
+    <script type="text/javascript" src="assets/jquery-3.1.0.min.js"></script>
+    <script type="text/javascript" src="lessons/lesson.js"></script>
+    <script type="text/javascript">
+        var praChapters = ['title', 'foreword'];
+        var chapters = ['Pengenalan', 'Output dan Tipe Data', 'Operasi', 'Input dan Variable', 'Percabangan', 'Perulangan'];
+        var currentChapter = '';
+        var chapterIndex = 0;
+        $(document).ready(function(event){
+            // add title & foreword
+            for(i=0; i<praChapters.length; i++){
+                praChapter = praChapters[i];
+                $.ajax({
+                    async: false,
+                    url: 'lessons/'+praChapter+'.html',
+                    success: function(html){
+                        $('#content').append(preprocessHtml(html));
+                    }
+                });
+            }
+
+            // load lessons
+            for(i=0; i<LESSONS.length; i++){
+                var lesson = LESSONS[i];
+                $.ajax({
+                    async: false,
+                    url: 'lessons/'+lesson.code+'/intro.html',
+                    success: function(html){
+                        // add h1 for the beginning of each lesson
+                        var codePrefix = lesson.code.split('-')[0];
+                        if(codePrefix != currentChapter){
+                            $('#content').append('<h1 class="break">'+chapters[chapterIndex]+'</h1>');
+                            chapterIndex++;
+                            currentChapter = codePrefix;
+                        }
+                        // add content
+                        $('#content').append(preprocessHtml(html, lesson));
+                    }
+                });
+            } 
+
+        });
+
+        function preprocessHtml(html, lesson){
+            if(lesson != null){
+                html = html.replace(/src="([a-z0-9_\-\.\/]*)"/ig, 'src="lessons/' + lesson.code + '/$1"');
+                html = html.replace(/href="([a-z0-9_\-\.\/]*)"/ig, 'href="lessons/' + lesson.code + '/$1"');
+            }
+            return html;
+        }
+    </script>
+</body>
