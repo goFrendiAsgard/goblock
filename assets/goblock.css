@@ -13,6 +13,10 @@ div#div-control, div#div-lesson-control{
 div#div-lesson-control{
     padding-right:0px;
 }
+div#div-lesson-container, div#div-workspace-container{
+    padding-left:0px;
+    padding-right:0px;
+}
 div#div-lesson{
     height:600px;
     font-size:small;
@@ -58,4 +62,10 @@ select#language{
     max-width:150px;
 }
 table#table-watcher{
+}
+div#div-lesson img.small{
+    max-width: 67%;
+    margin-right:5px;
+    margin-bottom:5px;
+    float:left;
 }
