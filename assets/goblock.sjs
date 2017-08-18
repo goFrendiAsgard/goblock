@@ -197,6 +197,7 @@ $('button#btn-toggle-lesson').click(function(){
 });
 
 function escapeHtml(str){
+    str = String(str);
     str = str.replace(/\n\n/g, '\n'); // remove double new line, we don't have too much space here
     str = str.replace(/ /g, '&nbsp;');
     str = str.replace(/</g, '&lt;')
@@ -276,11 +277,11 @@ function run_code(event, is_evaluation) {
                     $('#lesson-chapter').val(LESSON_ID);
                     load_lesson(LESSON_ID);
                 }else{ // no other lesson available
-                    window.alert('<div class="alert alert-success"><b>End of Lesson</b> You have complete the lesson</div>');
+                    window.alert('<div class="alert alert-success"><b>End of Lesson</b> You have complete the lesson</div>', false);
                 }
             }
         }else{ // evaluation failed
-            window.alert('<div class="alert alert-danger"><b>Failed:</b><br />' + message + '</div>');
+            window.alert('<div class="alert alert-danger"><b>Failed:</b><br />' + message + '</div>', false);
         }
     }
 }
