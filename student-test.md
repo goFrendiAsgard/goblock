@@ -5,43 +5,43 @@
     - Javascript
     - Python
     - Lua
-    - C.
+    - C 
 
 * Sebuah flowchart selalu:
     - Mengandung __percabangan__ dan __perulangan__
-    - Diawali dengan __start__ dan diakhiri dengan simbol __end__.
+    - Diawali dengan __start__ dan diakhiri dengan simbol __end__ 
     - Mengalir dari __kanan atas__ ke __kiri bawah__
     - Memiliki warna-warna khusus sebagai simbol logika
     - Berisi simbol lingkaran yang mewakili __proses__ dan simbol persegi panjang yang mewakili __entitas__
 
 * Pada flowchart, sebuah input diwakili dengan simbol:
     - Lingkaran
-    - Jajar genjang.
+    - Jajar genjang 
     - Belah ketupat
     - Persegi panjang
-    - Tanda panan 
+    - Tanda panah
 
 * Pada flowchart, sebuah output diwakili dengan simbol:
     - Lingkaran
-    - Jajar genjang.
+    - Jajar genjang 
     - Belah ketupat
     - Persegi panjang
-    - Tanda panan 
+    - Tanda panah 
 
 * Pada flowchart, sebuah kondisi diwakili dengan simbol:
     - Lingkaran
     - Jajar genjang
-    - Belah ketupat.
+    - Belah ketupat 
     - Persegi panjang
-    - Tanda panan 
+    - Tanda panah
 
-# Output dan Tipe Data 
+# Output dan Tipe Data
 
 * Di bawah ini yang bukan merupakan tipe data yang dikenali komputer adalah:
     - integer
     - float
     - double
-    - image.
+    - image 
     - string
     - boolean
 
@@ -50,13 +50,13 @@
     - float
     - double
     - image
-    - string.
+    - string 
     - boolean
 
 * Saldo nasabah sebaiknya disimpan dalam tipe data:
     - integer
-    - float.
-    - double.
+    - float 
+    - double 
     - image
     - string
     - boolean
@@ -66,7 +66,7 @@
     - float
     - double
     - image
-    - string.
+    - string 
     - boolean
 
 * Status kelulusan mahasiswa sebaiknya disimpan dalam tipe data:
@@ -75,12 +75,12 @@
     - double
     - image
     - string
-    - boolean.
+    - boolean 
 
-# Operasi 
+# Operasi
 
 * Operasi penjumlahan pada dua angka integer akan memberikan nilai:
-    - integer.
+    - integer 
     - float
     - double
     - image
@@ -89,8 +89,8 @@
 
 * Hasil perhitungan 10 dibagi 7 akan memberikan nilai:
     - integer
-    - float.
-    - double.
+    - float 
+    - double 
     - image
     - string
     - boolean
@@ -101,12 +101,12 @@
     - double
     - image
     - string
-    - boolean.
+    - boolean 
 
 * Negasi dari (true OR false) adalah:
     - true
-    - false.
-    - false OR true 
+    - false 
+    - false OR true
     - true AND true
     - tergantung dari inputan user
     - tak terdifinisi
@@ -116,7 +116,7 @@
     - float
     - double
     - image
-    - string.
+    - string 
     - boolean
 
 # Input dan Variable
@@ -133,7 +133,7 @@ window.alert(d)
 
 * Jika a bernilai 4 dan b bernilai 7, maka c bernilai:
     - true
-    - false.
+    - false 
     - -3
     - 3
     - 11 
@@ -142,13 +142,13 @@ window.alert(d)
 * Jika a bernilai 4 dan b bernilai 7, maka output program adalah:
     - true
     - false
-    - -3.
+    - -3 
     - 3
     - 11 
     - -11
 
 * Jika a dan b memiliki nilai yang sama maka:
-    - nilai d adalah 0.
+    - nilai d adalah 0 
     - nilai c adalah true
     - nilai c adalah 0
     - nilai d adalah true
@@ -156,7 +156,7 @@ window.alert(d)
 
 * Jika a dan b memiliki nilai yang sama maka:
     - nilai d adalah true 
-    - nilai c adalah false.
+    - nilai c adalah false 
     - nilai c adalah true
     - nilai d adalah false
     - program tidak bisa berjalan
@@ -164,7 +164,7 @@ window.alert(d)
 * Agar c bernilai false, maka nilai a dan b masing-masing haruslah:
     - 4 dan 1
     - 3 dan 2
-    - 4 dan 4.
+    - 4 dan 4 
     - 7 dan 5
     - 7 dan 3
 
@@ -187,7 +187,7 @@ window.alert(a*b);
 * Operasi yang pasti akan dilakukan adalah
     - a + b 
     - a - b
-    - a * b.
+    - a * b 
     - a / b
     - a ^ b
     - a > b
@@ -195,7 +195,7 @@ window.alert(a*b);
 * Jika a bernilai 7 dan b bernilai 9 maka output program adalah
     - 16 dan -2
     - -2 dan 16
-    - 16 dan 63.
+    - 16 dan 63 
     - 63 dan 16
     - -2 dan 63
     - 63 dan -2
@@ -205,11 +205,11 @@ window.alert(a*b);
     - 2 dan 16
     - 16 dan 63
     - 63 dan 16
-    - 2 dan 63.
+    - 2 dan 63 
     - 63 dan 2
 
 * Jika a dan b memiliki nilai yang sama, maka output pertama program adalah
-    - 0.
+    - 0 
     - 1
     - 2
     - 3
@@ -218,7 +218,7 @@ window.alert(a*b);
 
 * Jika a dan b memiliki nilai yang sama, maka:
     - Output yang kedua adalah dua kali lipat salah satu input
-    - Output yang kedua akan sama dengan kuadrat dari salah satu input.
+    - Output yang kedua akan sama dengan kuadrat dari salah satu input 
     - Output yang kedua akan sama dengan output yang pertama 
     - Output yang kedua dan output yang pertama pasti berbeda
     - Output yang kedua pasti lebih besar dari output yang pertama
@@ -239,7 +239,7 @@ while(b < a){
 
 * Jika nilai a adalah 2 maka nilai akhir b adalah:
     - 1
-    - 2.
+    - 2 
     - 3
     - 4
     - 5
@@ -249,12 +249,12 @@ while(b < a){
     - 1
     - 2
     - 3
-    - 4.
+    - 4 
     - 5
     - 6
 
 * Jika nilai a adalah 2 maka nilai c adalah:
-    - 1.
+    - 1 
     - 2
     - 3
     - 4
@@ -262,7 +262,7 @@ while(b < a){
     - 6
 
 * Jika nilai a adalah 2 maka output terakhir program adalah:
-    - 1.
+    - 1 
     - 2
     - 3
     - 4
@@ -270,7 +270,7 @@ while(b < a){
     - tidak ada output
 
 * Jika nilai a adalah 4 maka output terakhir adalah:
-    - 1.
+    - 1 
     - 2
     - 3
     - 4
