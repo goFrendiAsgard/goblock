@@ -156,14 +156,13 @@ $('.close-confirm-cancel').click(close_confirm_cancel);
 function adjust_height(){
     var window_height = $(window).height();
     var watcher_height = $('table#table-watcher').is(':visible')? $('table#table-watcher').height()+30 : 0;
-    if(window_height < 668){
-        $('div#div-lesson').height(600 - watcher_height);
-        $('div#div-output, div#div-source-code').height(130);
-    }
-    else{
-        $('div#div-lesson').height(window_height - 68 - watcher_height);
-        $('div#div-output, div#div-source-code').height(window_height - 538);
-    }
+    var control_height = $('div#div-control').height();
+    var footer_height = $('footer#footer').height();
+    var workplace_height = $('div#div-workplace').height();
+    var lesson_height = window_height - 20 - control_height - watcher_height - footer_height;
+    var output_height = window_height - 20 - control_height - workplace_height;
+    $('div#div-lesson').height(lesson_height);
+    $('div#div-output, div#div-source-code').height(output_height);
 }
 
 $(window).resize(function(event){
@@ -324,19 +323,10 @@ function highlightBlock(id) {
 
 function adjust_watcher(){
     if(LAST_VARIABLE_WATCH != ''){
-        //var containerHeight = $('div#div-lesson-container').height();
         $('table#table-watcher').show();
-        /*
-        var lessonHeight = $('div#div-lesson').height();
-        var watcherHeight = $('table#table-watcher').height();
-        if((containerHeight - 10) < (lessonHeight + watcherHeight)){
-            $('div#div-lesson').height(lessonHeight - watcherHeight - 10);
-        }
-        */
     }
     else{
         $('table#table-watcher').hide();
-        //$('div#div-lesson').height('');
     }
 }
 
@@ -432,8 +422,14 @@ function load_xml(){
 $('button#btn-load').click(load_xml);
 
 // initialize lesson
+var last_option_group = '';
 for(var i=0; i<LESSONS.length; i++){
     var lesson = LESSONS[i]
+    var option_group = lesson.caption.split('-')[0].trim();
+    if (last_option_group != option_group) {
+        last_option_group = option_group;
+        $('#lesson-chapter').append('<option disabled>' + last_option_group + ' ----------- </option>');
+    }
     $('#lesson-chapter').append('<option value="'+i+'">' + lesson.caption + '</option>');
 }
 

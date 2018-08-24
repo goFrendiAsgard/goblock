@@ -39,7 +39,7 @@ div#div-lesson img{
 }
 div#div-output, div#div-source-code{
     font-family:monospace;
-    font-size:small;
+    font-size:medium;
     background-color:white;
     height: 130px;
 }
