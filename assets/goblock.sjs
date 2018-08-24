@@ -422,16 +422,25 @@ function load_xml(){
 $('button#btn-load').click(load_xml);
 
 // initialize lesson
+function add_opt_group_to_lesson(option_group_html) {
+    if (option_group_html != '') {
+        option_group_html += '</opt_group>';
+        $('#lesson-chapter').append(option_group_html);
+    }
+}
 var last_option_group = '';
+var option_group_html = '';
 for(var i=0; i<LESSONS.length; i++){
     var lesson = LESSONS[i]
     var option_group = lesson.caption.split('-')[0].trim();
     if (last_option_group != option_group) {
+        add_opt_group_to_lesson(option_group_html);
         last_option_group = option_group;
-        $('#lesson-chapter').append('<option disabled>' + last_option_group + ' ----------- </option>');
+        option_group_html  = '<optgroup label = "' + last_option_group + ' ------------------">';
     }
-    $('#lesson-chapter').append('<option value="'+i+'">' + lesson.caption + '</option>');
+    option_group_html += '<option value="'+i+'">' + lesson.caption + '</option>';
 }
+add_opt_group_to_lesson(option_group_html);
 
 function load_lesson(id){
     if(id < 0 || id >= LESSONS.length){
